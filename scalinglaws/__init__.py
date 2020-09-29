@@ -34,8 +34,12 @@ class Hex:
         self._envs = torch.arange(self.n_envs, device='cuda')
 
     def _states(self, idxs, val=None):
-        rows, cols = idxs[..., 0], idxs[..., 1]
-        envs = self._envs[(slice(None),) + (None,)*(idxs.ndim-2)].expand_as(rows)
+        if idxs.size(-1) == 2:
+            rows, cols = idxs[..., 0], idxs[..., 1]
+            envs = self._envs[(slice(None),) + (None,)*(idxs.ndim-2)].expand_as(rows)
+        else: # idxs.size(-1) == 3
+            envs, rows, cols = idxs[..., 0], idxs[..., 1], idxs[..., 2]
+        
         if val is None:
             return self._board[envs, rows, cols]
         else:
@@ -43,6 +47,23 @@ class Hex:
 
     def _neighbours(self, idxs):
         return self._states((idxs[:, None, :] + self._NEIGHBOURS).clamp(0, self._boardsize-1))
+
+    def _flood(self, actions):
+        moves = self._states(actions)
+
+        colors = moves.clone()
+        colors[(moves == self._STATES['^']) | (moves == self._STATES['v'])] = self._STATES['b']
+        colors[(moves == self._STATES['<']) | (moves == self._STATES['>'])] = self._STATES['w']
+
+        active = torch.stack([moves == self._STATES[s] for s in '<>^v'], 0).any(0)
+
+        idxs = torch.stack([self._envs[:, None], actions], 1)[active]
+        while True:
+            self._states(idxs, moves[idxs[:, 0]])
+            neighbour_idxs = self._neighbours(idxs)
+            possible = self._states(neighbour_idxs) == colors[idxs[:, 0]]
+
+
 
     def _update_states(self, actions):
         assert (self._states(actions) == 0).all(), 'One of the actions is to place a token on an already-occupied cell'
@@ -66,6 +87,7 @@ class Hex:
         new_state[white & conns['<'] & conns['>']] = self._STATES['W']
 
         self._states(actions, new_state)
+        self._flood(actions)
 
         reset = ((new_state == self._STATES['B']) | (new_state == self._STATES['W']))
         self._board[reset] = self._STATES['.']
