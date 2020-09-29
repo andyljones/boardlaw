@@ -31,7 +31,7 @@ class Hex:
 
         # As per OpenSpiel and convention, black plays first.
         self._player = torch.full((n_envs,), 0, device=device, dtype=torch.int)
-        self._envs = torch.arange(self.n_envs, device='cuda')
+        self._envs = torch.arange(self.n_envs, device=device)
 
     def _states(self, idxs, val=None):
         if idxs.size(-1) == 2:
@@ -46,7 +46,7 @@ class Hex:
             self._board[envs, rows, cols] = val
 
     def _neighbours(self, idxs):
-        return self._states((idxs[:, None, :] + self._NEIGHBOURS).clamp(0, self._boardsize-1))
+        return (idxs[:, None, :] + self._NEIGHBOURS).clamp(0, self._boardsize-1)
 
     def _flood(self, actions):
         moves = self._states(actions)
@@ -57,18 +57,17 @@ class Hex:
 
         active = torch.stack([moves == self._STATES[s] for s in '<>^v'], 0).any(0)
 
-        idxs = torch.stack([self._envs[:, None], actions], 1)[active]
-        while True:
+        idxs = torch.cat([self._envs[:, None], actions], 1)[active]
+        while idxs.size(0) > 0:
             self._states(idxs, moves[idxs[:, 0]])
-            neighbour_idxs = self._neighbours(idxs)
+            neighbour_idxs = self._neighbours(idxs[:, 1:])
             possible = self._states(neighbour_idxs) == colors[idxs[:, 0]]
-
-
+            idxs = torch.cat([idxs[..., 0][:, None, None].expand_as(neighbour_idxs), neighbour_idxs], -1)[possible]
 
     def _update_states(self, actions):
         assert (self._states(actions) == 0).all(), 'One of the actions is to place a token on an already-occupied cell'
 
-        neighbours = self._neighbours(actions)
+        neighbours = self._states(self._neighbours(actions))
 
         black = self._player == 0
         white = self._player == 1
