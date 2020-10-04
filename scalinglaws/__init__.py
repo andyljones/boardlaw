@@ -162,7 +162,7 @@ class Hex:
 
     def display(self, e=0):
         strings = np.vectorize(self._STRINGS.__getitem__)(self._board[e].cpu().numpy())
-        print('\n'.join(''.join(r) for r in strings))
+        return '\n'.join(' '*i + ' '.join(r) for i, r in enumerate(strings))
 
 def test():
     h = Hex(1, 3, device='cpu')
