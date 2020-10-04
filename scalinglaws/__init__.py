@@ -46,6 +46,10 @@ class Hex:
             self._board[envs, rows, cols] = val
 
     def _neighbours(self, idxs):
+        if idxs.size(1) == 3:
+            neighbours = self._neighbours(idxs[:, 1:])
+            envs = idxs[:, None, [0]].expand(-1, len(self._NEIGHBOURS), 1)
+            return torch.cat([envs, neighbours], 2)
         return (idxs[:, None, :] + self._NEIGHBOURS).clamp(0, self._boardsize-1)
 
     def _flood(self, actions):
@@ -60,9 +64,9 @@ class Hex:
         idxs = torch.cat([self._envs[:, None], actions], 1)[active]
         while idxs.size(0) > 0:
             self._states(idxs, moves[idxs[:, 0]])
-            neighbour_idxs = self._neighbours(idxs[:, 1:])
-            possible = self._states(neighbour_idxs) == colors[idxs[:, 0]]
-            idxs = torch.cat([idxs[..., 0][:, None, None].expand_as(neighbour_idxs), neighbour_idxs], -1)[possible]
+            neighbour_idxs = self._neighbours(idxs)
+            possible = self._states(neighbour_idxs) == colors[idxs[:, 0], None]
+            idxs = neighbour_idxs[possible]
 
     def _update_states(self, actions):
         assert (self._states(actions) == 0).all(), 'One of the actions is to place a token on an already-occupied cell'
