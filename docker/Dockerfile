@@ -76,6 +76,15 @@ RUN pip install jupyter_contrib_nbextensions && \
     jupyter nbextension enable stripcommon/main && \
     jupyter nbextension enable autoscroll/main 
 
+RUN pip install cmake && \\ 
+    apt-get install clang-10 && \\
+    ln -s $(which clang-10) /usr/bin/clang++ && \\
+    cd / && \\
+    git clone https://github.com/andyljones/open_spiel.git && \\
+    # TODO: The install.sh bit will fail here after getting the subrepos we're after.
+    cd open_spiel && install.sh && pip install -e . \\
+
+
 # Set up the entrypoint script
 ADD dev.sh /usr/bin/
 
