@@ -2,6 +2,29 @@ import torch
 import numpy as np
 from rebar import arrdict
 
+def unique(idxs, maxes):
+    if idxs.size(0) == 0:
+        return idxs
+
+    assert idxs.size(-1) == len(maxes)+1
+    maxes = [idxs[..., 0].max()+1] + maxes
+
+    base = 1
+    id = torch.zeros_like(idxs[..., 0])
+    for d in reversed(range(len(maxes))):
+        id += idxs[..., d]*base
+        base *= maxes[d]
+    
+    uid = torch.unique(id)
+
+    unique_idxs = []
+    for d in reversed(range(len(maxes))):
+        uidx = uid % maxes[d]
+        uid = (uid - uidx)//maxes[d]
+        unique_idxs.append(uidx)
+
+    return torch.stack(unique_idxs[::-1], -1)
+
 class Hex:
     """Based on `OpenSpiel's implementation <https://github.com/deepmind/open_spiel/blob/master/open_spiel/games/hex.cc>`_.
     """
@@ -66,7 +89,8 @@ class Hex:
             self._states(idxs, moves[idxs[:, 0]])
             neighbour_idxs = self._neighbours(idxs)
             possible = self._states(neighbour_idxs) == colors[idxs[:, 0], None]
-            idxs = neighbour_idxs[possible]
+            #TODO: Take uniques
+            idxs = unique(neighbour_idxs[possible], [self._boardsize, self._boardsize])
 
     def _update_states(self, actions):
         assert (self._states(actions) == 0).all(), 'One of the actions is to place a token on an already-occupied cell'
