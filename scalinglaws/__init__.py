@@ -67,6 +67,10 @@ class Hex:
             return self._board[envs, rows, cols]
         else:
             self._board[envs, rows, cols] = val
+    
+    def _reset(self, reset):
+        self._board[reset] = self._STATES['.']
+        self._player[reset] = 0
 
     def _neighbours(self, idxs):
         if idxs.size(1) == 3:
@@ -117,29 +121,17 @@ class Hex:
         self._flood(actions)
 
         reset = ((new_state == self._STATES['B']) | (new_state == self._STATES['W']))
-        self._board[reset] = self._STATES['.']
 
         return reset
 
-    def step(self, actions):
-        """Args:
-            actions: (n_env, 2)-int tensor between (0, 0) and (boardsize, boardsize). Cells are indexed in row-major
-            order from the top-left.
-            
-        Returns:
-
-        """
-
-        reset = self._update_states(actions)
-        reward = reset.float()
-
+    def _observe(self, reset):
         obs = torch.stack([
             torch.stack([self._board == self._STATES[s] for s in 'b^vB']).any(0),
             torch.stack([self._board == self._STATES[s] for s in 'w<>W']).any(0)], -1)
 
         old = arrdict.arrdict(
             player=self._player,
-            reward=reward).clone()
+            reward=reset.float()).clone()
 
         self._player = 1 - self._player
 
@@ -150,6 +142,37 @@ class Hex:
 
         return old, new
 
+    def reset(self):
+        reset = torch.ones(self.n_envs, dtype=bool, device=self._device)
+        self._reset(reset)
+        return self._observe(reset)[1]
+
+    def step(self, actions):
+        """Args:
+            actions: (n_env, 2)-int tensor between (0, 0) and (boardsize, boardsize). Cells are indexed in row-major
+            order from the top-left.
+            
+        Returns:
+
+        """
+        reset = self._update_states(actions)
+        self._reset(reset)
+        return self._observe(reset)
+
+
     def display(self, e=0):
         strings = np.vectorize(self._STRINGS.__getitem__)(self._board[e].cpu().numpy())
         print('\n'.join(''.join(r) for r in strings))
+
+def test():
+    h = Hex(1, 3, device='cpu')
+
+    n = h.reset()
+
+    for _ in range(20):
+        mask = (~n.obs.any(-1))
+
+        options = torch.nonzero(mask)
+        move = options[torch.randint(options.size(0), ()), 1:]
+        
+        o, n = h.step(move[None])
