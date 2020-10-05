@@ -79,12 +79,15 @@ class Hex:
             return torch.cat([envs, neighbours], 2)
         return (idxs[:, None, :] + self._NEIGHBOURS).clamp(0, self._boardsize-1)
 
+    def _colours(self, x):
+        colours = x.clone()
+        colours[(x == self._STATES['^']) | (x == self._STATES['v'])] = self._STATES['b']
+        colours[(x == self._STATES['<']) | (x == self._STATES['>'])] = self._STATES['w']
+        return colours
+
     def _flood(self, actions):
         moves = self._states(actions)
-
-        colors = moves.clone()
-        colors[(moves == self._STATES['^']) | (moves == self._STATES['v'])] = self._STATES['b']
-        colors[(moves == self._STATES['<']) | (moves == self._STATES['>'])] = self._STATES['w']
+        colors = self._colours(moves)
 
         active = torch.stack([moves == self._STATES[s] for s in '<>^v'], 0).any(0)
 
@@ -124,28 +127,19 @@ class Hex:
 
         return reset
 
-    def _observe(self, reset):
+    def _observe(self):
         obs = torch.stack([
             torch.stack([self._board == self._STATES[s] for s in 'b^vB']).any(0),
             torch.stack([self._board == self._STATES[s] for s in 'w<>W']).any(0)], -1)
 
-        old = arrdict.arrdict(
-            player=self._player,
-            reward=reset.float()).clone()
-
-        self._player = 1 - self._player
-
-        new = arrdict.arrdict(
-                obs=obs,
-                reset=reset,
-                player=self._player).clone()
-
-        return old, new
+        return arrdict.arrdict(
+            obs=obs,
+            player=self._player).clone()
 
     def reset(self):
         reset = torch.ones(self.n_envs, dtype=bool, device=self._device)
         self._reset(reset)
-        return self._observe(reset)[1]
+        return arrdict.arrdict(reset=reset, **self._observe())
 
     def step(self, actions):
         """Args:
@@ -156,12 +150,20 @@ class Hex:
 
         """
         reset = self._update_states(actions)
+        old = arrdict.arrdict(reward=reset.float(), **self._observe())
+        self._player = 1 - self._player
         self._reset(reset)
-        return self._observe(reset)
+        new = arrdict.arrdict(reset=reset, **self._observe())
+        return old, new
 
-
-    def display(self, e=0):
-        strings = np.vectorize(self._STRINGS.__getitem__)(self._board[e].cpu().numpy())
+    def display(self, e=0, hidden=False):
+        if hidden:
+            strs = self._STRINGS
+            board = self._board[e].clone()
+        else:
+            strs = {int(self._STATES['b']): '◉', int(self._STATES['w']): '◯', int(self._STATES['.']): '·'}
+            board = self._colours(self._board[e])
+        strings = np.vectorize(strs.__getitem__)(board.cpu().numpy())
         return '\n'.join(' '*i + ' '.join(r) for i, r in enumerate(strings))
 
 def test():
