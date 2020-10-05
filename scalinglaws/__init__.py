@@ -189,20 +189,25 @@ def open_spiel_board(state):
 def open_spiel_test():
     import pyspiel
 
-    ours = Hex(1, 11, device='cpu')
+    e = 1
+    ours = Hex(e+1, 11, device='cpu')
+    new = ours.reset()
 
     theirs = pyspiel.load_game("hex")
     state = theirs.new_initial_state()
-    for _ in range(30):
-        their_action = np.random.choice(state.legal_actions())
+    while True:
+        our_action = []
+        for ee in range(ours.n_envs):
+            options = (~new.obs.any(-1)[ee]).nonzero()
+            our_action.append(options[torch.randint(options.size(0), ())])
+        old, new = ours.step(torch.stack(our_action))
+
+        their_action = (our_action[e] * torch.tensor([ours._boardsize, 1])).sum(-1)
         state.apply_action(their_action)
             
-        our_action = torch.tensor([
-                their_action // ours._boardsize, 
-                their_action % ours._boardsize])
+        if new.reset[e]:
+            break
             
-        ours.step(our_action[None])
-
-        our_state = ours.display(hidden=True)
+        our_state = ours.display(e=e, hidden=True)
         their_state = open_spiel_board(state)
         assert our_state == their_state
