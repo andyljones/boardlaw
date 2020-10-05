@@ -166,7 +166,7 @@ class Hex:
         strings = np.vectorize(strs.__getitem__)(board.cpu().numpy())
         return '\n'.join(' '*i + ' '.join(r) for i, r in enumerate(strings))
 
-def test():
+def basic_test():
     h = Hex(1, 3, device='cpu')
 
     n = h.reset()
@@ -178,3 +178,31 @@ def test():
         move = options[torch.randint(options.size(0), ()), 1:]
         
         o, n = h.step(move[None])
+
+def open_spiel_board(state):
+    # state ordering taken from hex.h 
+    strs = 'W<>w.bv^B'
+    board = np.array(state.observation_tensor()).reshape(9, 11, 11).argmax(0)
+    strs = np.vectorize(strs.__getitem__)(board)
+    return '\n'.join(' '*i + ' '.join(r) for i, r in enumerate(strs))
+
+def open_spiel_test():
+    import pyspiel
+
+    ours = Hex(1, 11, device='cpu')
+
+    theirs = pyspiel.load_game("hex")
+    state = theirs.new_initial_state()
+    for _ in range(30):
+        their_action = np.random.choice(state.legal_actions())
+        state.apply_action(their_action)
+            
+        our_action = torch.tensor([
+                their_action // ours._boardsize, 
+                their_action % ours._boardsize])
+            
+        ours.step(our_action[None])
+
+        our_state = ours.display(hidden=True)
+        their_state = open_spiel_board(state)
+        assert our_state == their_state
