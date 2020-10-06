@@ -106,6 +106,11 @@ class Hex:
         if actions.ndim == 1:
             actions = torch.stack([actions // self.boardsize, actions % self.boardsize], -1)
 
+        # White player sees a transposed board, so their actions need transposing back.
+        black_actions = actions
+        white_actions = actions.flip(1)
+        actions = torch.where(self._player[:, None] == 0, black_actions, white_actions)
+
         assert (self._states(actions) == 0).all(), 'One of the actions is to place a token on an already-occupied cell'
 
         neighbours = self._states(self._neighbours(actions))
@@ -134,9 +139,13 @@ class Hex:
         return reset
 
     def _observe(self):
-        obs = torch.stack([
+        black_view = torch.stack([
             torch.stack([self._board == self._STATES[s] for s in 'b^vB']).any(0),
             torch.stack([self._board == self._STATES[s] for s in 'w<>W']).any(0)], -1).float()
+
+        # White player sees a transposed board
+        white_view = black_view.transpose(1, 2).flip(3)
+        obs = black_view.where(self._player[:, None, None, None] == 0, white_view)
 
         return arrdict.arrdict(
             obs=obs,
