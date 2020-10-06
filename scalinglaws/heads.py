@@ -77,7 +77,7 @@ class DiscreteOutput(nn.Module):
 
     def __init__(self, space, width):
         super().__init__()
-        shape = space.dim
+        shape = space
         self.core = nn.Linear(width, int(np.prod(shape)))
         self.shape = shape
     
@@ -95,7 +95,7 @@ class MaskedOutput(nn.Module):
 
     def __init__(self, space, width):
         super().__init__()
-        shape = space.dim
+        shape = space
         self.core = nn.Linear(width, int(np.prod(shape)))
         self.shape = shape
     

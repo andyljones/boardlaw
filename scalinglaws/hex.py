@@ -57,7 +57,7 @@ class Hex:
         self._envs = torch.arange(self.n_envs, device=device)
 
         self.obs_space = heads.Tensor((self.boardsize, self.boardsize, 2))
-        self.action_space = heads.Masked((self.boardsize, self.boardsize))
+        self.action_space = heads.Masked(self.boardsize*self.boardsize)
 
     def _states(self, idxs, val=None):
         if idxs.size(-1) == 2:
@@ -103,6 +103,9 @@ class Hex:
             idxs = unique(neighbour_idxs[possible], [self.boardsize, self.boardsize])
 
     def _update_states(self, actions):
+        if actions.ndim == 1:
+            actions = torch.stack([actions // self.boardsize, actions % self.boardsize], -1)
+
         assert (self._states(actions) == 0).all(), 'One of the actions is to place a token on an already-occupied cell'
 
         neighbours = self._states(self._neighbours(actions))
@@ -137,7 +140,7 @@ class Hex:
 
         return arrdict.arrdict(
             obs=obs,
-            mask=(obs == 0).all(-1),
+            mask=(obs == 0).all(-1).reshape(self.n_envs, -1),
             player=self._player).clone()
 
     def reset(self):
