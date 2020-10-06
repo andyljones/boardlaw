@@ -3,13 +3,13 @@ from torch import nn
 from rebar import recurrence, arrdict
 from torch.nn import functional as F
 
-class Full(nn.Linear):
+class Residual(nn.Linear):
 
     def __init__(self, width):
         super().__init__(width, width)
 
     def forward(self, x, **kwargs):
-        return F.relu(super().forward(x))
+        return x + F.relu(super().forward(x))
 
 class Agent(nn.Module):
 
@@ -19,12 +19,12 @@ class Agent(nn.Module):
         self.sampler = out.sample
         self.policy = recurrence.Sequential(
             heads.intake(obs_space, width),
-            Full(width),
+            Residual(width),
             # lstm.LSTM(width),
             out)
         self.value = recurrence.Sequential(
             heads.intake(obs_space, width),
-            Full(width),
+            Residual(width),
             # lstm.LSTM(width),
             heads.ValueOutput(width))
 
