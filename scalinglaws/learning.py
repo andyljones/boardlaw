@@ -22,38 +22,47 @@ def assert_same_shape(ref, *arrs):
     for a in arrs:
         assert ref.shape == a.shape
 
-def deltas(value, reward, target, reset, gamma=.99):
-    reward, reset = reward[:-1], reset[1:]
-    regular_deltas = (reward + gamma*target[1:]) - value[:-1]
-    return torch.where(reset, reward - value[:-1], regular_deltas)
+def advantage_deltas(value, reward, target, reset, terminal, gamma=.99):
+    # Deltas implicitly followed by a reset, since they're at the end of the batch;
+    # unknown subsequent value, so assume zero
+    deltas = torch.zeros_like(reward)
+    # Regular case
+    deltas[:-1] = (reward[:-1] + gamma*target[1:]) - value[:-1]
+    # Deltas followed by a reset; unknown subsequent value, so assume zero
+    deltas[:-1][reset[1:]] = 0
+    # Deltas followed by a termination; subsequent value is zero
+    deltas[:-1][terminal[1:]] = reward[:-1] - value[:-1]
+    return deltas
 
-def present_value(dv, finals, reset, alpha):
-    assert_same_shape(dv, reset)
+def present_value(deltas, fallback, reset, alpha):
+    # reward-to-go, reset: fall back to value
+    # reward-to-go, terminal: fall back to delta
+    # advantages, reset: fall back to zero
+    # advantages, terminal: fall back to zero
+    assert_same_shape(deltas, fallback, reset)
 
     reset = reset.type(torch.float)
-    acc = finals
-    result = torch.full_like(dv, np.nan)
-    for t in np.arange(dv.shape[0])[::-1]:
-        acc = dv[t] + acc*alpha*(1 - reset[t])
-        result[t] = acc
+    result = torch.full_like(deltas, np.nan)
+    result[-1] = fallback[-1]
+    for t in np.arange(deltas.shape[0]-1)[::-1]:
+        result[t] = alpha*result[t+1] + fallback[t].where(reset[t+1], deltas[t])
     return result
 
 def generalized_advantages(value, reward, v, reset, terminal, gamma, lambd=.97):
     assert_same_shape(value, reward, v, reset, terminal)
 
-    dv = deltas(value, reward, v, reset, terminal, gamma=gamma)
-    finals = torch.zeros_like(dv[-1])
-    return torch.cat([present_value(dv, finals, reset[1:], terminal[1:], lambd*gamma), finals[None]], 0).detach()
+    dv = advantage_deltas(value, reward, v, reset, terminal, gamma=gamma)
+    return present_value(dv, value, reset, terminal, lambd*gamma).detach()
 
 def reward_to_go(reward, value, reset, terminal, gamma):
-    return torch.cat([present_value(reward[:-1], value[-1], reset[1:], terminal[1:], gamma), value[[-1]]], 0).detach()
+    return present_value(reward, value, reset, terminal, gamma).detach()
 
 def v_trace(ratios, value, reward, reset, gamma, max_rho=1, max_c=1):
     assert_same_shape(ratios, value, reward, reset)
 
     rho = ratios.clamp(0, max_rho)
     c = ratios.clamp(0, max_c)
-    dV = rho[:-1]*deltas(value, reward, value, reset, gamma=gamma)
+    dV = rho[:-1]*advantage_deltas(value, reward, value, reset, gamma=gamma)
 
     discount = (1 - reset.int())[1:]*gamma
 
