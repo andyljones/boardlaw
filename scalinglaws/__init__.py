@@ -1,4 +1,4 @@
-from . import hex, agents, learning
+from . import hex, agents, learning, matchers
 from rebar import arrdict, stats, widgets, logging, paths
 import numpy as np
 import torch
@@ -9,22 +9,25 @@ log = getLogger(__name__)
 def as_chunk(buffer):
     chunk = arrdict.stack(buffer)
     with stats.defer():
-        stats.rate('sample-rate/actor', chunk.inputs.reset.nelement())
-        stats.mean('traj-length', chunk.inputs.reset.nelement(), chunk.inputs.reset.sum())
-        stats.cumsum('count/traj', chunk.inputs.reset.sum())
-        stats.cumsum('count/inputs', chunk.inputs.reset.size(0))
+        i, r = chunk.inputs, chunk.responses
+        stats.rate('sample-rate/actor', i.terminal.nelement())
+        stats.mean('traj-length', i.terminal.nelement(), chunk.terminal.sum())
+        stats.cumsum('count/traj', i.terminal.sum())
+        stats.cumsum('count/inputs', i.terminal.size(0))
         stats.cumsum('count/chunks', 1)
-        stats.cumsum('count/samples', chunk.inputs.reset.nelement())
+        stats.cumsum('count/samples', i.terminal.nelement())
         stats.rate('step-rate/chunks', 1)
-        stats.rate('step-rate/inputs', chunk.inputs.reset.size(0))
-        stats.mean('step-reward', chunk.responses.reward.sum(), chunk.responses.reward.nelement())
-        stats.mean('traj-reward/mean', chunk.responses.reward.sum(), chunk.inputs.reset.sum())
-        stats.mean('traj-reward/positive', chunk.responses.reward.clamp(0, None).sum(), chunk.inputs.reset.sum())
-        stats.mean('traj-reward/negative', chunk.responses.reward.clamp(None, 0).sum(), chunk.inputs.reset.sum())
+        stats.rate('step-rate/inputs', i.terminal.size(0))
+        stats.mean('step-reward', r.reward.sum(), r.reward.nelement())
+        stats.mean('traj-reward/mean', r.reward.sum(), i.terminal.sum())
+        stats.mean('traj-reward/positive', r.reward.clamp(0, None).sum(), i.terminal.sum())
+        stats.mean('traj-reward/negative', r.reward.clamp(None, 0).sum(), i.terminal.sum())
     return chunk
 
 def optimize(agent, opt, batch, entropy=1e-2, gamma=.99, clip=.2):
-    i, d0, r = batch.inputs, batch.decisions, batch.responses
+    deinterlaced = matchers.deinterlace(batch)
+
+    i, d0, r = deinterlaced.inputs, deinterlaced.decisions, deinterlaced.responses
     d = agent(i, value=True)
 
     logits = learning.flatten(d.logits)
@@ -32,11 +35,11 @@ def optimize(agent, opt, batch, entropy=1e-2, gamma=.99, clip=.2):
     new_logits = learning.flatten(learning.gather(d.logits, d0.actions))
     ratio = (new_logits - old_logits).exp().clamp(.05, 20)
 
-    v_target = learning.v_trace(ratio, d.value, r.reward, i.reset, gamma=gamma)
+    v_target = learning.reward_to_go(r.reward, d.value, i.reset, i.terminal, gamma=gamma)
     v_clipped = d0.value + torch.clamp(d.value - d0.value, -10, +10)
     v_loss = .5*torch.max((d.value - v_target)**2, (v_clipped - v_target)**2).mean()
 
-    adv = learning.generalized_advantages(d.value, r.reward, d.value, i.reset, gamma=gamma)
+    adv = learning.generalized_advantages(d.value, r.reward, d.value, i.reset, i.terminal, gamma=gamma)
     normed_adv = (adv - adv.mean())/(1e-3 + adv.std())
     free_adv = ratio*normed_adv
     clip_adv = torch.clamp(ratio, 1-clip, 1+clip)*normed_adv
@@ -81,6 +84,9 @@ def optimize(agent, opt, batch, entropy=1e-2, gamma=.99, clip=.2):
 
 def train():
     """ 
+    Player chunks:
+     * Adapt present_value, v_trace to track the player
+     * Adapt recurrent state to ... what? How'd you deal with multi-agent experience collection?
     """
     buffer_size = 64
     n_envs = 1024

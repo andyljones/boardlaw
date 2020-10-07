@@ -38,15 +38,15 @@ def present_value(dv, finals, reset, alpha):
         result[t] = acc
     return result
 
-def generalized_advantages(value, reward, v, reset, gamma, lambd=.97):
-    assert_same_shape(value, reward, v, reset)
+def generalized_advantages(value, reward, v, reset, terminal, gamma, lambd=.97):
+    assert_same_shape(value, reward, v, reset, terminal)
 
-    dv = deltas(value, reward, v, reset, gamma=gamma)
+    dv = deltas(value, reward, v, reset, terminal, gamma=gamma)
     finals = torch.zeros_like(dv[-1])
-    return torch.cat([present_value(dv, finals, reset[1:], lambd*gamma), finals[None]], 0).detach()
+    return torch.cat([present_value(dv, finals, reset[1:], terminal[1:], lambd*gamma), finals[None]], 0).detach()
 
-def reward_to_go(reward, value, reset, gamma):
-    return torch.cat([present_value(reward[:-1], value[-1], reset[1:], gamma), value[[-1]]], 0).detach()
+def reward_to_go(reward, value, reset, terminal, gamma):
+    return torch.cat([present_value(reward[:-1], value[-1], reset[1:], terminal[1:], gamma), value[[-1]]], 0).detach()
 
 def v_trace(ratios, value, reward, reset, gamma, max_rho=1, max_c=1):
     assert_same_shape(ratios, value, reward, reset)

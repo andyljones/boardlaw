@@ -71,9 +71,9 @@ class Hex:
         else:
             self._board[envs, rows, cols] = val
     
-    def _reset(self, reset):
-        self._board[reset] = self._STATES['.']
-        self._player[reset] = 0
+    def _terminate(self, terminate):
+        self._board[terminate] = self._STATES['.']
+        self._player[terminate] = 0
 
     def _neighbours(self, idxs):
         if idxs.size(1) == 3:
@@ -134,9 +134,9 @@ class Hex:
         self._states(actions, new_state)
         self._flood(actions)
 
-        reset = ((new_state == self._STATES['B']) | (new_state == self._STATES['W']))
+        terminal = ((new_state == self._STATES['B']) | (new_state == self._STATES['W']))
 
-        return reset
+        return terminal
 
     def _observe(self):
         black_view = torch.stack([
@@ -153,9 +153,9 @@ class Hex:
             player=self._player).clone()
 
     def reset(self):
-        reset = torch.ones(self.n_envs, dtype=bool, device=self.device)
-        self._reset(reset)
-        return arrdict.arrdict(reset=reset, **self._observe())
+        terminal = torch.ones(self.n_envs, dtype=bool, device=self.device)
+        self._terminate(terminal)
+        return arrdict.arrdict(terminal=terminal, **self._observe())
 
     def step(self, actions):
         """Args:
@@ -165,11 +165,11 @@ class Hex:
         Returns:
 
         """
-        reset = self._update_states(actions)
-        old = arrdict.arrdict(reward=reset.float(), **self._observe())
+        terminal = self._update_states(actions)
+        old = arrdict.arrdict(reward=terminal.float(), **self._observe())
         self._player = 1 - self._player
-        self._reset(reset)
-        new = arrdict.arrdict(reset=reset, **self._observe())
+        self._terminate(terminal)
+        new = arrdict.arrdict(terminal=terminal, **self._observe())
         return old, new
 
     def display(self, e=0, hidden=False):
