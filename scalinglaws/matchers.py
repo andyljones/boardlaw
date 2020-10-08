@@ -73,7 +73,7 @@ class FixedMatcher:
         env_idxs = torch.argsort(env_ids)
         return arrdict.cat([xs[a] for a in sorted(xs)])[env_idxs]
 
-def rollout(env, agents, n_steps=100):
+def rollout(env, agents, n_steps=256):
     matcher = FixedMatcher(len(agents), env.n_envs, env.n_seats, device=env.device)
 
     trace = []

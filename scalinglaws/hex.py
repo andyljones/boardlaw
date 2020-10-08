@@ -156,7 +156,7 @@ class Hex:
     def reset(self):
         terminal = torch.ones(self.n_envs, dtype=bool, device=self.device)
         self._terminate(terminal)
-        return arrdict.arrdict(terminal=terminal, **self._observe())
+        return arrdict.arrdict(terminal=torch.zeros_like(terminal), **self._observe())
 
     def step(self, actions):
         """Args:
