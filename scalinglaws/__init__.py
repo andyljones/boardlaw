@@ -1,5 +1,5 @@
 from . import hex, agents, learning, matchers
-from rebar import arrdict, stats, widgets, logging, paths
+from rebar import arrdict, stats, widgets, logging, paths, plots, storing
 import numpy as np
 import torch
 from logging import getLogger
@@ -89,7 +89,7 @@ def train():
      * Adapt recurrent state to ... what? How'd you deal with multi-agent experience collection?
     """
     buffer_size = 64
-    n_envs = 1024
+    n_envs = 2048
     batch_size = 8*1024
 
     env = hex.Hex(n_envs)
@@ -98,6 +98,7 @@ def train():
 
     run_name = 'test'
     compositor = widgets.Compositor()
+    paths.clear(run_name)
     with logging.via_dir(run_name, compositor), stats.via_dir(run_name, compositor):
         inputs = env.reset()
         while True:
@@ -120,3 +121,5 @@ def train():
                 if kl > .02:
                     log.info('kl div exceeded')
                     break
+
+            storing.store_latest(run_name, {'agent': agent, 'opt': opt}, throttle=60)
