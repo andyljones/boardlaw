@@ -52,34 +52,49 @@ class FixedMatcher:
         self.n_envs = n_envs
         self.n_seats = n_seats
         self.n_copies = n_envs*n_seats // n_agents
+        self.device = device
 
         randperm = torch.randperm(n_seats*n_envs, device=device, dtype=torch.long).reshape(n_envs, n_seats)
-        self.agent_ids = randperm % n_agents
-        self.copy_ids = randperm // n_agents
+        self._agent_ids = randperm % n_agents
+
+    def agent_ids(self, seats):
+        return self._agent_ids.gather(1, seats[:, None].long()).squeeze(1)
+
+    def agent_masks(self, seats):
+        agents = self.agent_ids(seats)
+        return {a: (agents == a) for a in range(self.n_agents) if (agents == a).any()}
 
     def agentify(self, x, seats):
-        agents = self.agent_ids.gather(1, seats[:, None].long()).squeeze(1)
-        return [x[agents == a] for a in range(self.n_agents)]
+        return {a: x[m] for a, m in self.agent_masks(seats).items()}
 
     def envify(self, xs, seats):
-        agents = self.agent_ids.gather(1, seats[:, None].long()).squeeze(1)
-        env_ids = torch.arange(self.n_envs, device=agents.device)
-        env_ids = torch.cat([env_ids[agents == a] for a in range(self.n_agents)])
+        env_ids = torch.arange(self.n_envs, device=self.device)
+        env_ids = torch.cat([env_ids[m] for a, m in self.agent_masks(seats).items()])
         env_idxs = torch.argsort(env_ids)
-        return arrdict.cat(xs)[env_idxs]
+        return arrdict.cat([xs[a] for a in sorted(xs)])[env_idxs]
 
+def rollout(env, agents, n_steps=100):
+    matcher = FixedMatcher(len(agents), env.n_envs, env.n_seats, device=env.device)
 
-def rollout(env, agent, n_steps=100):
-    matcher = FixedMatcher(len(agent), env.n_envs, env.n_seats, device=env.device)
-
-    images = []
-    inputs = env.reset()
+    trace = []
+    env_inputs = env.reset()
     for _ in range(n_steps):
-        images.append(env.display())
-        agent_inputs = matcher.agentify(inputs, inputs.seat)
-        decisions = [agent(ai[None], sample=True).squeeze(0) for agent, ai in zip(agent, agent_inputs)]
-        env_decisions = matcher.envify(decisions, inputs.seat)
+        agent_inputs = matcher.agentify(env_inputs, env_inputs.seat)
+        decisions = {a: agents[a](ai[None], sample=True).squeeze(0) for a, ai in agent_inputs.items()}
+        env_decisions = matcher.envify(decisions, env_inputs.seat)
         responses, new_inputs = env.step(env_decisions.actions)
-        inputs = new_inputs
+        trace.append(arrdict.arrdict(
+            agent_ids=matcher.agent_ids(env_inputs.seat),
+            inputs=env_inputs,
+            decisions=env_decisions,
+            responses=responses))
+        env_inputs = new_inputs
     
-    return images
+    return arrdict.stack(trace)
+
+def winrate(env, agents):
+    trace = rollout(env, agents)
+
+    totals = torch.zeros(len(agents), device=env.device)
+    totals.index_add_(0, trace.agent_ids.flatten(), trace.responses.reward.flatten())
+    return totals/trace.inputs.terminal.sum()

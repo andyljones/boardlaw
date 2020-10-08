@@ -22,6 +22,10 @@ def store_latest(run_name, objs, throttle=0):
     _store(path, objs)
     return True
 
+def load_latest(run_name=-1, proc_name='MainProcess'):
+    [ps] = list(paths.subdir(run_name, 'storing', 'latest').glob(f'{proc_name}*.pkl'))
+    return pickle.loads(ps.read_bytes())
+
 def store_periodic(run_name, objs, throttle=0):
     subdir = paths.subdir(run_name, 'storing', 'periodic')
     subdir.mkdir(exist_ok=True, parents=True)
@@ -52,6 +56,9 @@ def stored_periodic(run_name=-1):
             'proc_name': procname,
             'proc_id': procid,
             'path': p})
+
+    if len(infos) == 0:
+        raise ValueError('No stored data to load')
 
     df = pd.DataFrame(infos).sort_values('date').reset_index(drop=True)
     return df
