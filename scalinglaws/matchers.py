@@ -21,12 +21,19 @@ def deinterlace(batch):
     us = torch.full_like(ts, -1)
     us[ts_inv, bs] = ts
 
-    batch = batch[us, bs]
-    if 'reset' in batch.inputs:
-        batch['inputs']['reset'] = resets | batch.inputs.reset
-    elif 'terminal' in batch.inputs:
-        batch['inputs']['reset']  = resets | batch.inputs.terminal
-    else:
-        batch['inputs']['reset'] = resets
+    deinterlaced = batch[us, bs]
+    assert 'reset' not in deinterlaced.inputs
 
-    return batch
+    #TODO: This should be done seperately in a prior step.
+
+    # Shift termination backwards a step
+    terminal = batch.inputs.terminal.clone()
+    terminal[:-1] = terminal[1:] | terminal[:-1]
+    deinterlaced['inputs']['reset'] = resets | terminal[us, bs]
+
+    # Mirror rewards backwards a step
+    rewards = batch.responses.reward.clone()
+    rewards[:-1] = rewards[:-1] - rewards[1:] 
+    deinterlaced['responses']['reward'] = rewards
+
+    return deinterlaced
