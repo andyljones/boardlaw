@@ -23,22 +23,19 @@ def assert_same_shape(ref, *arrs):
         assert ref.shape == a.shape
 
 def advantage_deltas(value, reward, target, reset, terminal, gamma=.99):
-    # Deltas implicitly followed by a reset, since they're at the end of the batch;
-    # unknown subsequent value, so assume zero
-    deltas = torch.zeros_like(reward[:-1])
     # Regular case
     deltas = (reward[:-1] + gamma*target[1:]) - value[:-1]
     # Deltas followed by a reset; unknown subsequent value, so assume zero
     deltas[reset[1:]] = 0
     # Deltas followed by a termination; subsequent value is zero
-    deltas[terminal[1:]] = reward[:-1] - value[:-1]
+    deltas[terminal[1:]] = (reward[:-1] - value[:-1])[terminal[1:]]
     return deltas
 
 def present_value(deltas, fallback, reset, alpha):
     # reward-to-go, reset: fall back to value
     # reward-to-go, terminal: fall back to delta
-    # advantages, reset: fall back to value plus reward
-    # advantages, terminal: fall back to reward
+    # advantages, reset: fall back to delta
+    # advantages, terminal: fall back to delta
     assert_same_shape(deltas, fallback[:-1], reset[:-1])
 
     result = torch.full_like(fallback, np.nan)
@@ -48,17 +45,21 @@ def present_value(deltas, fallback, reset, alpha):
     return result
 
 def generalized_advantages(value, reward, v, reset, terminal, gamma, lambd=.97):
+    # regular: final row is final deltas, prev rows are accumulations of deltas
+    # next is reset: use delta for current, which is zero
+    # next is terminal: use delta for current
     assert (reset | ~terminal).all(), 'Some sample is marked as terminal but not reset'
     assert_same_shape(value, reward, v, reset, terminal)
 
     deltas = advantage_deltas(value, reward, v, reset, terminal, gamma=gamma)
-    fallback = torch.zeros_like(value[:-1])
+    fallback = torch.zeros_like(value)
+    fallback[:-1] = deltas
     return present_value(deltas, fallback, reset, lambd*gamma).detach()
 
 def reward_to_go(reward, value, reset, terminal, gamma):
     # regular: final row is values, prev rows are accumulations of reward
-    # next is reset: use value for current state
-    # next is terminal: use reward for current state 
+    # next is reset: use value for current
+    # next is terminal: use reward for current 
     assert (reset | ~terminal).all(), 'Some sample is marked as terminal but not reset'
     fallback = value
     fallback[:-1][terminal[1:]] = reward[:-1][terminal[1:]]
@@ -164,7 +165,7 @@ def test_reward_to_go():
     reset = torch.tensor([False, True, False])
     terminal = torch.tensor([False, True, False])
     actual = reward_to_go(reward, value, reset, terminal, gamma)
-    torch.testing.assert_allclose(actual, torch.tensor([1., 8., 6.])))
+    torch.testing.assert_allclose(actual, torch.tensor([1., 8., 6.]))
 
 
 def test_generalized_advantages():
@@ -174,9 +175,16 @@ def test_generalized_advantages():
     lambd = 1.
 
     reset = torch.tensor([False, False, False])
-    adv = generalized_advantages(value, reward, value, reset, gamma=gamma, lambd=lambd)
+    terminal = torch.tensor([False, False, False])
+    adv = generalized_advantages(value, reward, value, reset, terminal, gamma=gamma, lambd=lambd)
     torch.testing.assert_allclose(adv, torch.tensor([5., 3., 0.]))
 
     reset = torch.tensor([False, True, False])
-    adv = generalized_advantages(value, reward, value, reset, gamma=gamma, lambd=lambd)
+    terminal = torch.tensor([False, False, False])
+    adv = generalized_advantages(value, reward, value, reset, terminal, gamma=gamma, lambd=lambd)
+    torch.testing.assert_allclose(adv, torch.tensor([0., 3., 0.]))
+
+    reset = torch.tensor([False, True, False])
+    terminal = torch.tensor([False, True, False])
+    adv = generalized_advantages(value, reward, value, reset, terminal, gamma=gamma, lambd=lambd)
     torch.testing.assert_allclose(adv, torch.tensor([-3., 3., 0.]))
