@@ -1,4 +1,5 @@
 import torch
+from rebar import arrdict
 
 def symmetrize(batch):
     batch = type(batch)({k: type(v)(**v) for k, v in batch.items()})
@@ -43,7 +44,7 @@ def deinterlace(batch):
 
     return deinterlaced
 
-class RandomMatcher:
+class FixedMatcher:
 
     def __init__(self, n_agents, n_envs, n_seats, device='cuda'):
         assert n_envs*n_seats % n_agents == 0, 'The total number of players is not divisible by the number of agents'
@@ -52,9 +53,17 @@ class RandomMatcher:
         self.n_seats = n_seats
         self.n_copies = n_envs*n_seats // n_agents
 
-        randperm = torch.randperm(n_seats*n_envs, device=device, dtype=torch.long)
-        self.agent_ids = randperm.reshape(n_envs, n_seats) % n_agents
+        randperm = torch.randperm(n_seats*n_envs, device=device, dtype=torch.long).reshape(n_envs, n_seats)
+        self.agent_ids = randperm % n_agents
+        self.copy_ids = randperm // n_agents
 
     def agentify(self, x, seats):
         agents = self.agent_ids.gather(1, seats[:, None].long()).squeeze(1)
         return [x[agents == a] for a in range(self.n_agents)]
+
+    def envify(self, xs, seats):
+        agents = self.agent_ids.gather(1, seats[:, None].long()).squeeze(1)
+        env_ids = torch.arange(self.n_envs, device=agents.device)
+        env_ids = torch.cat([env_ids[agents == a] for a in range(self.n_agents)])
+        env_idxs = torch.argsort(env_ids)
+        return arrdict.cat(xs)[env_idxs]
