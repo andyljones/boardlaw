@@ -25,13 +25,13 @@ def assert_same_shape(ref, *arrs):
 def advantage_deltas(value, reward, target, reset, terminal, gamma=.99):
     # Deltas implicitly followed by a reset, since they're at the end of the batch;
     # unknown subsequent value, so assume zero
-    deltas = torch.zeros_like(reward)
+    deltas = torch.zeros_like(reward[:-1])
     # Regular case
-    deltas[:-1] = (reward[:-1] + gamma*target[1:]) - value[:-1]
+    deltas = (reward[:-1] + gamma*target[1:]) - value[:-1]
     # Deltas followed by a reset; unknown subsequent value, so assume zero
-    deltas[:-1][reset[1:]] = 0
+    deltas[reset[1:]] = 0
     # Deltas followed by a termination; subsequent value is zero
-    deltas[:-1][terminal[1:]] = reward[:-1] - value[:-1]
+    deltas[terminal[1:]] = reward[:-1] - value[:-1]
     return deltas
 
 def present_value(deltas, fallback, reset, alpha):
@@ -39,23 +39,28 @@ def present_value(deltas, fallback, reset, alpha):
     # reward-to-go, terminal: fall back to delta
     # advantages, reset: fall back to zero
     # advantages, terminal: fall back to zero
-    assert_same_shape(deltas, fallback, reset)
+    assert_same_shape(deltas, fallback, reset[:-1])
 
     reset = reset.type(torch.float)
     result = torch.full_like(deltas, np.nan)
     result[-1] = fallback[-1]
-    for t in np.arange(deltas.shape[0]-1)[::-1]:
+    for t in np.arange(deltas.size(0))[::-1]:
         result[t] = alpha*result[t+1] + fallback[t].where(reset[t+1], deltas[t])
-    return result
+    return result[:-1]
 
 def generalized_advantages(value, reward, v, reset, terminal, gamma, lambd=.97):
+    assert (reset | ~terminal).all(), 'Some sample is marked as terminal but not reset'
     assert_same_shape(value, reward, v, reset, terminal)
 
-    dv = advantage_deltas(value, reward, v, reset, terminal, gamma=gamma)
-    return present_value(dv, value, reset, terminal, lambd*gamma).detach()
+    deltas = advantage_deltas(value, reward, v, reset, terminal, gamma=gamma)
+    fallback = torch.zeros_like(value[:-1])
+    return present_value(deltas, fallback, reset, lambd*gamma).detach()
 
 def reward_to_go(reward, value, reset, terminal, gamma):
-    return present_value(reward, value, reset, terminal, gamma).detach()
+    assert (reset | ~terminal).all(), 'Some sample is marked as terminal but not reset'
+    fallback = value[:-1].clone()
+    fallback[terminal[1:]] = 0
+    return present_value(reward, value, reset, gamma).detach()
 
 def v_trace(ratios, value, reward, reset, gamma, max_rho=1, max_c=1):
     assert_same_shape(ratios, value, reward, reset)
