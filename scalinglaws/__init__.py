@@ -97,7 +97,7 @@ def train():
     agent = agents.Agent(env.obs_space, env.action_space).to(env.device)
     opt = torch.optim.Adam(agent.parameters(), lr=3e-4, amsgrad=True)
 
-    run_name = 'test'
+    run_name = paths.timestamp('test')
     compositor = widgets.Compositor()
     paths.clear(run_name)
     with logging.via_dir(run_name, compositor), stats.via_dir(run_name, compositor):
@@ -124,3 +124,4 @@ def train():
                     break
 
             storing.store_latest(run_name, {'agent': agent, 'opt': opt}, throttle=60)
+            storing.store_periodic(run_name, {'agent': agent, 'opt': opt}, throttle=600)
