@@ -63,6 +63,10 @@ def stored_periodic(run_name=-1):
     df = pd.DataFrame(infos).sort_values('date').reset_index(drop=True)
     return df
 
-def load_periodic(run_name=-1, proc_name='MainProcess'):
-    path = stored_periodic(run_name).loc[lambda df: df.proc_name == proc_name].iloc[-1].path
-    return pickle.loads(path.read_bytes())
+def load_periodic(run_name=-1, idx=-1, proc_name='MainProcess'):
+    df = stored_periodic(run_name).loc[lambda df: df.proc_name == proc_name]
+    if isinstance(idx, int):
+        row = df.iloc[idx]
+    else:
+        raise ValueError('Only implemented integer indexing')
+    return pickle.loads(row.path.read_bytes())

@@ -125,3 +125,10 @@ def train():
 
             storing.store_latest(run_name, {'agent': agent, 'opt': opt}, throttle=60)
             storing.store_periodic(run_name, {'agent': agent, 'opt': opt}, throttle=600)
+
+def compare(run_name=-1, left=-2, right=-1):
+    env = hex.Hex(256)
+    agent = [agents.Agent(env.obs_space, env.action_space).to(env.device) for _ in range(2)]
+    agent[0].load_state_dict(storing.load_periodic(idx=left)['agent'])
+    agent[1].load_state_dict(storing.load_periodic(idx=right)['agent'])
+    return matchers.winrate(env, agent)
