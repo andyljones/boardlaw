@@ -106,4 +106,4 @@ def winrate(env, agents, ci=.05):
 
     totals = torch.zeros(len(agents), device=env.device)
     totals.index_add_(0, trace.agent_ids.flatten(), trace.responses.reward.flatten())
-    return (totals/trace.inputs.terminal.sum()).cpu().numpy()
+    return (totals/totals.sum()).cpu().numpy()
