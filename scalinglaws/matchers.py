@@ -6,7 +6,7 @@ def symmetrize(batch):
 
     # Shift termination backwards a step
     terminal = batch.inputs.terminal.clone()
-    terminal[:-1] = terminal[1:] | terminal[:-1]
+    terminal[1:] = terminal[:-1] | terminal[1:]
     batch['inputs']['terminal'] = terminal
 
     # Mirror rewards backwards a step
@@ -38,9 +38,11 @@ def deinterlace(batch):
     us[ts_inv, bs] = ts
 
     deinterlaced = batch[us, bs]
-    if 'reset' in deinterlaced.batch:
-        resets = resets | deinterlaced.batch.reset
-    deinterlaced['batch']['reset'] = resets
+    if 'reset' in deinterlaced.inputs:
+        resets = resets | deinterlaced.inputs.reset
+    else:
+        resets = resets | deinterlaced.inputs.terminal
+    deinterlaced['inputs']['reset'] = resets
 
     return deinterlaced
 
