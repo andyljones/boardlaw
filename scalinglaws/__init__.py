@@ -132,3 +132,11 @@ def compare(run_name=-1, left=-2, right=-1):
     agent[0].load_state_dict(storing.load_periodic(idx=left)['agent'])
     agent[1].load_state_dict(storing.load_periodic(idx=right)['agent'])
     return matchers.winrate(env, agent)
+
+def compare_all(run_name=-1):
+    import pandas as pd
+    from itertools import combinations
+
+    df = storing.stored_periodic(run_name)
+    rates = {(l, r): compare(-1, l, r) for l, r in combinations(range(len(df)), 2)}
+    rates = pd.DataFrame.from_dict(rates).iloc[1].unstack(1)
