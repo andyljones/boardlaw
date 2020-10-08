@@ -13,7 +13,7 @@ class Residual(nn.Linear):
 
 class Agent(nn.Module):
 
-    def __init__(self, obs_space, action_space, width=64):
+    def __init__(self, obs_space, action_space, width=256):
         super().__init__()
         out = heads.output(action_space, width)
         self.sampler = out.sample
@@ -21,10 +21,14 @@ class Agent(nn.Module):
             heads.intake(obs_space, width),
             Residual(width),
             Residual(width),
+            Residual(width),
+            Residual(width),
             # lstm.LSTM(width),
             out)
         self.value = recurrence.Sequential(
             heads.intake(obs_space, width),
+            Residual(width),
+            Residual(width),
             Residual(width),
             Residual(width),
             # lstm.LSTM(width),
