@@ -24,6 +24,8 @@ def deinterlace(batch):
     batch = batch[us, bs]
     if 'reset' in batch.inputs:
         batch['inputs']['reset'] = resets | batch.inputs.reset
+    elif 'terminal' in batch.inputs:
+        batch['inputs']['reset']  = resets | batch.inputs.terminal
     else:
         batch['inputs']['reset'] = resets
 
