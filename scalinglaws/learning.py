@@ -56,7 +56,7 @@ def generalized_advantages(value, reward, v, reset, terminal, gamma, lambd=.97):
     fallback[:-1] = deltas
     return present_value(deltas, fallback, reset, lambd*gamma).detach()
 
-def reward_to_go(reward, value, reset, terminal, gamma:
+def reward_to_go(reward, value, reset, terminal, gamma):
     # regular: final row is values, prev rows are accumulations of reward
     # next is reset: use value for current
     # next is terminal: use reward for current 
