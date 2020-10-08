@@ -67,3 +67,19 @@ class FixedMatcher:
         env_ids = torch.cat([env_ids[agents == a] for a in range(self.n_agents)])
         env_idxs = torch.argsort(env_ids)
         return arrdict.cat(xs)[env_idxs]
+
+
+def rollout(env, agent, n_steps=100):
+    matcher = FixedMatcher(len(agent), env.n_envs, env.n_seats, device=env.device)
+
+    images = []
+    inputs = env.reset()
+    for _ in range(n_steps):
+        images.append(env.display())
+        agent_inputs = matcher.agentify(inputs, inputs.seat)
+        decisions = [agent(ai[None], sample=True).squeeze(0) for agent, ai in zip(agent, agent_inputs)]
+        env_decisions = matcher.envify(decisions, inputs.seat)
+        responses, new_inputs = env.step(env_decisions.actions)
+        inputs = new_inputs
+    
+    return images
