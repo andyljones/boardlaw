@@ -1,5 +1,20 @@
 import torch
 
+def symmetrize(batch):
+    batch = type(batch)({k: type(v)(**v) for k, v in batch.items()})
+
+    # Shift termination backwards a step
+    terminal = batch.inputs.terminal.clone()
+    terminal[:-1] = terminal[1:] | terminal[:-1]
+    batch['inputs']['terminal'] = terminal
+
+    # Mirror rewards backwards a step
+    rewards = batch.responses.reward.clone()
+    rewards[:-1] = rewards[:-1] - rewards[1:] 
+    batch['responses']['reward'] = rewards
+
+    return batch
+
 def deinterlace(batch):
     player = batch.inputs.player
     T, B = player.shape
@@ -22,18 +37,8 @@ def deinterlace(batch):
     us[ts_inv, bs] = ts
 
     deinterlaced = batch[us, bs]
-    assert 'reset' not in deinterlaced.inputs
-
-    #TODO: This should be done seperately in a prior step.
-
-    # Shift termination backwards a step
-    terminal = batch.inputs.terminal.clone()
-    terminal[:-1] = terminal[1:] | terminal[:-1]
-    deinterlaced['inputs']['reset'] = resets | terminal[us, bs]
-
-    # Mirror rewards backwards a step
-    rewards = batch.responses.reward.clone()
-    rewards[:-1] = rewards[:-1] - rewards[1:] 
-    deinterlaced['responses']['reward'] = rewards
+    if 'reset' in deinterlaced.batch:
+        resets = resets | deinterlaced.batch.reset
+    deinterlaced['batch']['reset'] = resets
 
     return deinterlaced

@@ -25,7 +25,7 @@ def as_chunk(buffer):
     return chunk
 
 def optimize(agent, opt, batch, entropy=1e-2, gamma=.99, clip=.2):
-    deinterlaced = matchers.deinterlace(batch)
+    deinterlaced = matchers.deinterlace(matchers.symmetrize(batch))
 
     i, d0, r = deinterlaced.inputs, deinterlaced.decisions, deinterlaced.responses
     d = agent(i, value=True)
