@@ -11,7 +11,7 @@ def as_chunk(buffer):
     with stats.defer():
         i, r = chunk.inputs, chunk.responses
         stats.rate('sample-rate/actor', i.terminal.nelement())
-        stats.mean('traj-length', i.terminal.nelement(), chunk.terminal.sum())
+        stats.mean('traj-length', i.terminal.nelement(), i.terminal.sum())
         stats.cumsum('count/traj', i.terminal.sum())
         stats.cumsum('count/inputs', i.terminal.size(0))
         stats.cumsum('count/chunks', 1)
