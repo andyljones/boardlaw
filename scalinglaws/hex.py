@@ -37,6 +37,7 @@ class Hex:
 
     def __init__(self, n_envs=1, boardsize=11, device='cuda'):
         self.n_envs = n_envs
+        self.n_seats = 2
         self.boardsize = boardsize
         self.device = torch.device(device)
 
@@ -53,7 +54,7 @@ class Hex:
         self._board = torch.full((n_envs, boardsize, boardsize), 0, device=device, dtype=torch.int)
 
         # As per OpenSpiel and convention, black plays first.
-        self._player = torch.full((n_envs,), 0, device=device, dtype=torch.int)
+        self._seat = torch.full((n_envs,), 0, device=device, dtype=torch.int)
         self._envs = torch.arange(self.n_envs, device=device)
 
         self.obs_space = heads.Tensor((self.boardsize, self.boardsize, 2))
@@ -73,7 +74,7 @@ class Hex:
     
     def _terminate(self, terminate):
         self._board[terminate] = self._STATES['.']
-        self._player[terminate] = 0
+        self._seat[terminate] = 0
 
     def _neighbours(self, idxs):
         if idxs.size(1) == 3:
@@ -109,14 +110,14 @@ class Hex:
         # White player sees a transposed board, so their actions need transposing back.
         black_actions = actions
         white_actions = actions.flip(1)
-        actions = torch.where(self._player[:, None] == 0, black_actions, white_actions)
+        actions = torch.where(self._seat[:, None] == 0, black_actions, white_actions)
 
         assert (self._states(actions) == 0).all(), 'One of the actions is to place a token on an already-occupied cell'
 
         neighbours = self._states(self._neighbours(actions))
 
-        black = self._player == 0
-        white = self._player == 1
+        black = self._seat == 0
+        white = self._seat == 1
         conns = {s: ((neighbours == self._STATES[s]).any(-1)) | self._IS_EDGE[s](actions) for s in self._IS_EDGE}
 
         new_state = torch.zeros_like(self._states(actions))
@@ -145,12 +146,12 @@ class Hex:
 
         # White player sees a transposed board
         white_view = black_view.transpose(1, 2).flip(3)
-        obs = black_view.where(self._player[:, None, None, None] == 0, white_view)
+        obs = black_view.where(self._seat[:, None, None, None] == 0, white_view)
 
         return arrdict.arrdict(
             obs=obs,
             mask=(obs == 0).all(-1).reshape(self.n_envs, -1),
-            player=self._player).clone()
+            seat=self._seat).clone()
 
     def reset(self):
         terminal = torch.ones(self.n_envs, dtype=bool, device=self.device)
@@ -167,7 +168,7 @@ class Hex:
         """
         terminal = self._update_states(actions)
         old = arrdict.arrdict(reward=terminal.float(), **self._observe())
-        self._player = 1 - self._player
+        self._seat = 1 - self._seat
         self._terminate(terminal)
         new = arrdict.arrdict(terminal=terminal, **self._observe())
         return old, new
