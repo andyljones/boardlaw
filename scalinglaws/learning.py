@@ -37,16 +37,15 @@ def advantage_deltas(value, reward, target, reset, terminal, gamma=.99):
 def present_value(deltas, fallback, reset, alpha):
     # reward-to-go, reset: fall back to value
     # reward-to-go, terminal: fall back to delta
-    # advantages, reset: fall back to zero
-    # advantages, terminal: fall back to zero
+    # advantages, reset: fall back to value plus reward
+    # advantages, terminal: fall back to reward
     assert_same_shape(deltas, fallback, reset[:-1])
 
-    reset = reset.type(torch.float)
     result = torch.full_like(deltas, np.nan)
     result[-1] = fallback[-1]
-    for t in np.arange(deltas.size(0))[::-1]:
+    for t in np.arange(deltas.size(0)-1)[::-1]:
         result[t] = alpha*result[t+1] + fallback[t].where(reset[t+1], deltas[t])
-    return result[:-1]
+    return result
 
 def generalized_advantages(value, reward, v, reset, terminal, gamma, lambd=.97):
     assert (reset | ~terminal).all(), 'Some sample is marked as terminal but not reset'
@@ -58,9 +57,10 @@ def generalized_advantages(value, reward, v, reset, terminal, gamma, lambd=.97):
 
 def reward_to_go(reward, value, reset, terminal, gamma):
     assert (reset | ~terminal).all(), 'Some sample is marked as terminal but not reset'
-    fallback = value[:-1].clone()
-    fallback[terminal[1:]] = 0
-    return present_value(reward, value, reset, gamma).detach()
+    fallback = reward[:-1] + gamma*value[1:]
+    fallback[reset[1:]] = value[:-1][reset[1:]]
+    fallback[terminal[1:]] = reward[:-1][terminal[1:]]
+    return present_value(reward[:-1], fallback, reset, gamma).detach()
 
 def v_trace(ratios, value, reward, reset, gamma, max_rho=1, max_c=1):
     assert_same_shape(ratios, value, reward, reset)
@@ -150,12 +150,20 @@ def test_reward_to_go():
     gamma = 1.
 
     reset = torch.tensor([False, False, False])
-    actual = reward_to_go(reward, value, reset, gamma)
+    terminal = torch.tensor([False, False, False])
+    actual = reward_to_go(reward, value, reset, terminal, gamma)
     torch.testing.assert_allclose(actual, torch.tensor([9., 8., 6.]))
 
     reset = torch.tensor([False, True, False])
-    actual = reward_to_go(reward, value, reset, gamma)
+    terminal = torch.tensor([False, False, False])
+    actual = reward_to_go(reward, value, reset, terminal, gamma)
     torch.testing.assert_allclose(actual, torch.tensor([1., 8., 6.]))
+
+    reset = torch.tensor([False, True, False])
+    terminal = torch.tensor([False, True, False])
+    actual = reward_to_go(reward, value, reset, terminal, gamma)
+    torch.testing.assert_allclose(actual, torch.tensor([1., 8., 6.]))
+
 
 def test_generalized_advantages():
     reward = torch.tensor([1., 2., 3])
