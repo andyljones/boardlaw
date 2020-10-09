@@ -126,3 +126,12 @@ def train():
             storing.store_latest(run_name, {'agent': agent, 'opt': opt}, throttle=60)
             storing.store_periodic(run_name, {'agent': agent, 'opt': opt}, throttle=600)
 
+def demo(run_name=-1, left=-2, right=-1):
+    envfunc = hex.Hex
+    agentfunc = agents.Agent
+
+    agent = [agentfunc(envfunc(1).obs_space, envfunc(1).action_space).to(envfunc(1).device) for _ in range(2)]
+    agent[0].load_state_dict(storing.load_periodic(run_name, idx=left)['agent'])
+    agent[1].load_state_dict(storing.load_periodic(run_name, idx=right)['agent'])
+
+    analysis.watch(envfunc, agent)

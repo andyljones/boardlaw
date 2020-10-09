@@ -181,13 +181,14 @@ class Hex:
     @classmethod
     def plot_state(cls, state, e=0):
         board = state[e]
+        width = board.shape[1]
 
         fig, ax = plt.subplots()
         ax.set_aspect(1)
 
         sin60 = np.sin(np.pi/3)
-        ax.set_xlim(-.5, (1 + .5)*board.shape[1])
-        ax.set_ylim(-sin60, sin60*board.shape[1])
+        ax.set_xlim(-1, 1.5*width - .5)
+        ax.set_ylim(-sin60, sin60*width)
 
         rows, cols = np.indices(board.shape)
         coords = np.stack([
@@ -200,6 +201,11 @@ class Hex:
         colors = ['tan'] + [black]*4 + [white]*4
         colors = np.vectorize(colors.__getitem__)(board).flatten()
 
+
+        tl, tr = (-1.5, (width)*sin60), (width-.5, (width)*sin60)
+        bl, br = (width/2-1, -sin60), (1.5*width, -sin60)
+        ax.add_patch(mpl.patches.Polygon(np.array([tl, tr, bl, br]), linewidth=1, facecolor=black, zorder=1))
+        ax.add_patch(mpl.patches.Polygon(np.array([tl, bl, tr, br]), linewidth=1, facecolor=white, zorder=1))
 
         radius = .5/sin60
         data_to_pixels = ax.transData.get_matrix()[0, 0]
@@ -214,7 +220,8 @@ class Hex:
                         facecolors=colors, 
                         edgecolor='k', 
                         linewidths=1, 
-                        transOffset=ax.transData)
+                        transOffset=ax.transData,
+                        zorder=2)
 
         ax.add_collection(hexes)
         ax.set_frame_on(False)
