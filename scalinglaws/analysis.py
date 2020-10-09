@@ -1,7 +1,8 @@
 import torch
-from . import storing, matchers
-from rebar import arrdict
+from . import matchers
+from rebar import arrdict, recording, storing
 import numpy as np
+from tqdm import tqdm
 
 def rollout(env, agents):
     matcher = matchers.FixedMatcher(len(agents), env.n_envs, env.n_seats, device=env.device)
@@ -34,17 +35,18 @@ def trace(env, agents, n_trajs=None):
     
     return arrdict.stack(trace)
 
-def watch(envfunc, agents):
+def watch(envfunc, agents, N=None, fps=3):
     env = envfunc(1)
     assert len(agents) == env.n_seats
 
-    trace = []
-    for t in rollout(env, agents):
-        if t.inputs.terminal.any():
-            break
-        trace.append(env.plot(t.state))
+    with recording.ParallelEncoder(env.plot_state, N=N, fps=fps) as encoder:
+        for t in rollout(env, agents):
+            if t.inputs.terminal.any():
+                break
+            encoder(arrdict.numpyify(t.state))
     
-    return arrdict.stack(trace)
+    encoder.notebook()
+    return encoder
 
 def winrate(env, agents, ci=.05):
     # Assume fair coin, normal approx 

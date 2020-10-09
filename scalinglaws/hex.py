@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from rebar import arrdict
 from . import heads
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 def unique(idxs, maxes):
@@ -178,8 +179,8 @@ class Hex:
         return self._board.clone()
 
     @classmethod
-    def plot_state(cls, state):
-        board = state
+    def plot_state(cls, state, e=0):
+        board = state[e]
 
         fig, ax = plt.subplots()
         ax.set_aspect(1)
@@ -194,7 +195,9 @@ class Hex:
             # Hex centers are 1 apart, so distances between rows are sin(60)
             sin60*(board.shape[0] - 1 - rows)], -1).reshape(-1, 2)
 
-        colors = ['grey', 'k', 'k', 'k', 'k', 'w', 'w', 'w', 'w']
+        black = 'dimgray'
+        white = 'lightgray'
+        colors = ['tan'] + [black]*4 + [white]*4
         colors = np.vectorize(colors.__getitem__)(board).flatten()
 
 
@@ -210,7 +213,7 @@ class Hex:
                         offsets=coords, 
                         facecolors=colors, 
                         edgecolor='k', 
-                        linewidths=0, 
+                        linewidths=1, 
                         transOffset=ax.transData)
 
         ax.add_collection(hexes)
@@ -218,16 +221,10 @@ class Hex:
         ax.set_xticks([])
         ax.set_yticks([])
 
+        return fig
 
-    def display(self, e=0, hidden=False):
-        if hidden:
-            strs = self._STRINGS
-            board = self._board[e].clone()
-        else:
-            strs = {int(self._STATES['b']): '◉', int(self._STATES['w']): '◯', int(self._STATES['.']): '·'}
-            board = self._colours(self._board[e])
-        strings = np.vectorize(strs.__getitem__)(board.cpu().numpy())
-        return '\n'.join(' '*i + ' '.join(r) for i, r in enumerate(strings))
+    def display(self, e=0):
+        return self.plot_state(arrdict.numpyify(self.state()), e=e)
 
 def basic_test():
     h = Hex(1, 3, device='cpu')
