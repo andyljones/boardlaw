@@ -1,4 +1,4 @@
-from . import hex, agents, learning, matchers
+from . import hex, agents, learning, matchers, analysis
 from rebar import arrdict, stats, widgets, logging, paths, plots, storing
 import numpy as np
 import torch
@@ -126,37 +126,3 @@ def train():
             storing.store_latest(run_name, {'agent': agent, 'opt': opt}, throttle=60)
             storing.store_periodic(run_name, {'agent': agent, 'opt': opt}, throttle=600)
 
-def compare(run_name=-1, left=-2, right=-1):
-    env = hex.Hex(256)
-    agent = [agents.Agent(env.obs_space, env.action_space).to(env.device) for _ in range(2)]
-    agent[0].load_state_dict(storing.load_periodic(run_name, idx=left)['agent'])
-    agent[1].load_state_dict(storing.load_periodic(run_name, idx=right)['agent'])
-    return matchers.winrate(env, agent)
-
-def compare_all(run_name=-1):
-    import pandas as pd
-    from itertools import combinations
-
-    df = storing.stored_periodic(run_name)
-    rates = {(l, r): compare(-1, l, r) for l, r in combinations(range(len(df)), 2)}
-    rates = pd.DataFrame.from_dict(rates).iloc[1].unstack(1)
-    
-    return rates
-
-def ratings(run_name=-1):
-    import cvxpy as cp
-    import pandas as pd
-
-    rates = compare_all(run_name)
-
-    names = list(set(rates.index) | set(rates.columns))
-    full = rates.reindex(index=names, columns=names)
-    comp = full.combine_first(1 - full.T).fillna(.5)
-
-    targets = np.log2(1/comp.values - 1).clip(-10, +10)
-
-    #TODO: Is this even remotely how to calculate Elos?
-    r = cp.Variable(len(names))
-    loss = cp.sum_squares(r[:, None] - r[None, :] - targets)
-    cp.Problem(cp.Minimize(loss), [r[0] == 0]).solve()
-    return pd.Series(r.value, names)

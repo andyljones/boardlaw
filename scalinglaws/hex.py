@@ -173,6 +173,14 @@ class Hex:
         new = arrdict.arrdict(terminal=terminal, **self._observe())
         return old, new
 
+    def state(self):
+        return self._board.clone()
+
+    @classmethod
+    def plot_state(cls, state):
+        pass
+
+
     def display(self, e=0, hidden=False):
         if hidden:
             strs = self._STRINGS

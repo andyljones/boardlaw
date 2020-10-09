@@ -74,36 +74,3 @@ class FixedMatcher:
         env_ids = torch.cat([env_ids[m] for a, m in self.agent_masks(seats).items()])
         env_idxs = torch.argsort(env_ids)
         return arrdict.cat([xs[a] for a in sorted(xs)])[env_idxs]
-
-def rollout(env, agents, n_trajs=None):
-    n_trajs = env.n_trajs if n_trajs is None else n_trajs
-    matcher = FixedMatcher(len(agents), env.n_envs, env.n_seats, device=env.device)
-
-    trace = []
-    env_inputs = env.reset()
-    trajs = 0
-    while True:
-        trajs += env_inputs.terminal.sum()
-        if trajs >= n_trajs:
-            break
-        agent_inputs = matcher.agentify(env_inputs, env_inputs.seat)
-        decisions = {a: agents[a](ai[None], sample=True).squeeze(0) for a, ai in agent_inputs.items()}
-        env_decisions = matcher.envify(decisions, env_inputs.seat)
-        responses, new_inputs = env.step(env_decisions.actions)
-        trace.append(arrdict.arrdict(
-            agent_ids=matcher.agent_ids(env_inputs.seat),
-            inputs=env_inputs,
-            decisions=env_decisions,
-            responses=responses))
-        env_inputs = new_inputs
-    
-    return arrdict.stack(trace)
-
-def winrate(env, agents, ci=.05):
-    # Assume fair coin, normal approx 
-    n_trajs = (1/4*1.96)/ci**2
-    trace = rollout(env, agents, n_trajs=n_trajs)
-
-    totals = torch.zeros(len(agents), device=env.device)
-    totals.index_add_(0, trace.agent_ids.flatten(), trace.responses.reward.flatten())
-    return (totals/totals.sum()).cpu().numpy()
