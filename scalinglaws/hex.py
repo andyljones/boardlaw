@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from rebar import arrdict
 from . import heads
+import matplotlib.pyplot as plt
 
 def unique(idxs, maxes):
     if idxs.size(0) == 0:
@@ -178,7 +179,44 @@ class Hex:
 
     @classmethod
     def plot_state(cls, state):
-        pass
+        board = state
+
+        fig, ax = plt.subplots()
+        ax.set_aspect(1)
+
+        sin60 = np.sin(np.pi/3)
+        ax.set_xlim(-.5, (1 + .5)*board.shape[1])
+        ax.set_ylim(-sin60, sin60*board.shape[1])
+
+        rows, cols = np.indices(board.shape)
+        coords = np.stack([
+            cols + .5*np.arange(board.shape[0])[:, None],
+            # Hex centers are 1 apart, so distances between rows are sin(60)
+            sin60*(board.shape[0] - 1 - rows)], -1).reshape(-1, 2)
+
+        colors = ['grey', 'k', 'k', 'k', 'k', 'w', 'w', 'w', 'w']
+        colors = np.vectorize(colors.__getitem__)(board).flatten()
+
+
+        radius = .5/sin60
+        data_to_pixels = ax.transData.get_matrix()[0, 0]
+        pixels_to_points = 1/fig.get_dpi()*72.
+        size = np.pi*(data_to_pixels*pixels_to_points*radius)**2
+        sizes = (size,)*len(coords)
+
+        hexes = mpl.collections.RegularPolyCollection(
+                        numsides=6, 
+                        sizes=sizes,
+                        offsets=coords, 
+                        facecolors=colors, 
+                        edgecolor='k', 
+                        linewidths=0, 
+                        transOffset=ax.transData)
+
+        ax.add_collection(hexes)
+        ax.set_frame_on(False)
+        ax.set_xticks([])
+        ax.set_yticks([])
 
 
     def display(self, e=0, hidden=False):
