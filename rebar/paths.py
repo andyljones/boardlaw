@@ -38,6 +38,9 @@ def subdir(run_name, *parts):
         path = path / p
     return path
 
+def rename(old, new):
+    run_dir(resolve(old)).rename(run_dir(resolve(new)))
+
 def clear(run_name, *parts):
     shutil.rmtree(subdir(run_name, *parts), ignore_errors=True)
 
@@ -66,8 +69,6 @@ def parse_process_path(path):
     parsed = parse(path)
     parsed['procname'], parsed['pid'] = re.match(r'^(.*)-(.*)$', parsed.filename.split('.')[0]).groups()
     return parsed
-
-
 
 def runs():
     paths = []
