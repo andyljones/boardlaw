@@ -155,8 +155,12 @@ class Hex:
         new = arrdict.arrdict(terminal=terminal, **self._observe())
         return old, new
 
-    def state(self):
-        return self._board.clone()
+    def state_dict(self):
+        return arrdict.arrdict(board=self._board, seat=self._seat).clone()
+
+    def load_state_dict(self, sd):
+        self._board = sd.board
+        self._seat = sd.seat
 
     @classmethod
     def plot_state(cls, state, e=0):
@@ -211,7 +215,7 @@ class Hex:
         return fig
 
     def display(self, e=0):
-        return self.plot_state(arrdict.numpyify(self.state()), e=e)
+        return self.plot_state(arrdict.numpyify(self.state_dict()), e=e)
 
 def basic_test():
     h = Hex(1, 3, device='cpu')
