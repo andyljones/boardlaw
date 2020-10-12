@@ -5,29 +5,6 @@ from . import heads
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-def unique(idxs, maxes):
-    if idxs.size(0) == 0:
-        return idxs
-
-    assert idxs.size(-1) == len(maxes)+1
-    maxes = [idxs[..., 0].max()+1] + maxes
-
-    base = 1
-    id = torch.zeros_like(idxs[..., 0])
-    for d in reversed(range(len(maxes))):
-        id += idxs[..., d]*base
-        base *= maxes[d]
-    
-    uid = torch.unique(id)
-
-    unique_idxs = []
-    for d in reversed(range(len(maxes))):
-        uidx = uid % maxes[d]
-        uid = (uid - uidx)//maxes[d]
-        unique_idxs.append(uidx)
-
-    return torch.stack(unique_idxs[::-1], -1)
-
 class Hex:
     """Based on `OpenSpiel's implementation <https://github.com/deepmind/open_spiel/blob/master/open_spiel/games/hex.cc>`_.
     """
@@ -92,6 +69,7 @@ class Hex:
         return colours
 
     def _flood(self, actions):
+        # This eats 70% of the game's runtime.
         moves = self._states(actions)
         colors = self._colours(moves)
 
@@ -102,8 +80,10 @@ class Hex:
             self._states(idxs, moves[idxs[:, 0]])
             neighbour_idxs = self._neighbours(idxs)
             possible = self._states(neighbour_idxs) == colors[idxs[:, 0], None]
-            #TODO: Take uniques
-            idxs = unique(neighbour_idxs[possible], [self.boardsize, self.boardsize])
+
+            touched = torch.zeros_like(self._board, dtype=torch.bool)
+            touched[tuple(neighbour_idxs[possible].T)] = True
+            idxs = touched.nonzero()
 
     def _update_states(self, actions):
         if actions.ndim == 1:
@@ -253,29 +233,39 @@ def open_spiel_board(state):
     strs = np.vectorize(strs.__getitem__)(board)
     return '\n'.join(' '*i + ' '.join(r) for i, r in enumerate(strs))
 
+def open_spiel_display_str(env, e):
+    strs = env._STRINGS
+    board = env._board[e].clone()
+    strings = np.vectorize(strs.__getitem__)(board.cpu().numpy())
+    return '\n'.join(' '*i + ' '.join(r) for i, r in enumerate(strings))
+
 def open_spiel_test():
     import pyspiel
 
     e = 1
-    ours = Hex(e+1, 11, device='cpu')
+    ours = Hex(3, 11, device='cpu')
     new = ours.reset()
 
     theirs = pyspiel.load_game("hex")
     state = theirs.new_initial_state()
     while True:
-        our_action = []
-        for ee in range(ours.n_envs):
-            options = (~new.obs.any(-1)[ee]).nonzero()
-            our_action.append(options[torch.randint(options.size(0), ())])
-        old, new = ours.step(torch.stack(our_action))
+        seat = new.seat[e]
+        our_action = torch.distributions.Categorical(probs=new.mask.float()).sample()
+        old, new = ours.step(our_action)
 
-        their_action = (our_action[e] * torch.tensor([ours.boardsize, 1])).sum(-1)
+        if seat == 0:
+            their_action = our_action[e]
+        else: #if new.player == 1:
+            r, c = our_action[e]//ours.boardsize, our_action[e] % ours.boardsize
+            their_action = c*ours.boardsize + r
+
         state.apply_action(their_action)
             
-        if new.reset[e]:
+        if new.terminal[e]:
+            assert state.is_terminal()
             break
             
-        our_state = ours.display(e=e, hidden=True)
+        our_state = open_spiel_display_str(ours, e)
         their_state = open_spiel_board(state)
         assert our_state == their_state
 
