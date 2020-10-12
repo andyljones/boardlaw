@@ -41,61 +41,74 @@ class MCTS:
 
         values = q + self.c_puct*pi*N/(1 + n)
         return values.max(-1)
-    
+
     def descend(self):
         trace = []
-        current = torch.zeros_like(self.envs)
-        next = torch.zeros_like(self.envs)
+        current = torch.full_like(self.envs, -1)
+        next = torch.full_like(self.envs, 0)
         while True:
-            active = torch.isnan(self.v[self.envs, next])
-            if not active.any():
+            interior = (next != -1)
+            if not interior.any():
                 break
-            current = next
+
+            current[interior] = next[interior]
 
             actions = torch.full_like(self.parents, -1)
-            actions[active] = self.sample(self.envs[active], current[active])
+            actions[interior] = self.sample(self.envs[interior], current[interior])
             trace.append(actions)
 
-            next = torch.where(active, current, self.children[active, current, actions])
+            next = torch.where(interior, self.children[interior, current, actions], current)
 
-            self.parents
-
-        return torch.stack(trace), next
+        return torch.stack(trace), current
 
     def replay(self, env, inputs, trace):
+        inputs = inputs.clone()
+        rewards = self.v.new_zeros((self.n_envs,))
         for a in trace:
-            dummies = inputs.mask.nonzero(-1)
-            dummies[a != -1] = a[a != -1]
-            responses, inputs = env.step(dummies)
+            active = a != -1
+            dummies = torch.where(active, a, inputs.mask.nonzero(-1))
+            r, i = env.step(dummies)
 
-            self.r[self.envs, self.sim, dummies] = responses.reward
-            self.terminal[self.envs, self.sim, dummies] = responses.terminal
-        
-        return inputs
+            inputs[active] = i[active]
+            rewards[active] = r.reward[active]
 
-    def backup(self, trace, current):
+        return inputs, rewards
+
+    def backup(self, current, v):
         current = torch.full_like(self.envs, current)
         while True:
             active = (self.parents[self.envs, current] != -1)
-            self.n[self.envs[active], current[active], ]
+            if not active.any():
+                break
 
+            parent = self.parents[self.envs[active], current[active]]
+            relation = self.relation[self.envs[active], current[active]]
+
+            self.n[self.envs[active], parent, relation] += 1
+            self.w[self.envs[active], parent, relation] += v
+
+            current[active] = parent
     
     def simulate(self, env, inputs, agent):
         original_state = env.state_dict()
 
-        trace, current = self.descend()
-        inputs = self.replay(env, inputs, trace)
+        trace, leaf = self.descend()
+        self.children[self.envs, leaf, trace[-1]] = self.sim
+        self.parents[self.envs, self.sim] = leaf
+        self.relation[self.envs, self.sim] = trace[-1]
+
+        inputs, rewards = self.replay(env, inputs, trace)
+
+        self.r[:, leaf, trace[-1]] = rewards
 
         decisions = agent(inputs[None], value=True).squeeze(-1)
         self.log_pi[:, self.sim] = decisions.logits
+        self.v[:, self.sim] = decisions.v
         self.w[:, self.sim] = 0.
         self.n[:, self.sim] = 0 
 
-        self.parents[self.envs, self.sim] = current
-        self.relation[self.envs, self.sim] = 
+        self.backup(self.sim, decisions.v)
 
         self.sim += 1
 
         env.load_state_dict(original_state)
-
-        pass
