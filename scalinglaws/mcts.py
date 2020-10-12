@@ -12,19 +12,20 @@ class MCTS:
         self.device = env.device
         self.n_envs = env.n_envs
         self.n_sims = n_sims
-        pass
+
+        self.envs = torch.arange(env.n_envs, device=self.device).cuda()
 
         n_actions = np.prod(env.action_space.size())
-        self.children = torch.full((env.n_envs, n_sims, n_actions), -1, device=self.device)
-        self.parents = torch.full((env.n_envs, n_sims), -1, device=self.device)
+        self.children = self.envs.new_full((env.n_envs, n_sims, n_actions))
+        self.parents = self.envs.new_full((env.n_envs, n_sims), -1)
+        self.relation = self.envs.new_full((env.n_envs, n_sims), -1)
 
         self.log_pi = torch.full((env.n_envs, n_sims, n_actions), np.nan, device=self.device)
         self.v = torch.full((env.n_envs, n_sims), np.nan, device=self.device)
-        self.n = torch.full((env.n_envs, n_sims, n_actions), 0, device=self.device)
-        self.q = torch.full((env.n_envs, n_sims, n_actions), np.nan, device=self.device)
+        self.n = torch.full((env.n_envs, n_sims, n_actions), 0, device=self.device, dtype=torch.int)
+        self.w = torch.full((env.n_envs, n_sims, n_actions), np.nan, device=self.device)
         self.r = torch.full((env.n_envs, n_sims, n_actions), np.nan, device=self.device)
-
-        self.envs = torch.arange(env.n_envs, device=self.device).cuda()
+        self.terminal = torch.full((env.n_envs, n_sims, n_actions), False, device=self.device, dtype=torch.long)
 
         self.sim = 0
 
@@ -32,8 +33,8 @@ class MCTS:
         self.c_puct = 2.5
 
     def sample(self, envs, nodes):
-        q = self.q[envs, nodes]
         pi = self.log_pi[envs, nodes].exp()
+        q = self.w[envs, nodes]/self.n[envs, nodes]
         n = self.n[envs, nodes]
 
         N = n.sum(-1, keepdims=True)
@@ -43,51 +44,55 @@ class MCTS:
     
     def descend(self):
         trace = []
-        current = torch.zeros_like(self.parents)
+        current = torch.zeros_like(self.envs)
+        next = torch.zeros_like(self.envs)
         while True:
-            active = torch.isnan(self.v[self.envs, current])
+            active = torch.isnan(self.v[self.envs, next])
             if not active.any():
                 break
+            current = next
 
             actions = torch.full_like(self.parents, -1)
             actions[active] = self.sample(self.envs[active], current[active])
             trace.append(actions)
 
-            current[active] = self.children[active, current, actions]
+            next = torch.where(active, current, self.children[active, current, actions])
 
-        return trace
-    
-    def tmp(self, env, inputs, agent):
-        original_state = env.state_dict()
+            self.parents
 
-        current = torch.zeros_like(self.parents)
-        active = torch.ones_like(self.parents, dtype=torch.bool)
-        while True:
-            is_leaf = (self.parents[current] == -1)
-            to_eval = is_leaf & active
+        return torch.stack(trace), next
 
-            # Evaluate the envs that have reached a leaf
-            decisions = agent(inputs[to_eval][None], value=True).squeeze(0)
-            self.log_pi[to_eval, self.sim] = decisions.logits
-            self.v[to_eval, self.sim] = decisions.values 
-
-            active[is_leaf] = False
-
-            if is_leaf.all():
-                break
-
-            actions = self.sample(current[active])
-            self.children[to_eval, current, actions] = self.sim
-            self.parents[to_eval, self.sim] = current
-
-            current = self.children[active.nonzero(), current, actions]
-
-            dummies = decisions.mask.reshape(self.n_envs, -1).nonzero(-1)
-            dummies[active] = actions
+    def replay(self, env, inputs, trace):
+        for a in trace:
+            dummies = inputs.mask.nonzero(-1)
+            dummies[a != -1] = a[a != -1]
             responses, inputs = env.step(dummies)
 
-            self.r[active, self.sim, actions] = responses.reward
-            active[active] = ~inputs.terminal
+            self.r[self.envs, self.sim, dummies] = responses.reward
+            self.terminal[self.envs, self.sim, dummies] = responses.terminal
+        
+        return inputs
+
+    def backup(self, trace, current):
+        current = torch.full_like(self.envs, current)
+        while True:
+            active = (self.parents[self.envs, current] != -1)
+            self.n[self.envs[active], current[active], ]
+
+    
+    def simulate(self, env, inputs, agent):
+        original_state = env.state_dict()
+
+        trace, current = self.descend()
+        inputs = self.replay(env, inputs, trace)
+
+        decisions = agent(inputs[None], value=True).squeeze(-1)
+        self.log_pi[:, self.sim] = decisions.logits
+        self.w[:, self.sim] = 0.
+        self.n[:, self.sim] = 0 
+
+        self.parents[self.envs, self.sim] = current
+        self.relation[self.envs, self.sim] = 
 
         self.sim += 1
 
