@@ -63,6 +63,7 @@ class MCTS:
 
     def replay(self, env, inputs, trace):
         inputs = inputs.clone()
+        #TODO: Handle termination
         rewards = self.v.new_zeros((self.n_envs,))
         for a in trace:
             active = a != -1
