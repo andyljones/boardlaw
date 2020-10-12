@@ -18,15 +18,46 @@ class MCTS:
         self.children = torch.full((env.n_envs, n_sims, n_actions), -1, device=self.device)
         self.parents = torch.full((env.n_envs, n_sims), -1, device=self.device)
 
-        self.q = torch.full((env.n_envs, n_sims, n_actions), np.nan, device=self.device)
         self.log_pi = torch.full((env.n_envs, n_sims, n_actions), np.nan, device=self.device)
-        self.n = torch.full((env.n_envs, n_sims, n_actions), 0, device=self.device)
         self.v = torch.full((env.n_envs, n_sims), np.nan, device=self.device)
+        self.n = torch.full((env.n_envs, n_sims, n_actions), 0, device=self.device)
+        self.q = torch.full((env.n_envs, n_sims, n_actions), np.nan, device=self.device)
         self.r = torch.full((env.n_envs, n_sims, n_actions), np.nan, device=self.device)
 
+        self.envs = torch.arange(env.n_envs, device=self.device).cuda()
+
         self.sim = 0
+
+        # https://github.com/LeelaChessZero/lc0/issues/694
+        self.c_puct = 2.5
+
+    def sample(self, envs, nodes):
+        q = self.q[envs, nodes]
+        pi = self.log_pi[envs, nodes].exp()
+        n = self.n[envs, nodes]
+
+        N = n.sum(-1, keepdims=True)
+
+        values = q + self.c_puct*pi*N/(1 + n)
+        return values.max(-1)
     
-    def descend(self, env, inputs, agent):
+    def descend(self):
+        trace = []
+        current = torch.zeros_like(self.parents)
+        while True:
+            active = torch.isnan(self.v[self.envs, current])
+            if not active.any():
+                break
+
+            actions = torch.full_like(self.parents, -1)
+            actions[active] = self.sample(self.envs[active], current[active])
+            trace.append(actions)
+
+            current[active] = self.children[active, current, actions]
+
+        return trace
+    
+    def tmp(self, env, inputs, agent):
         original_state = env.state_dict()
 
         current = torch.zeros_like(self.parents)
@@ -35,8 +66,8 @@ class MCTS:
             is_leaf = (self.parents[current] == -1)
             to_eval = is_leaf & active
 
+            # Evaluate the envs that have reached a leaf
             decisions = agent(inputs[to_eval][None], value=True).squeeze(0)
-
             self.log_pi[to_eval, self.sim] = decisions.logits
             self.v[to_eval, self.sim] = decisions.values 
 
