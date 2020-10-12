@@ -278,3 +278,19 @@ def open_spiel_test():
         our_state = ours.display(e=e, hidden=True)
         their_state = open_spiel_board(state)
         assert our_state == their_state
+
+def benchmark(n_envs=4096, n_steps=256):
+    import aljpy
+    env = Hex(n_envs)
+
+    inputs = env.reset()
+    torch.cuda.synchronize()
+    with aljpy.timer() as timer:
+        for _ in range(n_steps):
+            flat_mask = inputs.mask.reshape(n_envs, -1).float()
+            probs = flat_mask/flat_mask.sum(-1, keepdims=True)
+            actions = torch.distributions.Categorical(probs=probs).sample()
+            _, inputs = env.step(actions)
+        
+        torch.cuda.synchronize()
+    print(f'{n_envs*n_steps/timer.time():.0f} samples/sec')
