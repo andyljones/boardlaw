@@ -2,7 +2,7 @@
 Right, MCTS:
     * 
 """
-from re import L
+from numpy.core.overrides import array_function_dispatch
 import torch
 import numpy as np
 
@@ -113,3 +113,31 @@ class MCTS:
         self.sim += 1
 
         env.load_state_dict(original_state)
+
+from rebar import arrdict
+
+class TestEnv:
+
+    def __init__(self, n_envs=1):
+        self.device = 'cpu'
+        self.n_envs = n_envs
+
+    def step(self, actions):
+        inputs = arrdict.arrdict(
+            mask=torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device))
+
+        response = arrdict.arrdict(
+            rewards=torch.zeros((self.n_envs,), device=self.device),
+            terminal=torch.zeros((self.n_envs,), dtype=torch.bool, device=self.device))
+        
+        return response, inputs
+
+    def state_dict(self):
+        return arrdict.arrdict()
+
+    def load_state_dict(self):
+        return
+
+class TestAgent:
+
+    def __init__(self, obs_space, action_space):
