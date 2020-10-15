@@ -6,6 +6,7 @@ from collections import namedtuple
 from numpy.core.overrides import array_function_dispatch
 import torch
 import numpy as np
+from rebar import arrdict
 
 class MCTS:
 
@@ -25,7 +26,6 @@ class MCTS:
         self.v = torch.full((env.n_envs, self.n_nodes), np.nan, device=self.device)
         self.n = torch.full((env.n_envs, self.n_nodes, n_actions), 0, device=self.device, dtype=torch.int)
         self.w = torch.full((env.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
-        self.r = torch.full((env.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
         self.terminal = torch.full((env.n_envs, self.n_nodes, n_actions), False, device=self.device, dtype=torch.long)
 
         self.sim = 0
@@ -62,10 +62,9 @@ class MCTS:
 
         return torch.stack(trace), current
 
-    def replay(self, env, inputs, trace):
+    def play(self, env, inputs, trace):
         inputs = inputs.clone()
         #TODO: Handle termination
-        rewards = self.v.new_zeros((self.n_envs,))
         for a in trace:
             active = a != -1
             dummies = torch.distributions.Categorical(probs=inputs.mask.float()).sample()
@@ -73,11 +72,11 @@ class MCTS:
             r, i = env.step(dummies)
 
             inputs[active] = i[active]
-            rewards[active] = r.reward[active]
 
-        return inputs, rewards
+        return inputs
 
     def backup(self, current, v):
+        v = v.clone()
         current = torch.full_like(self.envs, current)
         while True:
             active = (self.parents[self.envs, current] != -1)
@@ -87,6 +86,7 @@ class MCTS:
             parent = self.parents[self.envs[active], current[active]]
             relation = self.relation[self.envs[active], current[active]]
 
+            v[self.terminal[current]] = 0. 
             self.n[self.envs[active], parent, relation] += 1
             self.w[self.envs[active], parent, relation] += v
 
@@ -95,10 +95,10 @@ class MCTS:
     def initialize(self, env, inputs, agent):
         original_state = env.state_dict()
 
-        decisions = agent(inputs[None], value=True).squeeze(-1)
+        decisions = agent(inputs, value=True)
         self.log_pi[:, self.sim] = decisions.logits
         self.v[:, self.sim] = decisions.v
-        self.w[:, self.sim] = 0.
+        self.w[:, self.sim] = decisions.v
         self.n[:, self.sim] = 1 
 
         self.sim += 1
@@ -116,15 +116,14 @@ class MCTS:
         self.parents[self.envs, self.sim] = leaf
         self.relation[self.envs, self.sim] = trace[-1]
 
-        inputs, rewards = self.replay(env, inputs, trace)
+        inputs = self.play(env, inputs, trace)
 
-        self.r[:, leaf, trace[-1]] = rewards
-
-        decisions = agent(inputs[None], value=True).squeeze(-1)
+        decisions = agent(inputs, value=True)
         self.log_pi[:, self.sim] = decisions.logits
         self.v[:, self.sim] = decisions.v
         self.w[:, self.sim] = 0.
         self.n[:, self.sim] = 0 
+        self.terminal[:, self.sim] = inputs.terminal
 
         self.backup(self.sim, decisions.v)
 
@@ -132,7 +131,17 @@ class MCTS:
 
         env.load_state_dict(original_state)
 
-from rebar import arrdict
+def mcts(env, inputs, agent, n_sims=100):
+    mcts = MCTS(n_sims, env, agent)
+
+    mcts.initialize(env, inputs, agent)
+    for _ in range(n_sims):
+        mcts.simulate(env, inputs, agent)
+
+    return arrdict.arrdict(
+        logits=mcts.log_pi[:, 0],
+        v=mcts.v[:, 0])
+
 
 class TestEnv:
 
@@ -165,10 +174,10 @@ class TestEnv:
 class TestAgent:
 
     def __call__(self, inputs, sample=True, value=True):
-        T, B, A = inputs.mask.shape
+        B, A = inputs.mask.shape
         return arrdict.arrdict(
-            logits=torch.full((T, B, A), -np.log(A)),
-            v=torch.ones((T, B)))
+            logits=torch.full((B, A), -np.log(A)),
+            v=torch.ones((B,)))
     
 def test():
     env = TestEnv()
