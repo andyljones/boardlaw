@@ -2,6 +2,7 @@
 Right, MCTS:
     * 
 """
+from collections import namedtuple
 from numpy.core.overrides import array_function_dispatch
 import torch
 import numpy as np
@@ -11,21 +12,21 @@ class MCTS:
     def __init__(self, n_sims, env, agent):
         self.device = env.device
         self.n_envs = env.n_envs
-        self.n_sims = n_sims
+        self.n_nodes = n_sims+1
 
         self.envs = torch.arange(env.n_envs, device=self.device).cuda()
 
-        n_actions = np.prod(env.action_space.size())
-        self.children = self.envs.new_full((env.n_envs, n_sims, n_actions))
-        self.parents = self.envs.new_full((env.n_envs, n_sims), -1)
-        self.relation = self.envs.new_full((env.n_envs, n_sims), -1)
+        n_actions = np.prod(env.action_space)
+        self.children = self.envs.new_full((env.n_envs, self.n_nodes, n_actions), -1)
+        self.parents = self.envs.new_full((env.n_envs, self.n_nodes), -1)
+        self.relation = self.envs.new_full((env.n_envs, self.n_nodes), -1)
 
-        self.log_pi = torch.full((env.n_envs, n_sims, n_actions), np.nan, device=self.device)
-        self.v = torch.full((env.n_envs, n_sims), np.nan, device=self.device)
-        self.n = torch.full((env.n_envs, n_sims, n_actions), 0, device=self.device, dtype=torch.int)
-        self.w = torch.full((env.n_envs, n_sims, n_actions), np.nan, device=self.device)
-        self.r = torch.full((env.n_envs, n_sims, n_actions), np.nan, device=self.device)
-        self.terminal = torch.full((env.n_envs, n_sims, n_actions), False, device=self.device, dtype=torch.long)
+        self.log_pi = torch.full((env.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
+        self.v = torch.full((env.n_envs, self.n_nodes), np.nan, device=self.device)
+        self.n = torch.full((env.n_envs, self.n_nodes, n_actions), 0, device=self.device, dtype=torch.int)
+        self.w = torch.full((env.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
+        self.r = torch.full((env.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
+        self.terminal = torch.full((env.n_envs, self.n_nodes, n_actions), False, device=self.device, dtype=torch.long)
 
         self.sim = 0
 
@@ -40,7 +41,7 @@ class MCTS:
         N = n.sum(-1, keepdims=True)
 
         values = q + self.c_puct*pi*N/(1 + n)
-        return values.max(-1)
+        return values.max(-1).indices
 
     def descend(self):
         trace = []
@@ -53,7 +54,7 @@ class MCTS:
 
             current[interior] = next[interior]
 
-            actions = torch.full_like(self.parents, -1)
+            actions = torch.full_like(self.envs, -1)
             actions[interior] = self.sample(self.envs[interior], current[interior])
             trace.append(actions)
 
@@ -67,7 +68,8 @@ class MCTS:
         rewards = self.v.new_zeros((self.n_envs,))
         for a in trace:
             active = a != -1
-            dummies = torch.where(active, a, inputs.mask.nonzero(-1))
+            dummies = torch.distributions.Categorical(probs=inputs.mask.float()).sample()
+            dummies[active] = a
             r, i = env.step(dummies)
 
             inputs[active] = i[active]
@@ -89,8 +91,24 @@ class MCTS:
             self.w[self.envs[active], parent, relation] += v
 
             current[active] = parent
-    
+
+    def initialize(self, env, inputs, agent):
+        original_state = env.state_dict()
+
+        decisions = agent(inputs[None], value=True).squeeze(-1)
+        self.log_pi[:, self.sim] = decisions.logits
+        self.v[:, self.sim] = decisions.v
+        self.w[:, self.sim] = 0.
+        self.n[:, self.sim] = 1 
+
+        self.sim += 1
+
+        env.load_state_dict(original_state)
+
     def simulate(self, env, inputs, agent):
+        if self.sim >= self.n_nodes:
+            raise ValueError('Called simulate more times than were declared in the constructor')
+
         original_state = env.state_dict()
 
         trace, leaf = self.descend()
@@ -122,22 +140,43 @@ class TestEnv:
         self.device = 'cpu'
         self.n_envs = n_envs
 
-    def step(self, actions):
-        inputs = arrdict.arrdict(
+        self.action_space = namedtuple('Vector', ('dim',))((2,))
+
+    def _observe(self):
+        return arrdict.arrdict(
             mask=torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device))
 
+    def reset(self):
+        return self._observe()
+
+    def step(self, actions):
         response = arrdict.arrdict(
-            rewards=torch.zeros((self.n_envs,), device=self.device),
+            reward=torch.zeros((self.n_envs,), device=self.device),
             terminal=torch.zeros((self.n_envs,), dtype=torch.bool, device=self.device))
         
-        return response, inputs
+        return response, self._observe()
 
     def state_dict(self):
         return arrdict.arrdict()
 
-    def load_state_dict(self):
+    def load_state_dict(self, d):
         return
 
 class TestAgent:
 
-    def __init__(self, obs_space, action_space):
+    def __call__(self, inputs, sample=True, value=True):
+        T, B, A = inputs.mask.shape
+        return arrdict.arrdict(
+            logits=torch.full((T, B, A), -np.log(A)),
+            v=torch.ones((T, B)))
+    
+def test():
+    env = TestEnv()
+    agent = TestAgent()
+    inputs = env.reset()
+
+    mcts = MCTS(2, env, agent)
+
+    mcts.initialize(env, inputs, agent)
+    mcts.simulate(env, inputs, agent)
+    mcts.simulate(env, inputs, agent)
