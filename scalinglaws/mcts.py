@@ -23,7 +23,6 @@ class MCTS:
         self.relation = self.envs.new_full((env.n_envs, self.n_nodes), -1)
 
         self.log_pi = torch.full((env.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
-        self.v = torch.full((env.n_envs, self.n_nodes), np.nan, device=self.device)
         self.n = torch.full((env.n_envs, self.n_nodes, n_actions), 0, device=self.device, dtype=torch.int)
         self.w = torch.full((env.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
         self.terminal = torch.full((env.n_envs, self.n_nodes), False, device=self.device, dtype=torch.bool)
@@ -99,8 +98,7 @@ class MCTS:
 
         decisions = agent(inputs, value=True)
         self.log_pi[:, self.sim] = decisions.logits
-        self.v[:, self.sim] = decisions.v
-        self.w[:, self.sim] = decisions.v
+        self.w[:, self.sim] = 0.
         self.n[:, self.sim] = 1 
 
         self.sim += 1
@@ -123,8 +121,7 @@ class MCTS:
 
         decisions = agent(inputs, value=True)
         self.log_pi[:, self.sim] = decisions.logits
-        self.v[:, self.sim] = decisions.v
-        self.w[:, self.sim] = 0.
+        self.w[:, self.sim] = 0
         self.n[:, self.sim] = 0 
 
         self.backup(self.sim, decisions.v)
@@ -135,8 +132,25 @@ class MCTS:
 
     def root(self):
         return arrdict.arrdict(
+            p=self.n[:, 0]/self.n[:, 0].sum(-1, keepdims=True),
             logits=self.log_pi[:, 0],
-            v=self.v[:, 0])
+            v=self.w[:, 0]/self.n[:, 0])
+
+    def display(self, e=0):
+        import networkx as nx
+
+        edges, labels = [], {}
+        for i, p in enumerate(mcts.parents[e, 1:]):
+            edge = (int(p), i)
+            edges.append(edge)
+            labels[edge] = int(mcts.relation[e, 1:][i])
+            
+        colors = ['C0'] + ['C1']*(mcts.n_nodes-2)
+
+        G = nx.from_edgelist(edges)
+        pos = nx.kamada_kawai_layout(G)
+        nx.draw(G, pos, node_color=colors)
+        nx.draw_networkx_edge_labels(G, pos, edge_labels=labels)
 
 def mcts(env, inputs, agent, n_sims=100):
     mcts = MCTS(env, n_sims)
@@ -149,7 +163,7 @@ def mcts(env, inputs, agent, n_sims=100):
 
 class TestEnv:
 
-    def __init__(self, n_envs=1, length=4):
+    def __init__(self, n_envs=1, length=3):
         self.device = 'cpu'
         self.n_envs = n_envs
         self.length = length
@@ -160,7 +174,7 @@ class TestEnv:
 
     def _observe(self):
         return arrdict.arrdict(
-            obs=(self.history[:, :-1] == 0).all(-1),
+            obs=(self.history == 1)[:, :-1].all(-1),
             mask=torch.ones((self.n_envs, 2), dtype=torch.bool, device=self.device),
             terminal=(self.idx == self.length))
 
