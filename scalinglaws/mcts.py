@@ -10,12 +10,12 @@ from rebar import arrdict
 
 class MCTS:
 
-    def __init__(self, env, n_sims):
+    def __init__(self, env, n_nodes, c_puct=2.5):
         self.device = env.device
         self.n_envs = env.n_envs
-        self.n_nodes = n_sims+1
+        self.n_nodes = n_nodes
 
-        self.envs = torch.arange(env.n_envs, device=self.device).cuda()
+        self.envs = torch.arange(env.n_envs, device=self.device)
 
         n_actions = np.prod(env.action_space)
         self.children = self.envs.new_full((env.n_envs, self.n_nodes, n_actions), -1)
@@ -30,7 +30,7 @@ class MCTS:
         self.sim = 0
 
         # https://github.com/LeelaChessZero/lc0/issues/694
-        self.c_puct = 2.5
+        self.c_puct = c_puct
 
     def sample(self, envs, nodes):
         pi = self.log_pi[envs, nodes].exp()
@@ -63,7 +63,7 @@ class MCTS:
 
     def play(self, env, inputs, trace):
         inputs = inputs.clone()
-        #TODO: Handle termination
+        #TODO: Handle termination, bit of wasted compute right now.
         for a in trace:
             active = a != -1
             dummies = torch.distributions.Categorical(probs=inputs.mask.float()).sample()
@@ -132,49 +132,61 @@ class MCTS:
 
     def root(self):
         return arrdict.arrdict(
-            p=self.n[:, 0]/self.n[:, 0].sum(-1, keepdims=True),
+            p=self.n[:, 0].float()/self.n[:, 0].sum(-1, keepdims=True),
             logits=self.log_pi[:, 0],
             v=self.w[:, 0]/self.n[:, 0])
 
-    def display(self, e=0):
+    def display(self, e=0, color='terminal'):
         import networkx as nx
+        import matplotlib.pyplot as plt
 
-        edges, labels = [], {}
-        for i, p in enumerate(mcts.parents[e, 1:]):
-            edge = (int(p), i)
-            edges.append(edge)
-            labels[edge] = int(mcts.relation[e, 1:][i])
+        edges, labels, edge_colors = [], {}, []
+        qs = (self.w/self.n)[e].cpu()
+        q_min, q_max = np.nanmin(qs), np.nanmax(qs)
+        for i, p in enumerate(self.parents[e].cpu()):
+            p = int(p)
+            if p >= 0:
+                r = int(self.relation[e][i].cpu())
+                q = float(qs[p, r])
+                edge = (p, i)
+                edges.append(edge)
+                labels[edge] = f'{r}, {(q - q_min)/(q_max - q_min):.1f}'
+                edge_colors.append(plt.cm.viridis(q))
             
-        colors = ['C0'] + ['C1']*(mcts.n_nodes-2)
+        if color == 'terminal':
+            colors = ['C1' if t else 'C2' for t in self.terminal.float()[e].cpu().numpy()]
 
         G = nx.from_edgelist(edges)
         pos = nx.kamada_kawai_layout(G)
-        nx.draw(G, pos, node_color=colors)
+        nx.draw(G, pos, node_color=colors, edge_color=edge_colors, width=5)
         nx.draw_networkx_edge_labels(G, pos, edge_labels=labels)
+        nx.draw_networkx_labels(G, pos, labels={i: i for i in range(self.n_nodes)})
 
-def mcts(env, inputs, agent, n_sims=100):
-    mcts = MCTS(env, n_sims)
+        return plt.gca()
+
+def mcts(env, inputs, agent, n_nodes=100):
+    mcts = MCTS(env, n_nodes)
 
     mcts.initialize(env, inputs, agent)
-    for _ in range(n_sims):
+    for _ in range(n_nodes-1):
         mcts.simulate(env, inputs, agent)
 
     return mcts.root()
 
 class TestEnv:
 
-    def __init__(self, n_envs=1, length=3):
-        self.device = 'cpu'
+    def __init__(self, n_envs=1, length=3, device='cpu'):
+        self.device = device 
         self.n_envs = n_envs
         self.length = length
 
         self.action_space = namedtuple('Vector', ('dim',))((2,))
-        self.history = torch.full((n_envs, length), -1, dtype=torch.long)
-        self.idx = torch.full((n_envs,), 0, dtype=torch.long)
+        self.history = torch.full((n_envs, length), -1, dtype=torch.long, device=self.device)
+        self.idx = torch.full((n_envs,), 0, dtype=torch.long, device=self.device)
 
     def _observe(self):
         return arrdict.arrdict(
-            obs=(self.history == 1)[:, :-1].all(-1),
+            value=(self.history == 1).float().mean(-1),
             mask=torch.ones((self.n_envs, 2), dtype=torch.bool, device=self.device),
             terminal=(self.idx == self.length))
 
@@ -198,7 +210,7 @@ class TestEnv:
     def state_dict(self):
         return arrdict.arrdict(
             history=self.history,
-            idx=self.idx)
+            idx=self.idx).clone()
 
     def load_state_dict(self, d):
         self.history = d.history
@@ -210,15 +222,17 @@ class TestAgent:
         B, A = inputs.mask.shape
         return arrdict.arrdict(
             logits=torch.full((B, A), -np.log(A)),
-            v=inputs.obs.float())
+            v=inputs.value.float())
     
 def test():
-    env = TestEnv()
+    env = TestEnv(1024, device='cuda')
     agent = TestAgent()
     inputs = env.reset()
 
-    mcts = MCTS(2, env, agent)
+    n_sims = 101
+    mcts = MCTS(env, n_sims, c_puct=2.5)
 
     mcts.initialize(env, inputs, agent)
-    mcts.simulate(env, inputs, agent)
-    mcts.simulate(env, inputs, agent)
+    for _ in range(n_sims-1):
+        mcts.simulate(env, inputs, agent)
+    mcts.display()
