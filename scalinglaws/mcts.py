@@ -10,7 +10,7 @@ from rebar import arrdict
 
 class MCTS:
 
-    def __init__(self, n_sims, env, agent):
+    def __init__(self, env, n_sims):
         self.device = env.device
         self.n_envs = env.n_envs
         self.n_nodes = n_sims+1
@@ -26,7 +26,7 @@ class MCTS:
         self.v = torch.full((env.n_envs, self.n_nodes), np.nan, device=self.device)
         self.n = torch.full((env.n_envs, self.n_nodes, n_actions), 0, device=self.device, dtype=torch.int)
         self.w = torch.full((env.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
-        self.terminal = torch.full((env.n_envs, self.n_nodes, n_actions), False, device=self.device, dtype=torch.long)
+        self.terminal = torch.full((env.n_envs, self.n_nodes), False, device=self.device, dtype=torch.bool)
 
         self.sim = 0
 
@@ -71,7 +71,9 @@ class MCTS:
             dummies[active] = a
             r, i = env.step(dummies)
 
-            inputs[active] = i[active]
+            #TODO: Generalise this
+            for k in inputs:
+                inputs[k][active] = i[k][active]
 
         return inputs
 
@@ -86,7 +88,7 @@ class MCTS:
             parent = self.parents[self.envs[active], current[active]]
             relation = self.relation[self.envs[active], current[active]]
 
-            v[self.terminal[current]] = 0. 
+            v[self.terminal[self.envs[active], current[active]]] = 0. 
             self.n[self.envs[active], parent, relation] += 1
             self.w[self.envs[active], parent, relation] += v
 
@@ -117,13 +119,13 @@ class MCTS:
         self.relation[self.envs, self.sim] = trace[-1]
 
         inputs = self.play(env, inputs, trace)
+        self.terminal[:, self.sim] = inputs.terminal
 
         decisions = agent(inputs, value=True)
         self.log_pi[:, self.sim] = decisions.logits
         self.v[:, self.sim] = decisions.v
         self.w[:, self.sim] = 0.
         self.n[:, self.sim] = 0 
-        self.terminal[:, self.sim] = inputs.terminal
 
         self.backup(self.sim, decisions.v)
 
@@ -131,45 +133,62 @@ class MCTS:
 
         env.load_state_dict(original_state)
 
+    def root(self):
+        return arrdict.arrdict(
+            logits=self.log_pi[:, 0],
+            v=self.v[:, 0])
+
 def mcts(env, inputs, agent, n_sims=100):
-    mcts = MCTS(n_sims, env, agent)
+    mcts = MCTS(env, n_sims)
 
     mcts.initialize(env, inputs, agent)
     for _ in range(n_sims):
         mcts.simulate(env, inputs, agent)
 
-    return arrdict.arrdict(
-        logits=mcts.log_pi[:, 0],
-        v=mcts.v[:, 0])
-
+    return mcts.root()
 
 class TestEnv:
 
-    def __init__(self, n_envs=1):
+    def __init__(self, n_envs=1, length=4):
         self.device = 'cpu'
         self.n_envs = n_envs
+        self.length = length
 
         self.action_space = namedtuple('Vector', ('dim',))((2,))
+        self.history = torch.full((n_envs, length), -1, dtype=torch.long)
+        self.idx = torch.full((n_envs,), 0, dtype=torch.long)
 
     def _observe(self):
         return arrdict.arrdict(
-            mask=torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device))
+            obs=(self.history[:, :-1] == 0).all(-1),
+            mask=torch.ones((self.n_envs, 2), dtype=torch.bool, device=self.device),
+            terminal=(self.idx == self.length))
 
     def reset(self):
         return self._observe()
 
     def step(self, actions):
+        self.history[:, self.idx] = actions
+
+        self.idx += 1 
         response = arrdict.arrdict(
-            reward=torch.zeros((self.n_envs,), device=self.device),
-            terminal=torch.zeros((self.n_envs,), dtype=torch.bool, device=self.device))
+            reward=torch.zeros((self.n_envs,), device=self.device))
+
+        inputs = self._observe().clone()
+
+        self.idx[inputs.terminal] = 0
+        self.history[inputs.terminal] = -1
         
-        return response, self._observe()
+        return response, inputs
 
     def state_dict(self):
-        return arrdict.arrdict()
+        return arrdict.arrdict(
+            history=self.history,
+            idx=self.idx)
 
     def load_state_dict(self, d):
-        return
+        self.history = d.history
+        self.idx = d.idx
 
 class TestAgent:
 
@@ -177,7 +196,7 @@ class TestAgent:
         B, A = inputs.mask.shape
         return arrdict.arrdict(
             logits=torch.full((B, A), -np.log(A)),
-            v=torch.ones((B,)))
+            v=inputs.obs.float())
     
 def test():
     env = TestEnv()
