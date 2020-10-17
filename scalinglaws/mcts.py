@@ -22,11 +22,14 @@ class MCTS:
         self.parents = self.envs.new_full((env.n_envs, self.n_nodes), -1)
         self.relation = self.envs.new_full((env.n_envs, self.n_nodes), -1)
 
+        #TODO: All of these but the children tensor should not have a 'actions' dim; the field can be attributed
+        # to the parent 
         self.log_pi = torch.full((env.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
         self.n = torch.full((env.n_envs, self.n_nodes, n_actions), 0, device=self.device, dtype=torch.int)
         self.m = torch.full((env.n_envs, self.n_nodes, n_actions), 0, device=self.device, dtype=torch.int)
         self.w = torch.full((env.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
         self.terminal = torch.full((env.n_envs, self.n_nodes), False, device=self.device, dtype=torch.bool)
+        self.reward = torch.full((env.n_envs, self.n_nodes), 0., device=self.device, dtype=torch.float)
 
         self.sim = 0
 
@@ -69,7 +72,7 @@ class MCTS:
             active = a != -1
             dummies = torch.distributions.Categorical(probs=inputs.mask.float()).sample()
             dummies[active] = a
-            r, i = env.step(dummies)
+            i = env.step(dummies)
 
             #TODO: Generalise this
             for k in inputs:
@@ -90,11 +93,13 @@ class MCTS:
             relation = self.relation[self.envs[active], current[active]]
 
             v[self.terminal[self.envs[active], current[active]]] = 0. 
-            m[self.terminal[self.envs[active], current[active]]] = 0
 
+            r = self.reward[self.envs[active], current[active]]
             self.m[self.envs[active], parent, relation] += m
             self.n[self.envs[active], parent, relation] += 1
-            self.w[self.envs[active], parent, relation] += v
+            self.w[self.envs[active], parent, relation] += v + r
+
+            m[self.terminal[self.envs[active], current[active]]] = 0
 
             current[active] = parent
 
@@ -124,6 +129,7 @@ class MCTS:
 
         inputs = self.play(env, inputs, trace)
         self.terminal[:, self.sim] = inputs.terminal
+        self.reward[:, self.sim] = inputs.reward
 
         decisions = agent(inputs, value=True)
         self.log_pi[:, self.sim] = decisions.logits
@@ -171,7 +177,7 @@ class MCTS:
 
         return plt.gca()
 
-def mcts(env, inputs, agent, n_nodes=8):
+def mcts(env, inputs, agent, n_nodes):
     mcts = MCTS(env, n_nodes)
 
     mcts.initialize(env, inputs, agent)
@@ -194,7 +200,8 @@ class TestEnv:
     def _observe(self):
         return arrdict.arrdict(
             mask=torch.ones((self.n_envs, 2), dtype=torch.bool, device=self.device),
-            terminal=(self.idx == self.length))
+            terminal=(self.idx == self.length),
+            reward=(self.idx == self.length) & (self.history == 1).all(-1))
 
     def reset(self):
         return self._observe()
@@ -203,15 +210,13 @@ class TestEnv:
         self.history[:, self.idx] = actions
 
         self.idx += 1 
-        response = arrdict.arrdict(
-            reward=((self.idx == self.length) & (self.history == 1).all(-1)))
 
         inputs = self._observe().clone()
 
         self.idx[inputs.terminal] = 0
         self.history[inputs.terminal] = -1
         
-        return response, inputs
+        return inputs
 
     def state_dict(self):
         return arrdict.arrdict(
@@ -239,9 +244,9 @@ class RandomRolloutAgent:
                 break
 
             actions = torch.distributions.Categorical(probs=inputs.mask.float()).sample()
-            response, inputs = env.step(actions)
+            inputs = env.step(actions)
 
-            reward += response.reward * live.float()
+            reward += inputs.reward * live.float()
             live = live & ~inputs.terminal
 
         env.load_state_dict(original)
@@ -256,7 +261,7 @@ class RandomRolloutAgent:
     
 def test():
     env = TestEnv(4, device='cuda')
-    agent = TestAgent()
+    agent = RandomRolloutAgent(env)
     inputs = env.reset()
 
-    m = mcts(env, inputs, agent)
+    m = mcts(env, inputs, agent, 7)
