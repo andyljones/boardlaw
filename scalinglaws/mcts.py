@@ -24,6 +24,7 @@ class MCTS:
 
         self.log_pi = torch.full((env.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
         self.n = torch.full((env.n_envs, self.n_nodes, n_actions), 0, device=self.device, dtype=torch.int)
+        self.m = torch.full((env.n_envs, self.n_nodes, n_actions), 0, device=self.device, dtype=torch.int)
         self.w = torch.full((env.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
         self.terminal = torch.full((env.n_envs, self.n_nodes), False, device=self.device, dtype=torch.bool)
 
@@ -78,6 +79,7 @@ class MCTS:
 
     def backup(self, current, v):
         v = v.clone()
+        m = torch.ones_like(v, dtype=torch.int)
         current = torch.full_like(self.envs, current)
         while True:
             active = (self.parents[self.envs, current] != -1)
@@ -88,6 +90,9 @@ class MCTS:
             relation = self.relation[self.envs[active], current[active]]
 
             v[self.terminal[self.envs[active], current[active]]] = 0. 
+            m[self.terminal[self.envs[active], current[active]]] = 0
+
+            self.m[self.envs[active], parent, relation] += m
             self.n[self.envs[active], parent, relation] += 1
             self.w[self.envs[active], parent, relation] += v
 
@@ -99,7 +104,8 @@ class MCTS:
         decisions = agent(inputs, value=True)
         self.log_pi[:, self.sim] = decisions.logits
         self.w[:, self.sim] = 0.
-        self.n[:, self.sim] = 1 
+        self.n[:, self.sim] = 0 
+        self.m[:, self.sim] = 0 
 
         self.sim += 1
 
@@ -122,6 +128,7 @@ class MCTS:
         decisions = agent(inputs, value=True)
         self.log_pi[:, self.sim] = decisions.logits
         self.w[:, self.sim] = 0
+        self.m[:, self.sim] = 0
         self.n[:, self.sim] = 0 
 
         self.backup(self.sim, decisions.v)
@@ -134,14 +141,14 @@ class MCTS:
         return arrdict.arrdict(
             p=self.n[:, 0].float()/self.n[:, 0].sum(-1, keepdims=True),
             logits=self.log_pi[:, 0],
-            v=self.w[:, 0]/self.n[:, 0])
+            v=self.w[:, 0]/self.m[:, 0])
 
-    def display(self, e=0, color='terminal'):
+    def display(self, e=0):
         import networkx as nx
         import matplotlib.pyplot as plt
 
-        edges, labels, edge_colors = [], {}, []
-        qs = (self.w/self.n)[e].cpu()
+        edges, labels, edge_vals = [], {}, {}
+        qs = (self.w/self.m).where(self.m > 0, torch.zeros_like(self.w))[e].cpu()
         q_min, q_max = np.nanmin(qs), np.nanmax(qs)
         for i, p in enumerate(self.parents[e].cpu()):
             p = int(p)
@@ -150,13 +157,13 @@ class MCTS:
                 q = float(qs[p, r])
                 edge = (p, i)
                 edges.append(edge)
-                labels[edge] = f'{r}, {(q - q_min)/(q_max - q_min):.1f}'
-                edge_colors.append(plt.cm.viridis(q))
+                labels[edge] = f'{r}, {q:.1f}'
+                edge_vals[edge] = (q - q_min)/(q_max - q_min + 1e-6)
             
-        if color == 'terminal':
-            colors = ['C1' if t else 'C2' for t in self.terminal.float()[e].cpu().numpy()]
-
         G = nx.from_edgelist(edges)
+        colors = ['C1' if t else 'C2' for t in self.terminal.float()[e].cpu().numpy()]
+        edge_colors = [edge_vals[e] for e in G.edges()]
+
         pos = nx.kamada_kawai_layout(G)
         nx.draw(G, pos, node_color=colors, edge_color=edge_colors, width=5)
         nx.draw_networkx_edge_labels(G, pos, edge_labels=labels)
@@ -164,18 +171,18 @@ class MCTS:
 
         return plt.gca()
 
-def mcts(env, inputs, agent, n_nodes=100):
+def mcts(env, inputs, agent, n_nodes=8):
     mcts = MCTS(env, n_nodes)
 
     mcts.initialize(env, inputs, agent)
     for _ in range(n_nodes-1):
         mcts.simulate(env, inputs, agent)
 
-    return mcts.root()
+    return mcts
 
 class TestEnv:
 
-    def __init__(self, n_envs=1, length=3, device='cpu'):
+    def __init__(self, n_envs=1, length=2, device='cpu'):
         self.device = device 
         self.n_envs = n_envs
         self.length = length
@@ -186,7 +193,6 @@ class TestEnv:
 
     def _observe(self):
         return arrdict.arrdict(
-            value=(self.history == 1).float().mean(-1),
             mask=torch.ones((self.n_envs, 2), dtype=torch.bool, device=self.device),
             terminal=(self.idx == self.length))
 
@@ -198,7 +204,7 @@ class TestEnv:
 
         self.idx += 1 
         response = arrdict.arrdict(
-            reward=torch.zeros((self.n_envs,), device=self.device))
+            reward=((self.idx == self.length) & (self.history == 1).all(-1)))
 
         inputs = self._observe().clone()
 
@@ -216,23 +222,41 @@ class TestEnv:
         self.history = d.history
         self.idx = d.idx
 
-class TestAgent:
+class RandomRolloutAgent:
 
-    def __call__(self, inputs, sample=True, value=True):
+    def __init__(self, env, n_rollouts=64):
+        self.env = env
+        self.n_rollouts = n_rollouts
+
+    def rollout(self, inputs):
+        env = self.env
+        original = env.state_dict()
+
+        live = torch.ones_like(inputs.terminal)
+        reward = torch.zeros_like(inputs.terminal, dtype=torch.float)
+        while True:
+            if not live.any():
+                break
+
+            actions = torch.distributions.Categorical(probs=inputs.mask.float()).sample()
+            response, inputs = env.step(actions)
+
+            reward += response.reward * live.float()
+            live = live & ~inputs.terminal
+
+        env.load_state_dict(original)
+
+        return reward
+
+    def __call__(self, inputs, value=True):
         B, A = inputs.mask.shape
         return arrdict.arrdict(
-            logits=torch.full((B, A), -np.log(A)),
-            v=inputs.value.float())
+            logits=torch.full((B, A), -np.log(A), device=self.env.device),
+            v=torch.stack([self.rollout(inputs) for _ in range(self.n_rollouts)]).mean(0))
     
 def test():
-    env = TestEnv(1024, device='cuda')
+    env = TestEnv(4, device='cuda')
     agent = TestAgent()
     inputs = env.reset()
 
-    n_sims = 101
-    mcts = MCTS(env, n_sims, c_puct=2.5)
-
-    mcts.initialize(env, inputs, agent)
-    for _ in range(n_sims-1):
-        mcts.simulate(env, inputs, agent)
-    mcts.display()
+    m = mcts(env, inputs, agent)
