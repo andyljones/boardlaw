@@ -238,38 +238,7 @@ class TestEnv:
         self.history = d.history
         self.idx = d.idx
 
-class RandomRolloutAgent:
 
-    def __init__(self, env, n_rollouts=64):
-        self.env = env
-        self.n_rollouts = n_rollouts
-
-    def rollout(self, inputs):
-        env = self.env
-        original = env.state_dict()
-
-        live = torch.ones_like(inputs.terminal)
-        reward = torch.zeros_like(inputs.terminal, dtype=torch.float)
-        while True:
-            if not live.any():
-                break
-
-            actions = torch.distributions.Categorical(probs=inputs.mask.float()).sample()
-            inputs = env.step(actions)
-
-            reward += inputs.reward * live.float()
-            live = live & ~inputs.terminal
-
-        env.load_state_dict(original)
-
-        return reward
-
-    def __call__(self, inputs, value=True):
-        B, A = inputs.mask.shape
-        return arrdict.arrdict(
-            logits=torch.log(inputs.mask.float()/inputs.mask.sum(-1, keepdims=True)),
-            v=torch.stack([self.rollout(inputs) for _ in range(self.n_rollouts)]).mean(0))
-    
 def test():
     env = TestEnv(4, device='cuda')
     agent = RandomRolloutAgent(env)
