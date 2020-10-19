@@ -187,11 +187,11 @@ class MCTS:
 
         return plt.gca()
 
-def mcts(env, inputs, agent, n_nodes):
-    mcts = MCTS(env, n_nodes)
+def mcts(env, inputs, agent, **kwargs):
+    mcts = MCTS(env, **kwargs)
 
     mcts.initialize(env, inputs, agent)
-    for _ in range(n_nodes-1):
+    for _ in range(mcts.n_nodes-1):
         mcts.simulate(env, inputs, agent)
 
     return mcts
