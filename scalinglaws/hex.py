@@ -138,7 +138,10 @@ class Hex:
     def reset(self):
         terminal = torch.ones(self.n_envs, dtype=bool, device=self.device)
         self._terminate(terminal)
-        return arrdict.arrdict(terminal=torch.zeros_like(terminal), **self._observe())
+        return arrdict.arrdict(
+            terminal=torch.zeros_like(terminal), 
+            reward=torch.zeros_like(terminal).float(), 
+            **self._observe())
 
     def step(self, actions):
         """Args:
@@ -149,11 +152,12 @@ class Hex:
 
         """
         terminal = self._update_states(actions)
-        old = arrdict.arrdict(reward=terminal.float(), **self._observe())
         self._seat = 1 - self._seat
         self._terminate(terminal)
-        new = arrdict.arrdict(terminal=terminal, **self._observe())
-        return old, new
+        return arrdict.arrdict(
+            terminal=terminal, 
+            reward=terminal.float(), 
+            **self._observe())
 
     def state_dict(self):
         return arrdict.arrdict(board=self._board, seat=self._seat).clone()
@@ -164,7 +168,7 @@ class Hex:
 
     @classmethod
     def plot_state(cls, state, e=0):
-        board = state[e]
+        board = state[e].board
         width = board.shape[1]
 
         fig, ax = plt.subplots()

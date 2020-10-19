@@ -1,7 +1,3 @@
-"""
-Right, MCTS:
-    * 
-"""
 from collections import namedtuple
 from numpy.core.overrides import array_function_dispatch
 import torch
@@ -25,6 +21,7 @@ class MCTS:
         #TODO: All of these but the children tensor should not have a 'actions' dim; the field can be attributed
         # to the parent 
         self.log_pi = torch.full((env.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
+        self.valid = torch.full((env.n_envs, self.n_nodes, n_actions), False, device=self.device, dtype=torch.bool)
         self.n = torch.full((env.n_envs, self.n_nodes, n_actions), 0, device=self.device, dtype=torch.int)
         self.m = torch.full((env.n_envs, self.n_nodes, n_actions), 0, device=self.device, dtype=torch.int)
         self.w = torch.full((env.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
@@ -45,6 +42,7 @@ class MCTS:
         N = n.sum(-1, keepdims=True)
 
         values = q + self.c_puct*pi*N/(1 + n)
+        values[~self.valid[envs, nodes]] = -np.inf
         return values.max(-1).indices
 
     def descend(self):
@@ -111,6 +109,11 @@ class MCTS:
     def initialize(self, env, inputs, agent):
         original_state = env.state_dict()
 
+        self.valid[:, self.sim] = inputs.mask
+        self.terminal[:, self.sim] = inputs.terminal
+        self.reward[:, self.sim] = inputs.reward
+        self.seat[:, self.sim] = inputs.seat
+
         decisions = agent(inputs, value=True)
         self.log_pi[:, self.sim] = decisions.logits
         self.w[:, self.sim] = 0.
@@ -133,6 +136,7 @@ class MCTS:
         self.relation[self.envs, self.sim] = trace[-1]
 
         inputs = self.play(env, inputs, trace)
+        self.valid[:, self.sim] = inputs.mask
         self.terminal[:, self.sim] = inputs.terminal
         self.reward[:, self.sim] = inputs.reward
         self.seat[:, self.sim] = inputs.seat
@@ -263,7 +267,7 @@ class RandomRolloutAgent:
     def __call__(self, inputs, value=True):
         B, A = inputs.mask.shape
         return arrdict.arrdict(
-            logits=torch.full((B, A), -np.log(A), device=self.env.device),
+            logits=torch.log(inputs.mask.float()/inputs.mask.sum(-1, keepdims=True)),
             v=torch.stack([self.rollout(inputs) for _ in range(self.n_rollouts)]).mean(0))
     
 def test():
