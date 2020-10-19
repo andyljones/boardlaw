@@ -30,6 +30,7 @@ class MCTS:
         self.w = torch.full((env.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
         self.terminal = torch.full((env.n_envs, self.n_nodes), False, device=self.device, dtype=torch.bool)
         self.reward = torch.full((env.n_envs, self.n_nodes), 0., device=self.device, dtype=torch.float)
+        self.seat = torch.full((env.n_envs, self.n_nodes), -1, device=self.device, dtype=torch.int)
 
         self.sim = 0
 
@@ -80,10 +81,11 @@ class MCTS:
 
         return inputs
 
-    def backup(self, current, v):
+    def backup(self, current, seat, v):
         v = v.clone()
         m = torch.ones_like(v, dtype=torch.int)
         current = torch.full_like(self.envs, current)
+        #TODO: Need to backup value only for choosing player
         while True:
             active = (self.parents[self.envs, current] != -1)
             if not active.any():
@@ -94,10 +96,13 @@ class MCTS:
 
             v[self.terminal[self.envs[active], current[active]]] = 0. 
 
+            #TODO: This is only going to work for 2-player zero-sum games.
+            sign = 2*(seat[active] == self.seat[active, current[active]]).float() - 1
+
             r = self.reward[self.envs[active], current[active]]
             self.m[self.envs[active], parent, relation] += m
             self.n[self.envs[active], parent, relation] += 1
-            self.w[self.envs[active], parent, relation] += v + r
+            self.w[self.envs[active], parent, relation] += sign*(v + r)
 
             m[self.terminal[self.envs[active], current[active]]] = 0
 
@@ -130,6 +135,7 @@ class MCTS:
         inputs = self.play(env, inputs, trace)
         self.terminal[:, self.sim] = inputs.terminal
         self.reward[:, self.sim] = inputs.reward
+        self.seat[:, self.sim] = inputs.seat
 
         decisions = agent(inputs, value=True)
         self.log_pi[:, self.sim] = decisions.logits
@@ -137,7 +143,7 @@ class MCTS:
         self.m[:, self.sim] = 0
         self.n[:, self.sim] = 0 
 
-        self.backup(self.sim, decisions.v)
+        self.backup(self.sim, inputs.seat, decisions.v)
 
         self.sim += 1
 
@@ -199,6 +205,7 @@ class TestEnv:
 
     def _observe(self):
         return arrdict.arrdict(
+            seat=torch.zeros((self.n_envs,), dtype=torch.int, device=self.device),
             mask=torch.ones((self.n_envs, 2), dtype=torch.bool, device=self.device),
             terminal=(self.idx == self.length),
             reward=(self.idx == self.length) & (self.history == 1).all(-1))
