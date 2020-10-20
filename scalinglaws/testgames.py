@@ -9,12 +9,17 @@ What to test?
 """
 import torch
 from rebar import arrdict
+from . import heads
+from collections import namedtuple
 
 class RandomAgent:
 
-    def __call__(self, inputs, value=True):
-        return arrdict.arrdict(
+    def __call__(self, inputs, value=False):
+        decisions = arrdict.arrdict(
             logits=torch.log(inputs.valid.float()/inputs.valid.sum(-1, keepdims=True)))
+        if value:
+            decisions['v'] = torch.zeros_like(decisions.logits[:, 0])
+        return decisions
 
 class KnownValueRandomAgent:
 
@@ -62,8 +67,11 @@ class InstantReturn:
 
     def __init__(self, n_envs=1, device='cuda'):
         self.device = torch.device(device)
-        self.n_envs = 1
+        self.n_envs = n_envs
         self.n_seats = 1
+
+        self.obs_space = heads.Tensor(())
+        self.action_space = heads.Masked((1,))
 
     def reset(self):
         return arrdict.arrdict(
@@ -71,12 +79,60 @@ class InstantReturn:
             seats=torch.ones((self.n_envs,), dtype=torch.int, device=self.device))
 
     def step(self, actions):
-        arc = arrdict.arrdict(
+        responses = arrdict.arrdict(
             terminal=torch.ones((self.n_envs,), dtype=torch.bool, device=self.device),
             rewards=torch.ones((self.n_envs,), dtype=torch.float, device=self.device))
         
-        node = arrdict.arrdict(
+        inputs = arrdict.arrdict(
             valid=torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device),
             seats=torch.ones((self.n_envs,), dtype=torch.int, device=self.device))
         
-        return arc, node
+        return responses, inputs
+
+    def state_dict(self):
+        return arrdict.arrdict()
+
+    def load_state_dict(self, sd):
+        pass
+
+class BinaryTree:
+
+    def __init__(self, n_envs=1, length=2, device='cpu'):
+        self.device = device 
+        self.n_envs = n_envs
+        self.length = length
+
+        self.action_space = namedtuple('Vector', ('dim',))((2,))
+        self.history = torch.full((n_envs, length), -1, dtype=torch.long, device=self.device)
+        self.idx = torch.full((n_envs,), 0, dtype=torch.long, device=self.device)
+
+    def _observe(self):
+        return arrdict.arrdict(
+            seat=torch.zeros((self.n_envs,), dtype=torch.int, device=self.device),
+            mask=torch.ones((self.n_envs, 2), dtype=torch.bool, device=self.device),
+            terminal=(self.idx == self.length),
+            reward=(self.idx == self.length) & (self.history == 1).all(-1))
+
+    def reset(self):
+        return self._observe()
+
+    def step(self, actions):
+        self.history[:, self.idx] = actions
+
+        self.idx += 1 
+
+        inputs = self._observe().clone()
+
+        self.idx[inputs.terminal] = 0
+        self.history[inputs.terminal] = -1
+        
+        return inputs
+
+    def state_dict(self):
+        return arrdict.arrdict(
+            history=self.history,
+            idx=self.idx).clone()
+
+    def load_state_dict(self, d):
+        self.history = d.history
+        self.idx = d.idx

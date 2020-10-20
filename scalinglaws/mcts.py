@@ -1,4 +1,5 @@
 from collections import namedtuple
+from scalinglaws.testgames import RandomAgent
 from numpy.core.overrides import array_function_dispatch
 import torch
 import numpy as np
@@ -26,8 +27,8 @@ class MCTS:
         self.m = torch.full((env.n_envs, self.n_nodes, n_actions), 0, device=self.device, dtype=torch.int)
         self.w = torch.full((env.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
         self.terminal = torch.full((env.n_envs, self.n_nodes), False, device=self.device, dtype=torch.bool)
-        self.reward = torch.full((env.n_envs, self.n_nodes), 0., device=self.device, dtype=torch.float)
-        self.seat = torch.full((env.n_envs, self.n_nodes), -1, device=self.device, dtype=torch.int)
+        self.rewards = torch.full((env.n_envs, self.n_nodes), 0., device=self.device, dtype=torch.float)
+        self.seats = torch.full((env.n_envs, self.n_nodes), -1, device=self.device, dtype=torch.int)
 
         self.sim = 0
 
@@ -66,18 +67,23 @@ class MCTS:
 
     def play(self, env, inputs, trace):
         inputs = inputs.clone()
+        responses = arrdict.arrdict(
+            terminal=torch.zeros_like(self.terminal[:, self.sim]),
+            rewards=torch.zeros_like(self.rewards[:, self.sim]))
         #TODO: Handle termination, bit of wasted compute right now.
         for a in trace:
             active = a != -1
-            dummies = torch.distributions.Categorical(probs=inputs.mask.float()).sample()
+            dummies = torch.distributions.Categorical(probs=inputs.valid.float()).sample()
             dummies[active] = a
-            i = env.step(dummies)
+            new_responses, new_inputs = env.step(dummies)
 
             #TODO: Generalise this
             for k in inputs:
-                inputs[k][active] = i[k][active]
+                inputs[k][active] = new_inputs[k][active]
+            for k in responses:
+                responses[k][active] = new_responses[k][active]
 
-        return inputs
+        return responses, inputs
 
     def backup(self, current, seat, v):
         v = v.clone()
@@ -95,9 +101,9 @@ class MCTS:
             v[self.terminal[self.envs[active], current[active]]] = 0. 
 
             #TODO: This is only going to work for 2-player zero-sum games.
-            sign = 2*(seat[active] == self.seat[active, current[active]]).float() - 1
+            sign = 2*(seat[active] == self.seats[active, current[active]]).float() - 1
 
-            r = self.reward[self.envs[active], current[active]]
+            r = self.rewards[self.envs[active], current[active]]
             self.m[self.envs[active], parent, relation] += m
             self.n[self.envs[active], parent, relation] += 1
             self.w[self.envs[active], parent, relation] += sign*(v + r)
@@ -109,10 +115,10 @@ class MCTS:
     def initialize(self, env, inputs, agent):
         original_state = env.state_dict()
 
-        self.valid[:, self.sim] = inputs.mask
-        self.terminal[:, self.sim] = inputs.terminal
-        self.reward[:, self.sim] = inputs.reward
-        self.seat[:, self.sim] = inputs.seat
+        self.valid[:, self.sim] = inputs.valid
+        self.seats[:, self.sim] = inputs.seats
+        self.terminal[:, self.sim] = False
+        self.rewards[:, self.sim] = 0
 
         decisions = agent(inputs, value=True)
         self.log_pi[:, self.sim] = decisions.logits
@@ -135,11 +141,11 @@ class MCTS:
         self.parents[self.envs, self.sim] = leaf
         self.relation[self.envs, self.sim] = trace[-1]
 
-        inputs = self.play(env, inputs, trace)
-        self.valid[:, self.sim] = inputs.mask
-        self.terminal[:, self.sim] = inputs.terminal
-        self.reward[:, self.sim] = inputs.reward
-        self.seat[:, self.sim] = inputs.seat
+        response, inputs = self.play(env, inputs, trace)
+        self.valid[:, self.sim] = inputs.valid
+        self.seats[:, self.sim] = inputs.seats
+        self.terminal[:, self.sim] = response.terminal
+        self.rewards[:, self.sim] = response.rewards
 
         decisions = agent(inputs, value=True)
         self.log_pi[:, self.sim] = decisions.logits
@@ -147,7 +153,7 @@ class MCTS:
         self.m[:, self.sim] = 0
         self.n[:, self.sim] = 0 
 
-        self.backup(self.sim, inputs.seat, decisions.v)
+        self.backup(self.sim, inputs.seats, decisions.v)
 
         self.sim += 1
 
@@ -196,52 +202,10 @@ def mcts(env, inputs, agent, **kwargs):
 
     return mcts
 
-class TestEnv:
-
-    def __init__(self, n_envs=1, length=2, device='cpu'):
-        self.device = device 
-        self.n_envs = n_envs
-        self.length = length
-
-        self.action_space = namedtuple('Vector', ('dim',))((2,))
-        self.history = torch.full((n_envs, length), -1, dtype=torch.long, device=self.device)
-        self.idx = torch.full((n_envs,), 0, dtype=torch.long, device=self.device)
-
-    def _observe(self):
-        return arrdict.arrdict(
-            seat=torch.zeros((self.n_envs,), dtype=torch.int, device=self.device),
-            mask=torch.ones((self.n_envs, 2), dtype=torch.bool, device=self.device),
-            terminal=(self.idx == self.length),
-            reward=(self.idx == self.length) & (self.history == 1).all(-1))
-
-    def reset(self):
-        return self._observe()
-
-    def step(self, actions):
-        self.history[:, self.idx] = actions
-
-        self.idx += 1 
-
-        inputs = self._observe().clone()
-
-        self.idx[inputs.terminal] = 0
-        self.history[inputs.terminal] = -1
-        
-        return inputs
-
-    def state_dict(self):
-        return arrdict.arrdict(
-            history=self.history,
-            idx=self.idx).clone()
-
-    def load_state_dict(self, d):
-        self.history = d.history
-        self.idx = d.idx
-
-
 def test():
-    env = TestEnv(4, device='cuda')
-    agent = RandomRolloutAgent(env)
-    inputs = env.reset()
+    from . import testgames
+    env = testgames.InstantReturn()
+    agent = RandomAgent(env)
+    inputs = env.initialize()
 
     m = mcts(env, inputs, agent, 7)
