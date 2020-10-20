@@ -31,7 +31,7 @@ class MCTS:
         self.w = torch.full((env.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
         self.terminal = torch.full((env.n_envs, self.n_nodes), False, device=self.device, dtype=torch.bool)
         self.rewards = torch.full((env.n_envs, self.n_nodes, self.n_seats), 0., device=self.device, dtype=torch.float)
-        self.seats = torch.full((env.n_envs, self.n_nodes), -1, device=self.device, dtype=torch.int)
+        self.seats = torch.full((env.n_envs, self.n_nodes), -1, device=self.device, dtype=torch.long)
 
         self.sim = 0
 
@@ -89,13 +89,13 @@ class MCTS:
         return responses, inputs
 
     def backup(self, current, seat, v):
-        is_chooser = self.seats[:, 0] == seat
+        root_seat = self.seats[:, 0]
         v = v.clone()
         m = torch.ones_like(v, dtype=torch.int)
         current = torch.full_like(self.envs, current)
         #TODO: Need to backup value only for choosing player
         while True:
-            active = (self.parents[self.envs, current] != -1) & is_chooser
+            active = (self.parents[self.envs, current] != -1) & (root_seat == seat)
             if not active.any():
                 break
 
@@ -104,8 +104,7 @@ class MCTS:
 
             v[self.terminal[self.envs[active], current[active]]] = 0. 
 
-            current_seat = self.seats[self.envs[active], current[active]]
-            v[active] = v[active] + self.rewards[self.envs[active], current[active], current_seat]
+            v[active] = v[active] + self.rewards[self.envs[active], current[active], root_seat[active]]
 
             self.m[self.envs[active], parent, relation] += m
             self.n[self.envs[active], parent, relation] += 1

@@ -76,16 +76,16 @@ class InstantWin:
     def reset(self):
         return arrdict.arrdict(
             valid=torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device),
-            seats=torch.ones((self.n_envs,), dtype=torch.int, device=self.device))
+            seats=torch.zeros((self.n_envs,), dtype=torch.long, device=self.device))
 
     def step(self, actions):
         responses = arrdict.arrdict(
-            terminal=torch.ones((self.n_envs, self.n_seats), dtype=torch.bool, device=self.device),
+            terminal=torch.ones((self.n_envs,), dtype=torch.bool, device=self.device),
             rewards=torch.zeros((self.n_envs, self.n_seats), dtype=torch.float, device=self.device))
         
         inputs = arrdict.arrdict(
             valid=torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device),
-            seats=torch.ones((self.n_envs,), dtype=torch.int, device=self.device))
+            seats=torch.zeros((self.n_envs,), dtype=torch.long, device=self.device))
         
         return responses, inputs
 
@@ -105,12 +105,12 @@ class FirstWinsSecondLoses:
         self.obs_space = (0,)
         self.action_space = (1,)
 
-        self._seats = torch.zeros((self.n_envs,), dtype=torch.int, device=self.device)
+        self._seats = torch.zeros((self.n_envs,), dtype=torch.long, device=self.device)
 
     def reset(self):
         return arrdict.arrdict(
             valid=torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device),
-            seats=torch.ones((self.n_envs,), dtype=torch.int, device=self.device))
+            seats=self._seats).clone()
 
     def step(self, actions):
         terminal = (self._seats == 1)
