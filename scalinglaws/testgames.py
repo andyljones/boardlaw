@@ -63,15 +63,15 @@ class RandomRolloutAgent:
             logits=torch.log(inputs.valid.float()/inputs.valid.sum(-1, keepdims=True)),
             v=torch.stack([self.rollout(inputs) for _ in range(self.n_rollouts)]).mean(0))
     
-class InstantReturn:
+class InstantWin:
 
     def __init__(self, n_envs=1, device='cuda'):
         self.device = torch.device(device)
         self.n_envs = n_envs
         self.n_seats = 1
 
-        self.obs_space = heads.Tensor(())
-        self.action_space = heads.Masked((1,))
+        self.obs_space = (0,)
+        self.action_space = (1,)
 
     def reset(self):
         return arrdict.arrdict(
@@ -80,8 +80,8 @@ class InstantReturn:
 
     def step(self, actions):
         responses = arrdict.arrdict(
-            terminal=torch.ones((self.n_envs,), dtype=torch.bool, device=self.device),
-            rewards=torch.ones((self.n_envs,), dtype=torch.float, device=self.device))
+            terminal=torch.ones((self.n_envs, self.n_seats), dtype=torch.bool, device=self.device),
+            rewards=torch.zeros((self.n_envs, self.n_seats), dtype=torch.float, device=self.device))
         
         inputs = arrdict.arrdict(
             valid=torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device),
@@ -94,6 +94,43 @@ class InstantReturn:
 
     def load_state_dict(self, sd):
         pass
+
+class FirstWinsSecondLoses:
+
+    def __init__(self, n_envs=1, device='cuda'):
+        self.device = torch.device(device)
+        self.n_envs = n_envs
+        self.n_seats = 2
+
+        self.obs_space = (0,)
+        self.action_space = (1,)
+
+        self._seats = torch.zeros((self.n_envs,), dtype=torch.int, device=self.device)
+
+    def reset(self):
+        return arrdict.arrdict(
+            valid=torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device),
+            seats=torch.ones((self.n_envs,), dtype=torch.int, device=self.device))
+
+    def step(self, actions):
+        terminal = (self._seats == 1)
+        responses = arrdict.arrdict(
+            terminal=terminal,
+            rewards=torch.stack([terminal.float(), -terminal.float()], -1))
+        self._seats[responses.terminal] = 0
+        
+        inputs = arrdict.arrdict(
+            valid=torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device),
+            seats=self._seats).clone()
+        
+        return responses, inputs
+
+    def state_dict(self):
+        return arrdict.arrdict(
+            seat=self._seats).clone()
+
+    def load_state_dict(self, sd):
+        self._seats[:] = sd.seat
 
 class BinaryTree:
 

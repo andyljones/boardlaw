@@ -1,4 +1,6 @@
 from collections import namedtuple
+
+from networkx.algorithms.graphical import is_valid_degree_sequence_havel_hakimi
 from scalinglaws.testgames import RandomAgent
 from numpy.core.overrides import array_function_dispatch
 import torch
@@ -11,6 +13,7 @@ class MCTS:
         self.device = env.device
         self.n_envs = env.n_envs
         self.n_nodes = n_nodes
+        self.n_seats = env.n_seats
 
         self.envs = torch.arange(env.n_envs, device=self.device)
 
@@ -27,7 +30,7 @@ class MCTS:
         self.m = torch.full((env.n_envs, self.n_nodes, n_actions), 0, device=self.device, dtype=torch.int)
         self.w = torch.full((env.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
         self.terminal = torch.full((env.n_envs, self.n_nodes), False, device=self.device, dtype=torch.bool)
-        self.rewards = torch.full((env.n_envs, self.n_nodes), 0., device=self.device, dtype=torch.float)
+        self.rewards = torch.full((env.n_envs, self.n_nodes, self.n_seats), 0., device=self.device, dtype=torch.float)
         self.seats = torch.full((env.n_envs, self.n_nodes), -1, device=self.device, dtype=torch.int)
 
         self.sim = 0
@@ -86,12 +89,13 @@ class MCTS:
         return responses, inputs
 
     def backup(self, current, seat, v):
+        is_chooser = self.seats[:, 0] == seat
         v = v.clone()
         m = torch.ones_like(v, dtype=torch.int)
         current = torch.full_like(self.envs, current)
         #TODO: Need to backup value only for choosing player
         while True:
-            active = (self.parents[self.envs, current] != -1)
+            active = (self.parents[self.envs, current] != -1) & is_chooser
             if not active.any():
                 break
 
@@ -100,13 +104,12 @@ class MCTS:
 
             v[self.terminal[self.envs[active], current[active]]] = 0. 
 
-            #TODO: This is only going to work for 2-player zero-sum games.
-            sign = 2*(seat[active] == self.seats[active, current[active]]).float() - 1
+            current_seat = self.seats[self.envs[active], current[active]]
+            v[active] = v[active] + self.rewards[self.envs[active], current[active], current_seat]
 
-            r = self.rewards[self.envs[active], current[active]]
             self.m[self.envs[active], parent, relation] += m
             self.n[self.envs[active], parent, relation] += 1
-            self.w[self.envs[active], parent, relation] += sign*(v + r)
+            self.w[self.envs[active], parent, relation] += v
 
             m[self.terminal[self.envs[active], current[active]]] = 0
 
