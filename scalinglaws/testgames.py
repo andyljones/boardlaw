@@ -69,21 +69,21 @@ class InstantWin:
         self.obs_space = (0,)
         self.action_space = (1,)
 
-    def reset(self):
+    def _observe(self):
         return arrdict.arrdict(
             valid=torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device),
-            seats=torch.zeros((self.n_envs,), dtype=torch.long, device=self.device))
+            seats=torch.zeros((self.n_envs,), dtype=torch.long, device=self.device),
+            v=torch.ones((self.n_envs, self.n_seats), dtype=torch.float, device=self.device))
+
+    def reset(self):
+        return self._observe()
 
     def step(self, actions):
         responses = arrdict.arrdict(
             terminal=torch.ones((self.n_envs,), dtype=torch.bool, device=self.device),
-            rewards=torch.zeros((self.n_envs, self.n_seats), dtype=torch.float, device=self.device))
+            rewards=torch.ones((self.n_envs, self.n_seats), dtype=torch.float, device=self.device))
         
-        inputs = arrdict.arrdict(
-            valid=torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device),
-            seats=torch.zeros((self.n_envs,), dtype=torch.long, device=self.device))
-        
-        return responses, inputs
+        return responses, self._observe()
 
     def state_dict(self):
         return arrdict.arrdict()
