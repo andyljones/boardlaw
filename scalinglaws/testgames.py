@@ -117,6 +117,8 @@ class FirstWinsSecondLoses:
         responses = arrdict.arrdict(
             terminal=terminal,
             rewards=torch.stack([terminal.float(), -terminal.float()], -1))
+
+        self._seats += 1
         self._seats[responses.terminal] = 0
         
         inputs = arrdict.arrdict(

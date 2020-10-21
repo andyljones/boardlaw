@@ -90,12 +90,11 @@ class MCTS:
 
     def backup(self, current, seat, v):
         root_seat = self.seats[:, 0]
-        v = v.clone()
+        v = v*(root_seat == seat).float()
         m = torch.ones_like(v, dtype=torch.int)
         current = torch.full_like(self.envs, current)
-        #TODO: Need to backup value only for choosing player
         while True:
-            active = (self.parents[self.envs, current] != -1) & (root_seat == seat)
+            active = (self.parents[self.envs, current] != -1)
             if not active.any():
                 break
 
@@ -104,15 +103,15 @@ class MCTS:
 
             v[self.terminal[self.envs[active], current[active]]] = 0. 
 
-            v[active] = v[active] + self.rewards[self.envs[active], current[active], root_seat[active]]
+            # v[active] = v[active] + self.rewards[self.envs[active], current[active], root_seat[active]]
 
-            self.m[self.envs[active], parent, relation] += m
-            self.n[self.envs[active], parent, relation] += 1
-            self.w[self.envs[active], parent, relation] += v
+            # self.m[self.envs[active], parent, relation] += m
+            # self.n[self.envs[active], parent, relation] += 1
+            # self.w[self.envs[active], parent, relation] += v
 
-            m[self.terminal[self.envs[active], current[active]]] = 0
+            # m[self.terminal[self.envs[active], current[active]]] = 0
 
-            current[active] = parent
+            # current[active] = parent
 
     def initialize(self, env, inputs, agent):
         original_state = env.state_dict()
