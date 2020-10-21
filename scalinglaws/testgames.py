@@ -14,19 +14,15 @@ from collections import namedtuple
 
 class RandomAgent:
 
+    def __init__(self, env):
+        self.n_seats = env.n_seats
+
     def __call__(self, inputs, value=False):
         decisions = arrdict.arrdict(
             logits=torch.log(inputs.valid.float()/inputs.valid.sum(-1, keepdims=True)))
         if value:
-            decisions['v'] = torch.zeros_like(decisions.logits[:, 0])
+            decisions['v'] = inputs.v
         return decisions
-
-class KnownValueRandomAgent:
-
-    def __call__(self, inputs, value=True):
-        return arrdict.arrdict(
-            logits=torch.log(inputs.valid.float()/inputs.valid.sum(-1, keepdims=True)),
-            v=inputs.v)
 
 class RandomRolloutAgent:
 
@@ -107,10 +103,14 @@ class FirstWinsSecondLoses:
 
         self._seats = torch.zeros((self.n_envs,), dtype=torch.long, device=self.device)
 
-    def reset(self):
+    def _observe(self):
         return arrdict.arrdict(
             valid=torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device),
-            seats=self._seats).clone()
+            seats=self._seats,
+            v=torch.tensor([[+1., -1.]], device=self.device).expand(self.n_envs, 2)).clone()
+
+    def reset(self):
+        return self._observe()
 
     def step(self, actions):
         terminal = (self._seats == 1)
@@ -120,10 +120,8 @@ class FirstWinsSecondLoses:
 
         self._seats += 1
         self._seats[responses.terminal] = 0
-        
-        inputs = arrdict.arrdict(
-            valid=torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device),
-            seats=self._seats).clone()
+
+        inputs = self._observe()
         
         return responses, inputs
 

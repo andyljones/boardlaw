@@ -27,8 +27,7 @@ class MCTS:
         self.log_pi = torch.full((env.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
         self.valid = torch.full((env.n_envs, self.n_nodes, n_actions), False, device=self.device, dtype=torch.bool)
         self.n = torch.full((env.n_envs, self.n_nodes, n_actions), 0, device=self.device, dtype=torch.int)
-        self.m = torch.full((env.n_envs, self.n_nodes, n_actions), 0, device=self.device, dtype=torch.int)
-        self.w = torch.full((env.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
+        self.w = torch.full((env.n_envs, self.n_nodes, n_actions, self.n_seats), np.nan, device=self.device)
         self.terminal = torch.full((env.n_envs, self.n_nodes), False, device=self.device, dtype=torch.bool)
         self.rewards = torch.full((env.n_envs, self.n_nodes, self.n_seats), 0., device=self.device, dtype=torch.float)
         self.seats = torch.full((env.n_envs, self.n_nodes), -1, device=self.device, dtype=torch.long)
@@ -88,10 +87,8 @@ class MCTS:
 
         return responses, inputs
 
-    def backup(self, current, seat, v):
-        root_seat = self.seats[:, 0]
-        v = v*(root_seat == seat).float()
-        m = torch.ones_like(v, dtype=torch.int)
+    def backup(self, current, v):
+        v = v.clone()
         current = torch.full_like(self.envs, current)
         while True:
             active = (self.parents[self.envs, current] != -1)
@@ -103,15 +100,12 @@ class MCTS:
 
             v[self.terminal[self.envs[active], current[active]]] = 0. 
 
-            # v[active] = v[active] + self.rewards[self.envs[active], current[active], root_seat[active]]
+            v[active] = v[active] + self.rewards[self.envs[active], current[active]]
 
-            # self.m[self.envs[active], parent, relation] += m
-            # self.n[self.envs[active], parent, relation] += 1
-            # self.w[self.envs[active], parent, relation] += v
+            self.n[self.envs[active], parent, relation] += 1
+            self.w[self.envs[active], parent, relation] += v
 
-            # m[self.terminal[self.envs[active], current[active]]] = 0
-
-            # current[active] = parent
+            current[active] = parent
 
     def initialize(self, env, inputs, agent):
         original_state = env.state_dict()
@@ -125,7 +119,6 @@ class MCTS:
         self.log_pi[:, self.sim] = decisions.logits
         self.w[:, self.sim] = 0.
         self.n[:, self.sim] = 0 
-        self.m[:, self.sim] = 0 
 
         self.sim += 1
 
@@ -151,10 +144,9 @@ class MCTS:
         decisions = agent(inputs, value=True)
         self.log_pi[:, self.sim] = decisions.logits
         self.w[:, self.sim] = 0
-        self.m[:, self.sim] = 0
         self.n[:, self.sim] = 0 
 
-        self.backup(self.sim, inputs.seats, decisions.v)
+        self.backup(self.sim, decisions.v)
 
         self.sim += 1
 
@@ -164,14 +156,16 @@ class MCTS:
         return arrdict.arrdict(
             p=self.n[:, 0].float()/self.n[:, 0].sum(-1, keepdims=True),
             logits=self.log_pi[:, 0],
-            v=self.w[:, 0]/self.m[:, 0])
+            v=self.w[:, 0]/self.n[:, 0, None])
 
     def display(self, e=0):
         import networkx as nx
         import matplotlib.pyplot as plt
 
+        root_seat = self.seats[e, 0]
+
         edges, labels, edge_vals = [], {}, {}
-        qs = (self.w/self.m).where(self.m > 0, torch.zeros_like(self.w))[e].cpu()
+        qs = (self.w/self.n[..., None]).where(self.n > 0, torch.zeros_like(self.w))[e, :, root_seat].cpu()
         q_min, q_max = np.nanmin(qs), np.nanmax(qs)
         for i, p in enumerate(self.parents[e].cpu()):
             p = int(p)
