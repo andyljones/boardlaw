@@ -1,8 +1,3 @@
-from collections import namedtuple
-
-from networkx.algorithms.graphical import is_valid_degree_sequence_havel_hakimi
-from scalinglaws.testgames import RandomAgent
-from numpy.core.overrides import array_function_dispatch
 import torch
 import numpy as np
 from rebar import arrdict
@@ -38,8 +33,10 @@ class MCTS:
         self.c_puct = c_puct
 
     def sample(self, envs, nodes):
+        seat = self.seats[envs, nodes]
+
         pi = self.log_pi[envs, nodes].exp()
-        q = self.w[envs, nodes]/self.n[envs, nodes]
+        q = self.w[envs, nodes, :, seat]/self.n[envs, nodes]
         n = self.n[envs, nodes]
 
         N = n.sum(-1, keepdims=True)
@@ -100,7 +97,7 @@ class MCTS:
 
             v[self.terminal[self.envs[active], current[active]]] = 0. 
 
-            v[active] = v[active] + self.rewards[self.envs[active], current[active]]
+            v[active] += self.rewards[self.envs[active], current[active]]
 
             self.n[self.envs[active], parent, relation] += 1
             self.w[self.envs[active], parent, relation] += v
@@ -153,10 +150,11 @@ class MCTS:
         env.load_state_dict(original_state)
 
     def root(self):
+        seat = self.seats[:, 0]
         return arrdict.arrdict(
             p=self.n[:, 0].float()/self.n[:, 0].sum(-1, keepdims=True),
             logits=self.log_pi[:, 0],
-            v=self.w[:, 0]/self.n[:, 0, None])
+            v=self.w[self.envs, 0, :, seat]/self.n[:, 0])
 
     def display(self, e=0):
         import networkx as nx
@@ -165,7 +163,7 @@ class MCTS:
         root_seat = self.seats[e, 0]
 
         edges, labels, edge_vals = [], {}, {}
-        qs = (self.w/self.n[..., None]).where(self.n > 0, torch.zeros_like(self.w))[e, :, root_seat].cpu()
+        qs = (self.w[..., root_seat]/self.n[..., None]).where(self.n > 0, torch.zeros_like(self.w))[e, :, root_seat].cpu()
         q_min, q_max = np.nanmin(qs), np.nanmax(qs)
         for i, p in enumerate(self.parents[e].cpu()):
             p = int(p)
@@ -197,10 +195,24 @@ def mcts(env, inputs, agent, **kwargs):
 
     return mcts
 
-def test():
-    from . import testgames
-    env = testgames.InstantReturn()
-    agent = RandomAgent(env)
-    inputs = env.initialize()
+from . import testgames
 
-    m = mcts(env, inputs, agent, 7)
+def test_two_player():
+    env = testgames.FirstWinsSecondLoses()
+    agent = testgames.ProxyAgent(env)
+    inputs = env.reset()
+
+    m = mcts(env, inputs, agent, n_nodes=3)
+
+    expected = torch.tensor([[+1.]], device=env.device)
+    torch.testing.assert_allclose(m.root().v, expected)
+
+def test_depth():
+    env = testgames.AllOnes(length=4)
+    agent = testgames.ProxyAgent(env)
+    inputs = env.reset()
+
+    m = mcts(env, inputs, agent, n_nodes=15)
+
+    expected = torch.tensor([[0., 1/8.]], device=env.device)
+    torch.testing.assert_allclose(m.root().v, expected)

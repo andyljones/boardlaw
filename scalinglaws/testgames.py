@@ -12,14 +12,14 @@ from rebar import arrdict
 from . import heads
 from collections import namedtuple
 
-class RandomAgent:
+class ProxyAgent:
 
     def __init__(self, env):
-        self.n_seats = env.n_seats
+        self.n_seats = env.n_seats 
 
     def __call__(self, inputs, value=False):
         decisions = arrdict.arrdict(
-            logits=torch.log(inputs.valid.float()/inputs.valid.sum(-1, keepdims=True)))
+            logits=inputs.logits)
         if value:
             decisions['v'] = inputs.v
         return decisions
@@ -58,6 +58,9 @@ class RandomRolloutAgent:
         return arrdict.arrdict(
             logits=torch.log(inputs.valid.float()/inputs.valid.sum(-1, keepdims=True)),
             v=torch.stack([self.rollout(inputs) for _ in range(self.n_rollouts)]).mean(0))
+
+def uniform_logits(valid):
+    return torch.log(valid.float()/valid.sum(-1, keepdims=True))
     
 class InstantWin:
 
@@ -70,9 +73,11 @@ class InstantWin:
         self.action_space = (1,)
 
     def _observe(self):
+        valid = torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device),
         return arrdict.arrdict(
-            valid=torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device),
+            valid=valid,
             seats=torch.zeros((self.n_envs,), dtype=torch.long, device=self.device),
+            logits=uniform_logits(valid),
             v=torch.ones((self.n_envs, self.n_seats), dtype=torch.float, device=self.device))
 
     def reset(self):
@@ -104,9 +109,11 @@ class FirstWinsSecondLoses:
         self._seats = torch.zeros((self.n_envs,), dtype=torch.long, device=self.device)
 
     def _observe(self):
+        valid = torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device)
         return arrdict.arrdict(
-            valid=torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device),
+            valid=valid,
             seats=self._seats,
+            logits=uniform_logits(valid),
             v=torch.tensor([[+1., -1.]], device=self.device).expand(self.n_envs, 2)).clone()
 
     def reset(self):
@@ -132,23 +139,30 @@ class FirstWinsSecondLoses:
     def load_state_dict(self, sd):
         self._seats[:] = sd.seat
 
-class BinaryTree:
+class AllOnes:
 
-    def __init__(self, n_envs=1, length=2, device='cpu'):
+    def __init__(self, n_envs=1, length=4, device='cpu'):
         self.device = device 
         self.n_envs = n_envs
+        self.n_seats = 1
         self.length = length
 
-        self.action_space = namedtuple('Vector', ('dim',))((2,))
+        self.obs_space = (0,)
+        self.action_space = (2,)
         self.history = torch.full((n_envs, length), -1, dtype=torch.long, device=self.device)
         self.idx = torch.full((n_envs,), 0, dtype=torch.long, device=self.device)
 
     def _observe(self):
+        correct_so_far = (self.history == 1).sum(-1) == self.idx+1
+        correct_to_go = 2**((self.history == 1).sum(-1) - self.length).float()
+        v = correct_so_far.float()*correct_to_go
+
+        valid = torch.ones((self.n_envs, 2), dtype=torch.bool, device=self.device)
         return arrdict.arrdict(
-            seat=torch.zeros((self.n_envs,), dtype=torch.int, device=self.device),
-            mask=torch.ones((self.n_envs, 2), dtype=torch.bool, device=self.device),
-            terminal=(self.idx == self.length),
-            reward=(self.idx == self.length) & (self.history == 1).all(-1))
+            valid=valid,
+            seats=torch.zeros((self.n_envs,), dtype=torch.int, device=self.device),
+            logits=uniform_logits(valid),
+            v=v[..., None]).clone()
 
     def reset(self):
         return self._observe()
@@ -156,14 +170,18 @@ class BinaryTree:
     def step(self, actions):
         self.history[:, self.idx] = actions
 
+        inputs = self._observe()
+
         self.idx += 1 
 
-        inputs = self._observe().clone()
+        response = arrdict.arrdict(
+            terminal=(self.idx == self.length),
+            rewards=((self.idx == self.length) & (self.history == 1).all(-1))[:, None].float())
 
-        self.idx[inputs.terminal] = 0
-        self.history[inputs.terminal] = -1
+        self.idx[response.terminal] = 0
+        self.history[response.terminal] = -1
         
-        return inputs
+        return response, inputs
 
     def state_dict(self):
         return arrdict.arrdict(
