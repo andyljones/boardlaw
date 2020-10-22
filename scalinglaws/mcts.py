@@ -216,3 +216,13 @@ def test_depth():
 
     expected = torch.tensor([[0., 1/8.]], device=env.device)
     torch.testing.assert_allclose(m.root().v, expected)
+
+def test_full_game():
+    from . import hex
+    env = hex.Hex(boardsize=3)
+    agent = testgames.RandomRolloutAgent(env, 4)
+    inputs = env.reset()
+
+    m = mcts(env, inputs, agent, n_nodes=15)
+
+    m.root().v

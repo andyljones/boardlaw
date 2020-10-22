@@ -33,21 +33,21 @@ class RandomRolloutAgent:
     def rollout(self, inputs):
         env = self.env
         original = env.state_dict()
-        chooser = inputs.seat
+        chooser = inputs.seats
 
-        live = torch.ones_like(inputs.terminal)
-        reward = torch.zeros_like(inputs.terminal, dtype=torch.float)
+        live = torch.ones_like(inputs.valid[..., 0])
+        reward = torch.zeros_like(inputs.valid[..., 0], dtype=torch.float)
         while True:
             if not live.any():
                 break
 
-            actions = torch.distributions.Categorical(probs=inputs.mask.float()).sample()
-            same_seat = (inputs.seat == chooser).float()
+            actions = torch.distributions.Categorical(probs=inputs.valid.float()).sample()
+            same_seat = (inputs.seats == chooser).float()
 
-            inputs = env.step(actions)
+            responses, inputs = env.step(actions)
 
-            reward += inputs.reward * live.float() * same_seat
-            live = live & ~inputs.terminal
+            reward += responses.rewards * live.float() * same_seat
+            live = live & ~responses.terminal
 
         env.load_state_dict(original)
 

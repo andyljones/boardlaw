@@ -132,16 +132,13 @@ class Hex:
 
         return arrdict.arrdict(
             obs=obs,
-            mask=(obs == 0).all(-1).reshape(self.n_envs, -1),
-            seat=self._seat).clone()
+            valid=(obs == 0).all(-1).reshape(self.n_envs, -1),
+            seats=self._seat).clone()
 
     def reset(self):
         terminal = torch.ones(self.n_envs, dtype=bool, device=self.device)
         self._terminate(terminal)
-        return arrdict.arrdict(
-            terminal=torch.zeros_like(terminal), 
-            reward=torch.zeros_like(terminal).float(), 
-            **self._observe())
+        return self._observe()
 
     def step(self, actions):
         """Args:
@@ -154,10 +151,10 @@ class Hex:
         terminal = self._update_states(actions)
         self._seat = 1 - self._seat
         self._terminate(terminal)
-        return arrdict.arrdict(
+        responses = arrdict.arrdict(
             terminal=terminal, 
-            reward=terminal.float(), 
-            **self._observe())
+            rewards=terminal.float())
+        return responses, self._observe()
 
     def state_dict(self):
         return arrdict.arrdict(board=self._board, seat=self._seat).clone()
