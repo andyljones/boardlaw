@@ -149,11 +149,15 @@ class Hex:
 
         """
         terminal = self._update_states(actions)
+        rewards = torch.zeros((self.n_envs, self.n_seats), device=self.device)
+        rewards[self._envs, self._seat.long()] = terminal.float()
+        rewards[self._envs, 1-self._seat.long()] = -terminal.float()
+
         self._seat = 1 - self._seat
         self._terminate(terminal)
         responses = arrdict.arrdict(
             terminal=terminal, 
-            rewards=terminal.float())
+            rewards=rewards)
         return responses, self._observe()
 
     def state_dict(self):

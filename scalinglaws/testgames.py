@@ -31,22 +31,21 @@ class RandomRolloutAgent:
         self.n_rollouts = n_rollouts
 
     def rollout(self, inputs):
+        B, _ = inputs.valid.shape
         env = self.env
         original = env.state_dict()
-        chooser = inputs.seats
 
-        live = torch.ones_like(inputs.valid[..., 0])
-        reward = torch.zeros_like(inputs.valid[..., 0], dtype=torch.float)
+        live = torch.zeros((B,), dtype=torch.bool, device=env.device)
+        reward = torch.zeros((B, env.n_seats), dtype=torch.float, device=env.device)
         while True:
             if not live.any():
                 break
 
             actions = torch.distributions.Categorical(probs=inputs.valid.float()).sample()
-            same_seat = (inputs.seats == chooser).float()
 
             responses, inputs = env.step(actions)
 
-            reward += responses.rewards * live.float() * same_seat
+            reward += responses.rewards * live.unsqueeze(-1).float()
             live = live & ~responses.terminal
 
         env.load_state_dict(original)
@@ -55,9 +54,10 @@ class RandomRolloutAgent:
 
     def __call__(self, inputs, value=True):
         B, A = inputs.valid.shape
+        v = torch.stack([self.rollout(inputs) for _ in range(self.n_rollouts)]).mean(0)
         return arrdict.arrdict(
             logits=torch.log(inputs.valid.float()/inputs.valid.sum(-1, keepdims=True)),
-            v=torch.stack([self.rollout(inputs) for _ in range(self.n_rollouts)]).mean(0))
+            v=v)
 
 def uniform_logits(valid):
     return torch.log(valid.float()/valid.sum(-1, keepdims=True))
