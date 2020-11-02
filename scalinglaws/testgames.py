@@ -24,6 +24,18 @@ class ProxyAgent:
             decisions['v'] = inputs.v
         return decisions
 
+class RandomAgent:
+
+    def __init__(self, env):
+        self.n_seats = env.n_seats
+
+    def __call__(self, inputs):
+        B, _ = inputs.valid.shape
+        return arrdict.arrdict(
+            logits=torch.log(inputs.valid.float()/inputs.valid.sum(-1, keepdims=True)),
+            actions=torch.distributions.Categorical(probs=inputs.valid.float()).sample(),
+            v=torch.zeros((B, self.n_seats), device=inputs.valid.device))
+
 class RandomRolloutAgent:
 
     def __init__(self, env, n_rollouts):
@@ -53,11 +65,31 @@ class RandomRolloutAgent:
         return reward
 
     def __call__(self, inputs, value=True):
-        B, A = inputs.valid.shape
         v = torch.stack([self.rollout(inputs) for _ in range(self.n_rollouts)]).mean(0)
         return arrdict.arrdict(
             logits=torch.log(inputs.valid.float()/inputs.valid.sum(-1, keepdims=True)),
+            actions=torch.distributions.Categorical(probs=inputs.valid.float()).sample(),
             v=v)
+
+def combine(xs, masks):
+    catted = arrdict.cat(xs)
+    indices = torch.cat([m.nonzero().squeeze(1) for m in masks])
+    return catted[torch.argsort(indices)]
+
+def rollout(env, agents, n_steps):
+    inputs = env.reset()
+    trace = []
+    for _ in range(n_steps):
+        masks = [inputs.seats == a for a, agent in enumerate(agents)]
+        decisions = combine([agent(inputs[mask]) for agent, mask in zip(agents, masks)], masks)
+        responses, new_inputs = env.step(decisions.actions)
+        trace.append(arrdict.arrdict(
+            inputs=inputs,
+            decisions=decisions,
+            responses=responses))
+        inputs = new_inputs
+    return arrdict.stack(trace)
+
 
 def uniform_logits(valid):
     return torch.log(valid.float()/valid.sum(-1, keepdims=True))
