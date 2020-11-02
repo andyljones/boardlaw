@@ -35,7 +35,7 @@ class RandomRolloutAgent:
         env = self.env
         original = env.state_dict()
 
-        live = torch.zeros((B,), dtype=torch.bool, device=env.device)
+        live = torch.ones((B,), dtype=torch.bool, device=env.device)
         reward = torch.zeros((B, env.n_seats), dtype=torch.float, device=env.device)
         while True:
             if not live.any():
