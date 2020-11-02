@@ -38,9 +38,11 @@ class RandomAgent:
 
 class RandomRolloutAgent:
 
-    def __init__(self, env, n_rollouts):
+    def __init__(self, env, n_rollouts, temperature=1):
         self.env = env
         self.n_rollouts = n_rollouts
+        self.temperature = temperature
+        self.envs = torch.arange(env.n_envs, device=env.device)
 
     def rollout(self, inputs):
         B, _ = inputs.valid.shape
@@ -66,9 +68,13 @@ class RandomRolloutAgent:
 
     def __call__(self, inputs, value=True):
         v = torch.stack([self.rollout(inputs) for _ in range(self.n_rollouts)]).mean(0)
+
+        v_seat = v[self.envs.long(), :, inputs.seats.long()]
+        logits = self.temperature*v_seat*inputs.valid.float()
+        logits = logits - torch.logsumexp(logits, -1)
         return arrdict.arrdict(
-            logits=torch.log(inputs.valid.float()/inputs.valid.sum(-1, keepdims=True)),
-            actions=torch.distributions.Categorical(probs=inputs.valid.float()).sample(),
+            logits=logits,
+            actions=torch.distributions.Categorical(logits=logits).sample(),
             v=v)
 
 def combine(xs, seats):
