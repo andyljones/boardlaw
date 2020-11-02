@@ -71,17 +71,15 @@ class RandomRolloutAgent:
             actions=torch.distributions.Categorical(probs=inputs.valid.float()).sample(),
             v=v)
 
-def combine(xs, masks):
-    catted = arrdict.cat(xs)
-    indices = torch.cat([m.nonzero().squeeze(1) for m in masks])
-    return catted[torch.argsort(indices)]
+def combine(xs, seats):
+    envs = torch.arange(seats.size(0), device=seats.device)
+    return arrdict.stack(xs)[seats.long(), envs.long()]
 
 def rollout(env, agents, n_steps):
     inputs = env.reset()
     trace = []
     for _ in range(n_steps):
-        masks = [inputs.seats == a for a, agent in enumerate(agents)]
-        decisions = combine([agent(inputs[mask]) for agent, mask in zip(agents, masks)], masks)
+        decisions = combine([agent(inputs) for agent in agents], inputs.seats)
         responses, new_inputs = env.step(decisions.actions)
         trace.append(arrdict.arrdict(
             inputs=inputs,
