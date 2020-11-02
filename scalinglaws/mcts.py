@@ -151,10 +151,15 @@ class MCTS:
 
     def root(self):
         seat = self.seats[:, 0]
+        v_seat = self.w[self.envs, 0, :, seat]/self.n[:, 0]
+        v = torch.zeros_like(self.w[:, 0, 0])
+        v[self.envs, seat] = v_seat
+        v[self.envs, 1-seat] = -v_seat
+        #TODO: These aren't vs, they're qs
         return arrdict.arrdict(
             p=self.n[:, 0].float()/self.n[:, 0].sum(-1, keepdims=True),
             logits=self.log_pi[:, 0],
-            v=self.w[self.envs, 0, :, seat]/self.n[:, 0])
+            v=v)
 
     def display(self, e=0):
         import networkx as nx
@@ -194,6 +199,19 @@ def mcts(env, inputs, agent, **kwargs):
         mcts.simulate(env, inputs, agent)
 
     return mcts
+
+class MCTSAgent:
+
+    def __init__(self, env, agent, **kwargs):
+        self.env = env
+        self.agent = agent
+        self.kwargs = kwargs
+
+    def __call__(self, inputs, value=True):
+        r = mcts(self.env, inputs, self.agent, **self.kwargs).root()
+        breakpoint()
+        return arrdict.arrdict(
+            v=r.v,)
 
 from . import testgames
 
