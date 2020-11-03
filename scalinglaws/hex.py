@@ -35,6 +35,7 @@ class Hex:
         # As per OpenSpiel and convention, black plays first.
         self._seat = torch.full((n_envs,), 0, device=device, dtype=torch.int)
         self._envs = torch.arange(self.n_envs, device=device)
+        self._step = torch.zeros(self.n_envs, device=device)
 
         self.obs_space = heads.Tensor((self.boardsize, self.boardsize, 2))
         self.action_space = heads.Masked(self.boardsize*self.boardsize)
@@ -130,10 +131,14 @@ class Hex:
         white_view = black_view.transpose(1, 2).flip(3)
         obs = black_view.where(self._seat[:, None, None, None] == 0, white_view)
 
+        if self._step.max() > self._step.min():
+            breakpoint()
+
         return arrdict.arrdict(
             obs=obs,
             valid=(obs == 0).all(-1).reshape(self.n_envs, -1),
-            seats=self._seat).clone()
+            seats=self._seat,
+            step=self._step).clone()
 
     def reset(self):
         terminal = torch.ones(self.n_envs, dtype=bool, device=self.device)
@@ -154,6 +159,7 @@ class Hex:
         rewards[self._envs, 1-self._seat.long()] = -terminal.float()
 
         self._seat = 1 - self._seat
+        self._step += 1
         self._terminate(terminal)
         responses = arrdict.arrdict(
             terminal=terminal, 
@@ -161,11 +167,15 @@ class Hex:
         return responses, self._observe()
 
     def state_dict(self):
-        return arrdict.arrdict(board=self._board, seat=self._seat).clone()
+        return arrdict.arrdict(
+            board=self._board, 
+            step=self._step,
+            seat=self._seat).clone()
 
     def load_state_dict(self, sd):
-        self._board = sd.board
-        self._seat = sd.seat
+        self._board[:] = sd.board
+        self._seat[:] = sd.seat
+        self._step[:] = sd.step
 
     @classmethod
     def plot_state(cls, state, e=0):

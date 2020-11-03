@@ -111,8 +111,6 @@ class MCTS:
             current[active] = parent
 
     def initialize(self, env, inputs, agent):
-        original_state = env.state_dict()
-
         self.valid[:, self.sim] = inputs.valid
         self.seats[:, self.sim] = inputs.seats
         self.terminal[:, self.sim] = False
@@ -125,20 +123,18 @@ class MCTS:
 
         self.sim += 1
 
-        env.load_state_dict(original_state)
-
     def simulate(self, env, inputs, agent):
         if self.sim >= self.n_nodes:
             raise ValueError('Called simulate more times than were declared in the constructor')
 
         original_state = env.state_dict()
-
         trace, leaf, final_actions = self.descend()
         self.children[self.envs, leaf, final_actions] = self.sim
         self.parents[self.envs, self.sim] = leaf
         self.relation[self.envs, self.sim] = final_actions
 
         response, inputs = self.play(env, inputs, trace)
+
         self.valid[:, self.sim] = inputs.valid
         self.seats[:, self.sim] = inputs.seats
         self.terminal[:, self.sim] = response.terminal
@@ -150,10 +146,9 @@ class MCTS:
         self.n[:, self.sim] = 0 
 
         self.backup(self.sim, decisions.v)
+        env.load_state_dict(original_state)
 
         self.sim += 1
-
-        env.load_state_dict(original_state)
 
     def root(self):
         seat = self.seats[:, 0]

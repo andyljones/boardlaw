@@ -29,7 +29,7 @@ class RandomAgent:
     def __init__(self, env):
         self.n_seats = env.n_seats
 
-    def __call__(self, inputs):
+    def __call__(self, inputs, value=True):
         B, _ = inputs.valid.shape
         return arrdict.arrdict(
             logits=torch.log(inputs.valid.float()/inputs.valid.sum(-1, keepdims=True)),
