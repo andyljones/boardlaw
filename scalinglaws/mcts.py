@@ -75,17 +75,23 @@ class MCTS:
             terminal=torch.zeros_like(self.terminal[:, self.sim]),
             rewards=torch.zeros_like(self.rewards[:, self.sim]))
         #TODO: Handle termination, bit of wasted compute right now.
+        state = env.state_dict()
         for a in trace:
             active = a != -1
             dummies = torch.distributions.Categorical(probs=inputs.valid.float()).sample()
             dummies[active] = a[active]
             new_responses, new_inputs = env.step(dummies)
+            new_state = env.state_dict()
 
             #TODO: Generalise this
             for k in inputs:
                 inputs[k][active] = new_inputs[k][active]
             for k in responses:
                 responses[k][active] = new_responses[k][active]
+            for k in state:
+                state[k][active] = new_state[k][active]
+
+        env.load_state_dict(state)
 
         return responses, inputs
 
@@ -243,10 +249,9 @@ def test_depth():
 
 def test_full_game():
     from . import hex
-    env = hex.Hex(boardsize=3)
-    agent = testgames.RandomRolloutAgent(env, 4)
-    inputs = env.reset()
 
-    m = mcts(env, inputs, agent, n_nodes=15)
+    env = hex.Hex(16, boardsize=3, device='cuda')
+    agents = [testgames.RandomAgent(env), MCTSAgent(env, testgames.RandomRolloutAgent(env, 4), n_nodes=4)]
+    trace = testgames.rollout(env, agents, 32)
 
-    m.root().v
+    trace.responses.rewards.mean(0).mean(0)

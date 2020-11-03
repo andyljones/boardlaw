@@ -131,9 +131,6 @@ class Hex:
         white_view = black_view.transpose(1, 2).flip(3)
         obs = black_view.where(self._seat[:, None, None, None] == 0, white_view)
 
-        if self._step.max() > self._step.min():
-            breakpoint()
-
         return arrdict.arrdict(
             obs=obs,
             valid=(obs == 0).all(-1).reshape(self.n_envs, -1),
