@@ -9,6 +9,7 @@ class MCTS:
         self.n_envs = env.n_envs
         self.n_nodes = n_nodes
         self.n_seats = env.n_seats
+        assert n_nodes > 1, 'MCTS requires at least two nodes'
 
         self.envs = torch.arange(env.n_envs, device=self.device)
 
@@ -60,7 +61,8 @@ class MCTS:
             actions[interior] = self.sample(self.envs[interior], current[interior])
             trace.append(actions)
 
-            next = torch.where(interior, self.children[interior, current, actions], current)
+            next = current.clone()
+            next[interior] = self.children[interior, current[interior], actions[interior]]
 
         return torch.stack(trace), current
 
@@ -151,14 +153,20 @@ class MCTS:
 
     def root(self):
         seat = self.seats[:, 0]
-        v_seat = self.w[self.envs, 0, :, seat]/self.n[:, 0]
-        v = torch.zeros_like(self.w[:, 0, 0])
-        v[self.envs, seat] = v_seat
-        v[self.envs, 1-seat] = -v_seat
-        #TODO: These aren't vs, they're qs
+        q_seat = self.w[self.envs, 0, :, seat]/self.n[:, 0]
+        q = torch.zeros_like(self.w[:, 0])
+        q[self.envs, :, seat] = q_seat
+        q[self.envs, :, 1-seat] = -q_seat
+
+        p = self.n[:, 0].float()/self.n[:, 0].sum(-1, keepdims=True)
+        if torch.isnan(p).any():
+            breakpoint()
+
+        #TODO: Is this how I should be evaluating root value?
+        v = (q*p[..., None]).sum(1)
+
         return arrdict.arrdict(
-            p=self.n[:, 0].float()/self.n[:, 0].sum(-1, keepdims=True),
-            logits=self.log_pi[:, 0],
+            logits=torch.log(p),
             v=v)
 
     def display(self, e=0):
@@ -209,9 +217,10 @@ class MCTSAgent:
 
     def __call__(self, inputs, value=True):
         r = mcts(self.env, inputs, self.agent, **self.kwargs).root()
-        breakpoint()
         return arrdict.arrdict(
-            v=r.v,)
+            logits=r.logits,
+            v=r.v,
+            actions=torch.distributions.Categorical(logits=r.logits).sample())
 
 from . import testgames
 
