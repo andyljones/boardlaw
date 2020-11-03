@@ -50,6 +50,7 @@ class MCTS:
         trace = []
         current = torch.full_like(self.envs, -1)
         next = torch.full_like(self.envs, 0)
+        final_actions = torch.full_like(self.envs, -1)
         while True:
             interior = (next != -1)
             if not interior.any():
@@ -61,10 +62,12 @@ class MCTS:
             actions[interior] = self.sample(self.envs[interior], current[interior])
             trace.append(actions)
 
-            next = current.clone()
-            next[interior] = self.children[interior, current[interior], actions[interior]]
+            final_actions[interior] = actions[interior]
 
-        return torch.stack(trace), current
+            next = next.clone()
+            next[interior] = self.children[self.envs[interior], current[interior], actions[interior]]
+
+        return torch.stack(trace), current, final_actions
 
     def play(self, env, inputs, trace):
         inputs = inputs.clone()
@@ -75,7 +78,7 @@ class MCTS:
         for a in trace:
             active = a != -1
             dummies = torch.distributions.Categorical(probs=inputs.valid.float()).sample()
-            dummies[active] = a
+            dummies[active] = a[active]
             new_responses, new_inputs = env.step(dummies)
 
             #TODO: Generalise this
@@ -97,12 +100,13 @@ class MCTS:
             parent = self.parents[self.envs[active], current[active]]
             relation = self.relation[self.envs[active], current[active]]
 
-            v[self.terminal[self.envs[active], current[active]]] = 0. 
+            t = self.terminal[self.envs[active], current[active]]
+            v[self.envs[active][t]] = 0. 
 
             v[active] += self.rewards[self.envs[active], current[active]]
 
             self.n[self.envs[active], parent, relation] += 1
-            self.w[self.envs[active], parent, relation] += v
+            self.w[self.envs[active], parent, relation] += v[active]
 
             current[active] = parent
 
@@ -129,10 +133,10 @@ class MCTS:
 
         original_state = env.state_dict()
 
-        trace, leaf = self.descend()
-        self.children[self.envs, leaf, trace[-1]] = self.sim
+        trace, leaf, final_actions = self.descend()
+        self.children[self.envs, leaf, final_actions] = self.sim
         self.parents[self.envs, self.sim] = leaf
-        self.relation[self.envs, self.sim] = trace[-1]
+        self.relation[self.envs, self.sim] = final_actions
 
         response, inputs = self.play(env, inputs, trace)
         self.valid[:, self.sim] = inputs.valid
@@ -159,8 +163,6 @@ class MCTS:
         q[self.envs, :, 1-seat] = -q_seat
 
         p = self.n[:, 0].float()/self.n[:, 0].sum(-1, keepdims=True)
-        if torch.isnan(p).any():
-            breakpoint()
 
         #TODO: Is this how I should be evaluating root value?
         v = (q*p[..., None]).sum(1)
