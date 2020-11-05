@@ -83,13 +83,9 @@ class MCTS:
             new_responses, new_inputs = env.step(dummies)
             new_state = env.state_dict()
 
-            #TODO: Generalise this
-            for k in inputs:
-                inputs[k][active] = new_inputs[k][active]
-            for k in responses:
-                responses[k][active] = new_responses[k][active]
-            for k in state:
-                state[k][active] = new_state[k][active]
+            inputs[active] = new_inputs[active]
+            responses[active] = new_responses[active]
+            state[active] = new_state[active]
 
         env.load_state_dict(state)
 
@@ -157,16 +153,12 @@ class MCTS:
         self.sim += 1
 
     def root(self):
-        seat = self.seats[:, 0]
-        q_seat = self.w[self.envs, 0, :, seat]/self.n[:, 0]
-        q = torch.zeros_like(self.w[:, 0])
-        q[self.envs, :, seat] = q_seat
-        q[self.envs, :, 1-seat] = -q_seat
+        q = self.w[self.envs, 0, :]/self.n[:, 0]
 
         p = self.n[:, 0].float()/self.n[:, 0].sum(-1, keepdims=True)
 
         #TODO: Is this how I should be evaluating root value?
-        v = (q*p[..., None]).sum(1)
+        v = (q*p).sum(1)
 
         return arrdict.arrdict(
             logits=torch.log(p),
@@ -227,9 +219,10 @@ class MCTSAgent:
 
 from . import testgames
 
-def test_two_player():
-    env = testgames.FirstWinsSecondLoses()
-    agent = testgames.ProxyAgent(env)
+def test_trivial():
+    env = testgames.InstantWin(device='cpu')
+    agent = testgames.ProxyAgent()
+
     inputs = env.reset()
 
     m = mcts(env, inputs, agent, n_nodes=3)
@@ -237,9 +230,19 @@ def test_two_player():
     expected = torch.tensor([[+1.]], device=env.device)
     torch.testing.assert_allclose(m.root().v, expected)
 
+def test_two_player():
+    env = testgames.FirstWinsSecondLoses()
+    agent = testgames.ProxyAgent()
+    inputs = env.reset()
+
+    m = mcts(env, inputs, agent, n_nodes=3)
+
+    expected = torch.tensor([[+1., -1.]], device=env.device)
+    torch.testing.assert_allclose(m.root().v, expected)
+
 def test_depth():
     env = testgames.AllOnes(length=4)
-    agent = testgames.ProxyAgent(env)
+    agent = testgames.ProxyAgent()
     inputs = env.reset()
 
     m = mcts(env, inputs, agent, n_nodes=15)

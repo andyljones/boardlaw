@@ -14,9 +14,6 @@ from collections import namedtuple
 
 class ProxyAgent:
 
-    def __init__(self, env):
-        self.n_seats = env.n_seats 
-
     def __call__(self, inputs, value=False):
         decisions = arrdict.arrdict(
             logits=inputs.logits)
@@ -103,7 +100,7 @@ class InstantWin:
         self.action_space = (1,)
 
     def _observe(self):
-        valid = torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device),
+        valid = torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device)
         return arrdict.arrdict(
             valid=valid,
             seats=torch.zeros((self.n_envs,), dtype=torch.long, device=self.device),
@@ -126,10 +123,10 @@ class InstantWin:
     def load_state_dict(self, sd):
         pass
 
-    def __getitem__(self, x):
-        pass
+    def __getitem__(self, m):
+        return InstantWin(self.n_envs)
 
-    def __setitem__(sel, x):
+    def __setitem__(self, x):
         pass
 
 class FirstWinsSecondLoses:
