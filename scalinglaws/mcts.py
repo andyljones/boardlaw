@@ -153,12 +153,11 @@ class MCTS:
         self.sim += 1
 
     def root(self):
-        q = self.w[self.envs, 0, :]/self.n[:, 0]
-
+        q = self.w[:, 0, :]/self.n[:, 0, ..., None]
         p = self.n[:, 0].float()/self.n[:, 0].sum(-1, keepdims=True)
 
         #TODO: Is this how I should be evaluating root value?
-        v = (q*p).sum(1)
+        v = (q*p[..., None]).sum(1)
 
         return arrdict.arrdict(
             logits=torch.log(p),
@@ -171,7 +170,9 @@ class MCTS:
         root_seat = self.seats[e, 0]
 
         edges, labels, edge_vals = [], {}, {}
-        qs = (self.w[..., root_seat]/self.n[..., None]).where(self.n > 0, torch.zeros_like(self.w))[e, :, root_seat].cpu()
+        ws = self.w[e, ..., root_seat]
+        ns = self.n[e]
+        qs = (ws/ns).where(ns > 0, torch.zeros_like(ws)).cpu()
         q_min, q_max = np.nanmin(qs), np.nanmax(qs)
         for i, p in enumerate(self.parents[e].cpu()):
             p = int(p)
@@ -247,7 +248,7 @@ def test_depth():
 
     m = mcts(env, inputs, agent, n_nodes=15)
 
-    expected = torch.tensor([[0., 1/8.]], device=env.device)
+    expected = torch.tensor([[1/8.]], device=env.device)
     torch.testing.assert_allclose(m.root().v, expected)
 
 def test_full_game():
