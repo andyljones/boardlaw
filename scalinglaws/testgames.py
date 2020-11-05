@@ -126,6 +126,12 @@ class InstantWin:
     def load_state_dict(self, sd):
         pass
 
+    def __getitem__(self, x):
+        pass
+
+    def __setitem__(sel, x):
+        pass
+
 class FirstWinsSecondLoses:
 
     def __init__(self, n_envs=1, device='cuda'):

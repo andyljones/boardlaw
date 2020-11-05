@@ -25,7 +25,20 @@ def _arrdict_factory():
         def __getitem__(self, x):
             if isinstance(x, str):
                 return super().__getitem__(x)
-            return type(self)({k: v[x] for k, v in self.items()})
+            else:
+                return type(self)({k: v[x] for k, v in self.items()})
+
+        def __setitem__(self, x, y):
+            if isinstance(x, str):
+                super().__setitem__(x, y)
+            elif isinstance(y, type(self)):
+                for k in self:
+                    self[k][x] = y[k]
+            else:
+                raise ValueError('Setting items must be done with a string key or by passing an arrdict')
+
+        def __setattr__(self, key, value):
+            raise ValueError('Setting by attribute is not allowed')
 
         def __binary_op__(self, name, rhs):
             if isinstance(rhs, dict):
@@ -144,3 +157,21 @@ def clone(t):
     if hasattr(t, 'copy'):
         return t.copy()
     return t
+
+
+def test_arrdict_setitem():
+    d = arrdict(
+        a=np.array([0, 1]),
+        b=arrdict(
+            c=np.array([10, 11])))
+    
+    d[0] = d[1]
+
+    np.testing.assert_allclose(d.a, np.array([1, 1]))
+    np.testing.assert_allclose(d.b.c, np.array([11, 11]))
+
+def test_arrdict_setattr_error():
+    d = arrdict()
+
+    with np.testing.assert_raises(ValueError):
+        d.a = 'b'
