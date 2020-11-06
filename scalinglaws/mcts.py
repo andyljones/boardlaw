@@ -266,11 +266,27 @@ def test_multienv():
     expected = torch.tensor([[1/8.], [1/8.]], device=env.device)
     torch.testing.assert_allclose(m.root().v, expected)
 
-def test_full_game():
+def full_game_mcts(s, n_nodes, n_rollouts):
     from . import hex
+    env, inputs = hex.from_string(s, device='cpu')
+    agent = testgames.RandomRolloutAgent(env, n_rollouts=n_rollouts)
+    return mcts(env, inputs, agent, n_nodes=n_nodes)
 
-    env = hex.Hex(1, boardsize=3, device='cpu')
-    agent = testgames.RandomRolloutAgent(env, 4)
-    inputs = env.reset()
+def test_full_game():
+    black_wins = """
+    bwb
+    wbw
+    ...
+    """
+    m = full_game_mcts(black_wins, 17, 1)
+    expected = torch.tensor([[+1., -1.]], device=m.device)
+    torch.testing.assert_allclose(m.root().v, expected)
 
-    m = mcts(env, inputs, agent, n_nodes=4)
+    white_wins = """
+    wb.
+    bw.
+    wbb
+    """
+    m = full_game_mcts(white_wins, 4, 1)
+    expected = torch.tensor([[-1., +1.]], device=m.device)
+    torch.testing.assert_allclose(m.root().v, expected)

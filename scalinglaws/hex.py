@@ -245,7 +245,7 @@ def board_actions(s):
     assert len(bs) - len(ws) in {0, 1}
 
     actions = []
-    for i in range(len(bs)):
+    for i in range(len(ws)):
         actions.append([bs[i, 0], bs[i, 1]])
         actions.append([ws[i, 1], ws[i, 0]])
 
@@ -254,20 +254,20 @@ def board_actions(s):
 
     return torch.tensor(actions)
 
-def from_string(s):
+def from_string(s, **kwargs):
     """Example:
     
-    s = \"""
+    s = '''
     bwb
     wbw
     ...
-    \"""
+    '''
     
     """
-    env = hex.Hex(boardsize=board_size(s), device='cpu')
-    for a in board_actions(s)[:6]:
-        env.step(a[None])
-    return env
+    env = Hex(boardsize=board_size(s), **kwargs)
+    for a in board_actions(s):
+        response, inputs = env.step(a[None])
+    return env, inputs
 
 
 ## TESTS ##
