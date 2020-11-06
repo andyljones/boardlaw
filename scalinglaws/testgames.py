@@ -83,7 +83,7 @@ def rollout(env, agents, n_steps):
             decisions=decisions,
             responses=responses))
         inputs = new_inputs
-    return arrdict.stack(trace)
+    return arrdict.stack(trace), inputs
 
 
 def uniform_logits(valid):

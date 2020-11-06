@@ -214,7 +214,8 @@ class MCTSAgent:
         self.kwargs = kwargs
 
     def __call__(self, inputs, value=True):
-        r = mcts(self.env, inputs, self.agent, **self.kwargs).root()
+        m = mcts(self.env, inputs, self.agent, **self.kwargs)
+        r = m.root()
         return arrdict.arrdict(
             logits=r.logits,
             v=r.v,
@@ -266,13 +267,13 @@ def test_multienv():
     expected = torch.tensor([[1/8.], [1/8.]], device=env.device)
     torch.testing.assert_allclose(m.root().v, expected)
 
-def full_game_mcts(s, n_nodes, n_rollouts):
+def full_game_mcts(s, n_nodes, n_rollouts, **kwargs):
     from . import hex
     env, inputs = hex.from_string(s, device='cpu')
     agent = testgames.RandomRolloutAgent(env, n_rollouts=n_rollouts)
-    return mcts(env, inputs, agent, n_nodes=n_nodes)
+    return mcts(env, inputs, agent, n_nodes=n_nodes, **kwargs)
 
-def test_full_game():
+def test_planted_game():
     black_wins = """
     bwb
     wbw
@@ -290,3 +291,21 @@ def test_full_game():
     m = full_game_mcts(white_wins, 4, 1)
     expected = torch.tensor([[-1., +1.]], device=m.device)
     torch.testing.assert_allclose(m.root().v, expected)
+
+    # Hard to validate this
+    competitive = """
+    wb.
+    bw.
+    wb.
+    """
+    m = full_game_mcts(competitive, 31, 1, c_puct=1.)
+    expected = torch.tensor([[-1., +1.]], device=m.device)
+    torch.testing.assert_allclose(m.root().v, expected)
+    m.root().logits
+
+def test_full_game():
+    env = hex.Hex(boardsize=3, device='cpu')
+    black = MCTSAgent(env, testgames.RandomRolloutAgent(env, 4), n_nodes=16, c_puct=.5)
+    white = testgames.RandomAgent(env)
+    trace, inputs = testgames.rollout(env, [black, white], 128)
+    trace.responses.rewards.sum(0)/trace.responses.rewards.abs().sum(0)
