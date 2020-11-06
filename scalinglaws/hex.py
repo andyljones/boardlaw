@@ -229,6 +229,49 @@ class Hex:
     def display(self, e=0):
         return self.plot_state(arrdict.numpyify(self.state_dict()), e=e)
 
+def board_size(s):
+    return len(s.strip().splitlines())
+
+def board_actions(s):
+    size = board_size(s)
+    board = (np.frombuffer((s.strip() + '\n').encode(), dtype='S1')
+                 .reshape(size, size+1)
+                 [:, :-1])
+    indices = np.indices(board.shape)
+
+    bs = indices[:, board == b'b'].T
+    ws = indices[:, board == b'w'].T
+
+    assert len(bs) - len(ws) in {0, 1}
+
+    actions = []
+    for i in range(len(bs)):
+        actions.append([bs[i, 0], bs[i, 1]])
+        actions.append([ws[i, 1], ws[i, 0]])
+
+    if len(ws) < len(bs):
+        actions.append([bs[-1, 0], bs[-1, 1]])
+
+    return torch.tensor(actions)
+
+def from_string(s):
+    """Example:
+    
+    s = \"""
+    bwb
+    wbw
+    ...
+    \"""
+    
+    """
+    env = hex.Hex(boardsize=board_size(s), device='cpu')
+    for a in board_actions(s)[:6]:
+        env.step(a[None])
+    return env
+
+
+## TESTS ##
+
 def basic_test():
     h = Hex(1, 3, device='cpu')
 

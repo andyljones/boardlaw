@@ -153,8 +153,10 @@ class MCTS:
         self.sim += 1
 
     def root(self):
-        q = self.w[:, 0, :]/self.n[:, 0, ..., None]
         p = self.n[:, 0].float()/self.n[:, 0].sum(-1, keepdims=True)
+
+        q = self.w[:, 0, :]/self.n[:, 0, ..., None]
+        q[p == 0] = 0.
 
         #TODO: Is this how I should be evaluating root value?
         v = (q*p[..., None]).sum(1)
@@ -232,7 +234,7 @@ def test_trivial():
     torch.testing.assert_allclose(m.root().v, expected)
 
 def test_two_player():
-    env = testgames.FirstWinsSecondLoses()
+    env = testgames.FirstWinsSecondLoses(device='cpu')
     agent = testgames.ProxyAgent()
     inputs = env.reset()
 
@@ -242,7 +244,7 @@ def test_two_player():
     torch.testing.assert_allclose(m.root().v, expected)
 
 def test_depth():
-    env = testgames.AllOnes(length=4)
+    env = testgames.AllOnes(length=4, device='cpu')
     agent = testgames.ProxyAgent()
     inputs = env.reset()
 
@@ -251,11 +253,24 @@ def test_depth():
     expected = torch.tensor([[1/8.]], device=env.device)
     torch.testing.assert_allclose(m.root().v, expected)
 
+def test_multienv():
+    # Need to use a fairly complex env here to make sure we've not got 
+    # any singleton dims hanging around internally. They can really ruin
+    # a tester's day. 
+    env = testgames.AllOnes(n_envs=2, length=3)
+    agent = testgames.ProxyAgent()
+    inputs = env.reset()
+
+    m = mcts(env, inputs, agent, n_nodes=15)
+
+    expected = torch.tensor([[1/8.], [1/8.]], device=env.device)
+    torch.testing.assert_allclose(m.root().v, expected)
+
 def test_full_game():
     from . import hex
 
-    env = hex.Hex(16, boardsize=3, device='cuda')
-    agents = [testgames.RandomAgent(env), MCTSAgent(env, testgames.RandomRolloutAgent(env, 4), n_nodes=4)]
-    trace = testgames.rollout(env, agents, 32)
+    env = hex.Hex(1, boardsize=3, device='cpu')
+    agent = testgames.RandomRolloutAgent(env, 4)
+    inputs = env.reset()
 
-    trace.responses.rewards.mean(0).mean(0)
+    m = mcts(env, inputs, agent, n_nodes=4)
