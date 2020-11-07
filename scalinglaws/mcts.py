@@ -70,26 +70,27 @@ class MCTS:
         return torch.stack(trace), current, final_actions
 
     def play(self, env, inputs, trace):
-        inputs = inputs.clone()
-        responses = arrdict.arrdict(
+        #TODO: There's a bunch of weirdness here around envs that terminate early. Would
+        # be a lot better to implement maskable envs.
+        final_inputs = inputs.clone()
+        final_responses = arrdict.arrdict(
             terminal=torch.zeros_like(self.terminal[:, self.sim]),
             rewards=torch.zeros_like(self.rewards[:, self.sim]))
-        #TODO: Handle termination, bit of wasted compute right now.
-        state = env.state_dict()
+        final_state = env.state_dict()
         for a in trace:
             active = a != -1
             dummies = torch.distributions.Categorical(probs=inputs.valid.float()).sample()
             dummies[active] = a[active]
-            new_responses, new_inputs = env.step(dummies)
-            new_state = env.state_dict()
+            responses, inputs = env.step(dummies)
+            state = env.state_dict()
 
-            inputs[active] = new_inputs[active]
-            responses[active] = new_responses[active]
-            state[active] = new_state[active]
+            final_inputs[active] = inputs[active]
+            final_responses[active] = responses[active]
+            final_state[active] = state[active]
 
-        env.load_state_dict(state)
+        env.load_state_dict(final_state)
 
-        return responses, inputs
+        return final_responses, final_inputs
 
     def backup(self, current, v):
         v = v.clone()
@@ -159,6 +160,7 @@ class MCTS:
         q[p == 0] = 0.
 
         #TODO: Is this how I should be evaluating root value?
+        # Not actually used in AlphaZero at all, but it's nice to have around for validation
         v = (q*p[..., None]).sum(1)
 
         return arrdict.arrdict(
