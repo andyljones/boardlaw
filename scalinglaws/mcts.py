@@ -311,3 +311,28 @@ def test_full_game():
     white = validation.RandomAgent(env)
     trace, inputs = validation.rollout(env, [black, white], 128)
     trace.responses.rewards.sum(0)/trace.responses.rewards.abs().sum(0)
+
+def benchmark():
+    import pandas as pd
+    import aljpy
+    import matplotlib.pyplot as plt
+
+    results = []
+    for n in np.logspace(0, 14, 15, base=2, dtype=int):
+        torch.cuda.synchronize()
+        with aljpy.timer() as timer:
+            env = hex.Hex(n_envs=n, boardsize=3, device='cuda')
+            black = MCTSAgent(env, validation.RandomAgent(env), n_nodes=16, c_puct=.5)
+            white = validation.RandomAgent(env)
+            trace, inputs = validation.rollout(env, [black, white], 16)
+            torch.cuda.synchronize()
+        results.append({'n_envs': n, 'runtime': timer.time(), 'samples': trace.inputs.seats.nelement()})
+        print(results[-1])
+    df = pd.DataFrame(results)
+        
+    with plt.style.context('seaborn-poster'):
+        ax = df.plot.scatter('n_envs', 'runtime', zorder=2)
+        ax.set_xscale('log', base=2)
+        ax.set_xlim(1, 2**14)
+        ax.set_title('scaling of runtime w/ env count')
+        ax.grid(True, zorder=1, alpha=.25)
