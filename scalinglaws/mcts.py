@@ -221,11 +221,11 @@ class MCTSAgent:
             v=r.v,
             actions=torch.distributions.Categorical(logits=r.logits).sample())
 
-from . import testgames
+from . import validation 
 
 def test_trivial():
-    env = testgames.InstantWin(device='cpu')
-    agent = testgames.ProxyAgent()
+    env = validation.InstantWin(device='cpu')
+    agent = validation.ProxyAgent()
 
     inputs = env.reset()
 
@@ -235,8 +235,8 @@ def test_trivial():
     torch.testing.assert_allclose(m.root().v, expected)
 
 def test_two_player():
-    env = testgames.FirstWinsSecondLoses(device='cpu')
-    agent = testgames.ProxyAgent()
+    env = validation.FirstWinsSecondLoses(device='cpu')
+    agent = validation.ProxyAgent()
     inputs = env.reset()
 
     m = mcts(env, inputs, agent, n_nodes=3)
@@ -245,8 +245,8 @@ def test_two_player():
     torch.testing.assert_allclose(m.root().v, expected)
 
 def test_depth():
-    env = testgames.AllOnes(length=4, device='cpu')
-    agent = testgames.ProxyAgent()
+    env = validation.AllOnes(length=4, device='cpu')
+    agent = validation.ProxyAgent()
     inputs = env.reset()
 
     m = mcts(env, inputs, agent, n_nodes=15)
@@ -258,8 +258,8 @@ def test_multienv():
     # Need to use a fairly complex env here to make sure we've not got 
     # any singleton dims hanging around internally. They can really ruin
     # a tester's day. 
-    env = testgames.AllOnes(n_envs=2, length=3)
-    agent = testgames.ProxyAgent()
+    env = validation.AllOnes(n_envs=2, length=3)
+    agent = validation.ProxyAgent()
     inputs = env.reset()
 
     m = mcts(env, inputs, agent, n_nodes=15)
@@ -270,7 +270,7 @@ def test_multienv():
 def full_game_mcts(s, n_nodes, n_rollouts, **kwargs):
     from . import hex
     env, inputs = hex.from_string(s, device='cpu')
-    agent = testgames.RandomRolloutAgent(env, n_rollouts=n_rollouts)
+    agent = validation.RandomRolloutAgent(env, n_rollouts=n_rollouts)
     return mcts(env, inputs, agent, n_nodes=n_nodes, **kwargs)
 
 def test_planted_game():
@@ -292,7 +292,7 @@ def test_planted_game():
     expected = torch.tensor([[-1., +1.]], device=m.device)
     torch.testing.assert_allclose(m.root().v, expected)
 
-    # Hard to validate this
+    # Hard to validate the logits
     competitive = """
     wb.
     bw.
@@ -305,7 +305,7 @@ def test_planted_game():
 
 def test_full_game():
     env = hex.Hex(boardsize=3, device='cpu')
-    black = MCTSAgent(env, testgames.RandomRolloutAgent(env, 4), n_nodes=16, c_puct=.5)
-    white = testgames.RandomAgent(env)
-    trace, inputs = testgames.rollout(env, [black, white], 128)
+    black = MCTSAgent(env, validation.RandomRolloutAgent(env, 4), n_nodes=16, c_puct=.5)
+    white = validation.RandomAgent(env)
+    trace, inputs = validation.rollout(env, [black, white], 128)
     trace.responses.rewards.sum(0)/trace.responses.rewards.abs().sum(0)
