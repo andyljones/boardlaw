@@ -28,7 +28,7 @@ class EmptyIntake(nn.Module):
 class VectorIntake(nn.Linear):
 
     def __init__(self, space, width):
-        C, = space
+        C, = space.dim
         super().__init__(C, width)
                                
     def forward(self, obs, **kwargs):
@@ -41,11 +41,11 @@ class VectorIntake(nn.Linear):
 class TensorIntake(nn.Linear):
 
     def __init__(self, space, width):
-        self._ndim = len(space)
-        super().__init__(int(np.prod(space)), width)
+        self._ndim = len(space.dim)
+        super().__init__(int(np.prod(space.dim)), width)
 
     def forward(self, obs, **kwargs):
-        if obs.ndim == self._ndim:
+        if obs.ndim == self._ndim+1:
             return self.forward(obs[None], **kwargs).squeeze(0)
 
         T, B = obs.shape[:2]
@@ -99,9 +99,9 @@ class MaskedOutput(nn.Module):
         self.core = nn.Linear(width, int(np.prod(shape)))
         self.shape = shape
     
-    def forward(self, x, mask, **kwargs):
+    def forward(self, x, valid, **kwargs):
         y = self.core(x).reshape(*x.shape[:-1], *self.shape)
-        y = y.where(mask, torch.full_like(y, -1000))
+        y = y.where(valid, torch.full_like(y, -1000))
         return F.log_softmax(y, -1)
 
     def sample(self, logits, test=False):

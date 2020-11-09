@@ -9,7 +9,7 @@ What to test?
 """
 import torch
 from rebar import arrdict
-from . import heads
+from . import heads, tools
 from collections import namedtuple
 
 class ProxyAgent:
@@ -68,7 +68,7 @@ class RandomRolloutAgent:
             actions=torch.distributions.Categorical(probs=inputs.valid.float()).sample(),
             v=v)
 
-def combine(xs, seats):
+def seat_select(xs, seats):
     envs = torch.arange(seats.size(0), device=seats.device)
     return arrdict.stack(xs)[seats.long(), envs.long()]
 
@@ -76,7 +76,7 @@ def rollout(env, agents, n_steps):
     inputs = env.reset()
     trace = []
     for _ in range(n_steps):
-        decisions = combine([agent(inputs) for agent in agents], inputs.seats)
+        decisions = seat_select([agent(inputs) for agent in agents], inputs.seats)
         responses, new_inputs = env.step(decisions.actions)
         trace.append(arrdict.arrdict(
             inputs=inputs,
