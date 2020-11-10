@@ -9,7 +9,7 @@ What to test?
 """
 import torch
 from rebar import arrdict
-from . import heads, tools
+from . import heads
 from collections import namedtuple
 
 class ProxyAgent:
