@@ -1,3 +1,4 @@
+import torch
 import os, string, sys, subprocess
 from select import select
 from logging import getLogger
@@ -7,7 +8,7 @@ log = getLogger(__name__)
 
 class MoHex:
 
-    def __init__(self, board_size=5, timelimit=.1, ):
+    def __init__(self, boardsize=5, timelimit=.1):
         command = 'mohex --use-logfile=0'
         self._p = subprocess.Popen(shlex.split(command),
                              stdin=subprocess.PIPE, 
@@ -16,18 +17,21 @@ class MoHex:
                              text=True)
         self._logs = []
         self._log(f"# {command}\n")
-        self.send(f'boardsize {board_size}')
+        self.send(f'boardsize {boardsize}')
         self.send(f'param_mohex max_time {timelimit}')
 
     def play(self, color, pos):
         row, col = pos
         col = chr(ord('a') + col)
-        self.send(f'play {color} {col}{row}')
+        self.send(f'play {color} {col}{row+1}')
 
     def solve(self, color):
         col, row = self.send(f'genmove {color}').strip()
         col = ord(col) - ord('a')
-        return int(row), col
+        return int(row)-1, col
+
+    def clear(self):
+        self.send('clear_board')
 
     def display(self):
         s = self.send('showboard')
@@ -74,3 +78,49 @@ class MoHex:
         for s in list:
             self._log(os.read(s.fileno(), 8192))
 
+class MoHexAgent:
+
+    def __init__(self, env):
+        self._proxies = [MoHex(env.boardsize) for _ in range(env.n_envs)]
+        self._prev_obs = torch.zeros((env.n_envs, env.boardsize, env.boardsize, 2), device=env.device)
+
+    def __call__(self, inputs):
+        seated_obs = inputs.obs
+        oppo_obs = inputs.obs.transpose(1, 2).flip(3)
+        obs = seated_obs.where(inputs.seats[:, None, None, None] == 0, oppo_obs)
+
+        reset = ((obs == 0) & (self._prev_obs != 0)).any(-1).any(-1).any(-1)
+        for env in reset.nonzero():
+            self._proxies[env].clear()
+        self._prev_obs[reset] = 0.
+
+        new_moves = (obs != self._prev_obs).nonzero()
+        for (env, row, col, seat) in new_moves:
+            color = 'bw'[seat]
+            self._proxies[env].play(color, (row, col))
+
+        self._prev_obs = obs
+
+        actions = []
+        for env, seat in enumerate(inputs.seats):
+            color = 'bw'[seat]
+            row, col = self._proxies[env].solve(color)
+            actions.append((row, col) if seat == 0 else (col, row))
+            obs[env, row, col, seat] = 1.
+        
+        return torch.tensor(actions, dtype=torch.long, device=inputs.seats.device)
+
+    def display(self, e=0):
+        return self._proxies[e].display()
+
+def test():
+    env = hex.Hex(boardsize=3)
+    black = MoHexAgent(env)
+    white = MoHexAgent(env)
+
+    inputs = env.reset()
+    for _ in range(5):
+        actions = black(inputs)
+        responses, inputs = env.step(actions)
+        actions = white(inputs)
+        responses, inputs = env.step(actions)

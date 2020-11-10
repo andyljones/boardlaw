@@ -80,7 +80,7 @@ def run():
         while True:
             buffer = []
             for _ in range(32):
-                decisions = agent(inputs, value=True)
+                decisions = agent(inputs, responses, value=True)
                 responses, new_inputs = env.step(decisions.actions)
                 buffer.append(arrdict.arrdict(
                     inputs=inputs,
