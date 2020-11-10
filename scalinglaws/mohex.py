@@ -8,7 +8,7 @@ log = getLogger(__name__)
 
 class MoHex:
 
-    def __init__(self, boardsize=5, timelimit=.1):
+    def __init__(self, boardsize=5, timelimit=1):
         command = 'mohex --use-logfile=0'
         self._p = subprocess.Popen(shlex.split(command),
                              stdin=subprocess.PIPE, 
@@ -18,24 +18,9 @@ class MoHex:
         self._logs = []
         self._log(f"# {command}\n")
         self.send(f'boardsize {boardsize}')
-        self.send(f'param_mohex max_time {timelimit}')
-
-    def play(self, color, pos):
-        row, col = pos
-        col = chr(ord('a') + col)
-        self.send(f'play {color} {col}{row+1}')
-
-    def solve(self, color):
-        col, row = self.send(f'genmove {color}').strip()
-        col = ord(col) - ord('a')
-        return int(row)-1, col
-
-    def clear(self):
-        self.send('clear_board')
-
-    def display(self):
-        s = self.send('showboard')
-        print('\n'.join(s.splitlines()[3:-1]))
+        # self.send(f'param_mohex use_time_management 1')
+        # self.send(f'param_game game_time {timelimit/2}')
+        self.send('param_mohex max_games 1')
 
     def send(self, cmd):
         try:
@@ -77,6 +62,25 @@ class MoHex:
         list = select([self._p.stderr], [], [], 0)[0]
         for s in list:
             self._log(os.read(s.fileno(), 8192))
+
+    def play(self, color, pos):
+        row, col = pos
+        col = chr(ord('a') + col)
+        self.send(f'play {color} {col}{row+1}')
+
+    def solve(self, color):
+        resp = self.send(f'genmove {color}').strip()
+        col, row = resp[:1], resp[1:]
+        col = ord(col) - ord('a')
+        return int(row)-1, col
+
+    def clear(self):
+        self.send('clear_board')
+
+    def display(self):
+        s = self.send('showboard')
+        print('\n'.join(s.splitlines()[3:-1]))
+
 
 class MoHexAgent:
 
