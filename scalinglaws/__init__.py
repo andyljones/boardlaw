@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from rebar import paths, widgets, logging, stats, arrdict
 from . import hex, mcts, networks, learning
@@ -24,62 +25,41 @@ def as_chunk(buffer):
         stats.mean('traj-reward/negative', r.rewards.clamp(None, 0).sum(), n_trajs)
     return chunk
 
-def optimize(network, opt, batch, entropy=1e-2, gamma=.99, clip=.2):
+def optimize(network, opt, batch):
     #TODO: Env should emit batch data delayed so that it can fix the terminal/reward itself.
     i, d0, r = batch.inputs, batch.decisions, batch.responses
     d = network(i, value=True)
 
-    target_logits = d0.logits[batch.inputs.valid]
-    actual_logits = d.logits[batch.inputs.valid]
-    F.nll_loss()
+    target_logits = d0.logits
+    actual_probs = d.logits.exp()
+    policy_terms = -(actual_probs*target_logits).where(batch.inputs.valid, torch.zeros_like(actual_probs))
+    policy_loss = policy_terms.sum(axis=1).mean()
 
-
-    v_target = learning.reward_to_go(r.reward, d0.value, i.reset, i.terminal, gamma=gamma)
-    v_clipped = d0.value + torch.clamp(d.value - d0.value, -10, +10)
-    v_loss = .5*torch.max((d.value - v_target)**2, (v_clipped - v_target)**2).mean()
-
-    adv = learning.generalized_advantages(d.value, r.reward, d.value, i.reset, i.terminal, gamma=gamma)
-    normed_adv = (adv - adv.mean())/(1e-3 + adv.std())
-    free_adv = ratio*normed_adv
-    clip_adv = torch.clamp(ratio, 1-clip, 1+clip)*normed_adv
-    p_loss = -torch.min(free_adv, clip_adv).mean()
-
-    h_loss = (logits.exp()*logits).sum(-1).mean()
-    loss = v_loss + p_loss + entropy*h_loss
+    target_value = learning.reward_to_go(r.rewards, d0.v, r.terminal, r.terminal, gamma=1)
+    value_loss = (target_value - d.v).square().mean()
+    
+    loss = policy_loss + value_loss
     
     opt.zero_grad()
     loss.backward()
-    torch.nn.utils.clip_grad_norm_(agent.policy.parameters(), 100.)
-    torch.nn.utils.clip_grad_norm_(agent.value.parameters(), 100.)
+    torch.nn.utils.clip_grad_norm_(network.policy.parameters(), 100.)
+    torch.nn.utils.clip_grad_norm_(network.value.parameters(), 100.)
 
     opt.step()
 
-    kl_div = -(new_logits - old_logits).mean().detach()
-
     with stats.defer():
-        stats.mean('loss/value', v_loss)
-        stats.mean('loss/policy', p_loss)
-        stats.mean('loss/entropy', h_loss)
-        stats.mean('resid-var/v', (v_target - d.value).pow(2).mean(), v_target.pow(2).mean())
-        stats.mean('rel-entropy', -(logits.exp()*logits).sum(-1).mean()/np.log(logits.shape[-1]))
-        stats.mean('kl-div', kl_div) 
+        stats.mean('loss/value', value_loss)
+        stats.mean('loss/policy', policy_loss)
+        stats.mean('resid-var/v', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
+        stats.mean('rel-entropy', -(d.logits.exp()*d.logits).sum(-1).mean()/np.log(d.logits.size(-1)))
 
-        stats.mean('v-target/mean', v_target.mean())
-        stats.mean('v-target/std', v_target.std())
-
-        stats.mean('adv/z-mean', adv.mean())
-        stats.mean('adv/z-std', adv.std())
-        stats.max('adv/z-max', adv.abs().max())
+        stats.mean('v-target/mean', target_value.mean())
+        stats.mean('v-target/std', target_value.std())
 
         stats.rate('sample-rate/learner', i.reset.nelement())
         stats.rate('step-rate/learner', 1)
         stats.cumsum('count/learner-steps', 1)
         # stats.rel_gradient_norm('rel-norm-grad', agent)
-
-        stats.mean('param/gamma', gamma)
-        stats.mean('param/entropy', entropy)
-
-    return kl_div
 
 def run():
     env = hex.Hex(n_envs=8, boardsize=5, device='cpu')
