@@ -29,7 +29,10 @@ def _arrdict_factory():
                 return type(self)({k: v[x] for k, v in self.items()})
 
         def __setitem__(self, x, y):
-            if isinstance(x, str):
+            # Valid keys to stick in an arrdict are strings and tuples of strings.
+            # Anything else could plausibly be a tensor index.
+            if (isinstance(x, str) or 
+                    (isinstance(x, tuple) and all(isinstance(xx, str) for xx in x))):
                 super().__setitem__(x, y)
             elif isinstance(y, type(self)):
                 for k in self:

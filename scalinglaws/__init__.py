@@ -1,8 +1,11 @@
 import numpy as np
 import torch
-from rebar import paths, widgets, logging, stats, arrdict
+from rebar import paths, widgets, logging, stats, arrdict, storing
 from . import hex, mcts, networks, learning
 from torch.nn import functional as F
+from logging import getLogger
+
+log = getLogger(__name__)
 
 def as_chunk(buffer):
     chunk = arrdict.stack(buffer)
@@ -35,7 +38,8 @@ def optimize(network, opt, batch):
     policy_terms = -(actual_probs*target_logits).where(batch.inputs.valid, torch.zeros_like(actual_probs))
     policy_loss = policy_terms.sum(axis=1).mean()
 
-    target_value = learning.reward_to_go(r.rewards, d0.v, r.terminal, r.terminal, gamma=1)
+    terminal = torch.stack([r.terminal, r.terminal], -1)
+    target_value = learning.reward_to_go(r.rewards, d0.v, terminal, terminal, gamma=1)
     value_loss = (target_value - d.v).square().mean()
     
     loss = policy_loss + value_loss
@@ -56,14 +60,14 @@ def optimize(network, opt, batch):
         stats.mean('v-target/mean', target_value.mean())
         stats.mean('v-target/std', target_value.std())
 
-        stats.rate('sample-rate/learner', i.reset.nelement())
+        stats.rate('sample-rate/learner', r.terminal.nelement())
         stats.rate('step-rate/learner', 1)
         stats.cumsum('count/learner-steps', 1)
         # stats.rel_gradient_norm('rel-norm-grad', agent)
 
 def run():
-    env = hex.Hex(n_envs=8, boardsize=5, device='cpu')
-    network = networks.Network(env.obs_space, env.action_space, width=16)
+    env = hex.Hex(n_envs=512, boardsize=5, device='cuda')
+    network = networks.Network(env.obs_space, env.action_space, width=128).to(env.device)
     agent = mcts.MCTSAgent(env, network, n_nodes=16)
     opt = torch.optim.Adam(network.parameters(), lr=3e-4, amsgrad=True)
 
@@ -86,5 +90,9 @@ def run():
                 
             chunk = as_chunk(buffer)
 
-            for idxs in learning.batch_indices(chunk, 128):
+            for idxs in learning.batch_indices(chunk, 2048):
                 optimize(network, opt, chunk[:, idxs])
+                log.info('learner stepped')
+
+            storing.store_latest(run_name, {'network': network, 'opt': opt}, throttle=60)
+            storing.store_periodic(run_name, {'network': network, 'opt': opt}, throttle=600)
