@@ -84,6 +84,14 @@ RUN pip install cmake && \\
     # TODO: The install.sh bit will fail here after getting the subrepos we're after.
     cd open_spiel && install.sh && pip install -e . \\
 
+RUN apt-get install libdb-dev libboost-all-dev && \\
+    cd / && \\
+    git clone https://github.com/cgao3/benzene-vanilla-cmake.git mohex && \\
+    mkdir mohex/build && \\
+    cd mohex/build && \\
+    cmake ../ && \\
+    make -j4 && \\
+    ln -s src/mohex/mohex /bin/mohex
 
 # Set up the entrypoint script
 ADD dev.sh /usr/bin/
