@@ -93,9 +93,11 @@ class MoHex:
 
 class MoHexAgent:
 
-    def __init__(self, env):
-        self._proxies = [MoHex(env.boardsize) for _ in range(env.n_envs)]
-        self._prev_obs = torch.zeros((env.n_envs, env.boardsize, env.boardsize, 2), device=env.device)
+    def __init__(self, env=None, n_envs=None, boardsize=None):
+        n_envs = env.n_envs if n_envs is None else n_envs
+        boardsize = env.boardsize if boardsize is None else boardsize
+        self._proxies = [MoHex(env.boardsize) for _ in range(n_envs)]
+        self._prev_obs = torch.zeros((n_envs, boardsize, boardsize, 2), device=env.device)
 
     def __call__(self, inputs):
         seated_obs = inputs.obs
@@ -128,6 +130,20 @@ class MoHexAgent:
 
     def display(self, e=0):
         return self._proxies[e].display()
+
+    def __getitem__(self, m):
+        n_envs, boardsize = self._prev_obs.shape[:2]
+        m = hex.as_mask(m, n_envs, self._prev_obs.device)
+        subagent = MoHexAgent(n_envs=n_envs, boardsize=boardsize)
+        #TODO: Should I fork these processes?
+        subagent._proxies = [self._proxies[i] for i in range(n_envs) if m[i]]
+        subagent._prev_obs = self._prev_obs[m]
+        return subagent
+
+    def __setitem__(self, m, subagent):
+        n_envs, _ = self._prev_obs.shape[:2]
+        m = hex.as_mask(m, n_envs, self._prev_obs.device)
+        self._prev_obs[m] = subagent._prev_obs
 
 def test():
     env = hex.Hex(boardsize=3)

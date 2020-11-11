@@ -5,6 +5,21 @@ from . import heads
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
+def as_mask(m, n_envs, device):
+    if not isinstance(m, torch.Tensor):
+        dtype = {bool: torch.bool, int: torch.long}[type(m[0])]
+        m = torch.as_tensor(m, dtype=dtype)
+    if m.device != device:
+        m = m.to(device)
+    if m.dtype == torch.long:
+        mask = torch.zeros(n_envs, dtype=torch.bool, device=device)
+        mask[m] = True
+        m = mask
+    assert isinstance(m, torch.Tensor) and m.dtype == torch.bool
+    return m
+
+
+
 class Hex:
     """Based on `OpenSpiel's implementation <https://github.com/deepmind/open_spiel/blob/master/open_spiel/games/hex.cc>`_.
     """
@@ -174,21 +189,8 @@ class Hex:
         self._seat[:] = sd.seat
         self._step[:] = sd.step
 
-    def _as_mask(self, m):
-        if not isinstance(m, torch.Tensor):
-            dtype = {bool: torch.bool, int: torch.long}[type(m[0])]
-            m = torch.as_tensor(m, dtype=dtype)
-        if m.device != self.device:
-            m = m.to(self.device)
-        if m.dtype == torch.long:
-            mask = torch.zeros(self.n_envs, dtype=torch.bool, device=self.device)
-            mask[m] = True
-            m = mask
-        assert isinstance(m, torch.Tensor) and m.dtype == torch.bool
-        return m
-
     def __getitem__(self, m):
-        m = self._as_mask(m)
+        m = as_mask(m, self.n_envs, self.device)
         n_envs = m.sum()
         subenv = type(self)(n_envs, self.boardsize, self.device)
         substate = self.state_dict()[m]
@@ -196,7 +198,7 @@ class Hex:
         return subenv
 
     def __setitem__(self, m, subenv):
-        m = self._as_mask(m)
+        m = as_mask(m, self.n_envs, self.device)
         current = self.state_dict()
         current[m] = subenv.state_dict()
         self.load_state_dict(current)
