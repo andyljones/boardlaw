@@ -1,5 +1,6 @@
 import torch
-import os, string, sys, subprocess
+import subprocess
+import os
 from select import select
 from logging import getLogger
 import shlex
@@ -8,7 +9,7 @@ log = getLogger(__name__)
 
 class MoHex:
 
-    def __init__(self, boardsize=5, timelimit=1):
+    def __init__(self, boardsize=5, max_games=1000, pre_search=True):
         command = 'mohex --use-logfile=0'
         self._p = subprocess.Popen(shlex.split(command),
                              stdin=subprocess.PIPE, 
@@ -17,21 +18,11 @@ class MoHex:
                              text=True)
         self._logs = []
         self._log(f"# {command}\n")
-        self.send(f'boardsize {boardsize}')
-        # self.send(f'param_mohex use_time_management 1')
-        # self.send(f'param_game game_time {timelimit/2}')
-        self.send('param_mohex max_games 1')
+        self.query(f'boardsize {boardsize}')
+        self.query(f'param_mohex max_games {max_games}')
+        self.query(f'param_mohex perform_pre_search {int(pre_search)}')
 
-    def send(self, cmd):
-        try:
-            self._log(">{cmd}\n")
-            self._p.stdin.write(f'{cmd}\n')
-            self._p.stdin.flush()
-            return self._answer()
-        except IOError:
-            raise
-
-    def _answer(self):
+    def answer(self):
         self._log_std_err()
         lines = []
         while True:
@@ -54,6 +45,16 @@ class MoHex:
             return answer[1:].strip()
         return answer[2:]
 
+    def send(self, cmd):
+        self._log(">{cmd}\n")
+        self._p.stdin.write(f'{cmd}\n')
+        self._p.stdin.flush()
+
+        return self.answer
+
+    def query(self, cmd):
+        return self.send(cmd)()
+
     def _log(self, message):
         self._logs.append(message)
         log.debug(f'MoHex: {message}')
@@ -66,19 +67,27 @@ class MoHex:
     def play(self, color, pos):
         row, col = pos
         col = chr(ord('a') + col)
-        self.send(f'play {color} {col}{row+1}')
+        self.query(f'play {color} {col}{row+1}')
+
+    def solve_async(self, color):
+        f = self.send(f'reg_genmove {color}')
+
+        def future():
+            resp = f().strip()
+            col, row = resp[:1], resp[1:]
+            col = ord(col) - ord('a')
+            return int(row)-1, col
+        
+        return future
 
     def solve(self, color):
-        resp = self.send(f'genmove {color}').strip()
-        col, row = resp[:1], resp[1:]
-        col = ord(col) - ord('a')
-        return int(row)-1, col
+        return self.solve_async(color)()
 
     def clear(self):
-        self.send('clear_board')
+        self.query('clear_board')
 
     def display(self):
-        s = self.send('showboard')
+        s = self.query('showboard')
         print('\n'.join(s.splitlines()[3:-1]))
 
 
@@ -105,12 +114,15 @@ class MoHexAgent:
 
         self._prev_obs = obs
 
-        actions = []
-        for env, seat in enumerate(inputs.seats):
+        futures = []
+        for proxy, seat in zip(self._proxies, inputs.seats):
             color = 'bw'[seat]
-            row, col = self._proxies[env].solve(color)
+            futures.append(proxy.solve_async(color))
+        
+        actions = []
+        for future, seat in zip(futures, inputs.seats):
+            row, col = future()
             actions.append((row, col) if seat == 0 else (col, row))
-            obs[env, row, col, seat] = 1.
         
         return torch.tensor(actions, dtype=torch.long, device=inputs.seats.device)
 
@@ -128,3 +140,27 @@ def test():
         responses, inputs = env.step(actions)
         actions = white(inputs)
         responses, inputs = env.step(actions)
+
+def benchmark():
+    import aljpy 
+    import pandas as pd
+
+    results = []
+    for n in [1, 2, 4, 8, 16]:
+        env = hex.Hex(n_envs=n, boardsize=11)
+        black = MoHexAgent(env)
+        white = MoHexAgent(env)
+
+        with aljpy.timer() as timer:
+            inputs = env.reset()
+            moves = 0
+            for _ in range(5):
+                actions = black(inputs)
+                responses, inputs = env.step(actions)
+                actions = white(inputs)
+                responses, inputs = env.step(actions)
+                moves += 2*inputs.valid.size(0)
+            results.append({'n_envs': n, 'runtime': timer.time(), 'samples': moves}) 
+            print(results[-1])
+
+    results = pd.DataFrame(results)
