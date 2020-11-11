@@ -174,6 +174,33 @@ class Hex:
         self._seat[:] = sd.seat
         self._step[:] = sd.step
 
+    def _as_mask(self, m):
+        if not isinstance(m, torch.Tensor):
+            dtype = {bool: torch.bool, int: torch.long}[type(m[0])]
+            m = torch.as_tensor(m, dtype=dtype)
+        if m.device != self.device:
+            m = m.to(self.device)
+        if m.dtype == torch.long:
+            mask = torch.zeros(self.n_envs, dtype=torch.bool, device=self.device)
+            mask[m] = True
+            m = mask
+        assert isinstance(m, torch.Tensor) and m.dtype == torch.bool
+        return m
+
+    def __getitem__(self, m):
+        m = self._as_mask(m)
+        n_envs = m.sum()
+        subenv = type(self)(n_envs, self.boardsize, self.device)
+        substate = self.state_dict()[m]
+        subenv.load_state_dict(substate)
+        return subenv
+
+    def __setitem__(self, m, subenv):
+        m = self._as_mask(m)
+        current = self.state_dict()
+        current[m] = subenv.state_dict()
+        self.load_state_dict(current)
+
     @classmethod
     def plot_state(cls, state, e=0):
         board = state[e].board
@@ -272,7 +299,7 @@ def from_string(s, **kwargs):
 
 ## TESTS ##
 
-def basic_test():
+def test_basic():
     h = Hex(1, 3, device='cpu')
 
     n = h.reset()
@@ -298,7 +325,7 @@ def open_spiel_display_str(env, e):
     strings = np.vectorize(strs.__getitem__)(board.cpu().numpy())
     return '\n'.join(' '*i + ' '.join(r) for i, r in enumerate(strings))
 
-def open_spiel_test():
+def test_open_spiel():
     import pyspiel
 
     e = 1
@@ -343,3 +370,16 @@ def benchmark(n_envs=4096, n_steps=256):
         
         torch.cuda.synchronize()
     print(f'{n_envs*n_steps/timer.time():.0f} samples/sec')
+
+def test_subenvs():
+    env = hex.Hex(n_envs=3, boardsize=5, device='cpu')
+    inputs = env.reset()
+    subenv = env[[1]]
+    subresponse, subinputs = subenv.step(torch.tensor([[0, 0]], dtype=torch.long))
+    env[[1]] = subenv
+
+    board = env.state_dict().board
+    assert (board[[0, 2]] == 0).all()
+    assert (board[1][1:, :] == 0).all()
+    assert (board[1][:, 1:] == 0).all()
+    assert (board[1][0, 0] != 0).all()
