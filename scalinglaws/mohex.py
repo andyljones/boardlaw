@@ -95,11 +95,12 @@ class MoHex:
 
 class MoHexAgent:
 
-    def __init__(self, env=None, n_envs=None, boardsize=None, device=None):
+    def __init__(self, env=None):
+        # If env is None, then we're just interested in creating an empty shell that we'll manually
+        # initialize.
         if env is not None:
-            n_envs, boardsize, device = env.n_envs, env.boardsize, env.device
-        self._proxies = [MoHex(boardsize) for _ in range(n_envs)]
-        self._prev_obs = torch.zeros((n_envs, boardsize, boardsize, 2), device=device)
+            self._proxies = [MoHex(env.boardsize) for _ in range(env.n_envs)]
+            self._prev_obs = torch.zeros((env.n_envs, env.boardsize, env.boardsize, 2), device=env.device)
 
     def __call__(self, inputs):
         seated_obs = inputs.obs
@@ -141,10 +142,12 @@ class MoHexAgent:
         return self._proxies[e].display()
 
     def __getitem__(self, m):
-        n_envs, boardsize = self._prev_obs.shape[:2]
+        n_envs = self._prev_obs.size(0)
         m = hex.as_mask(m, n_envs, self._prev_obs.device)
-        subagent = type(self)(n_envs=n_envs, boardsize=boardsize, device=self._prev_obs.device)
-        #TODO: Should I fork these processes?
+        subagent = type(self)()
+        #TODO: Should I fork these processes? Else it should be that
+        # the masking is a view. Right now it's a bit weird where half the 
+        # subagent's state is shared and half isn't.
         subagent._proxies = [self._proxies[i] for i in range(n_envs) if m[i]]
         subagent._prev_obs = self._prev_obs[m]
         return subagent
