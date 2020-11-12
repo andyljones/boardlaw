@@ -256,7 +256,9 @@ class Hex:
         return fig
 
     def display(self, e=0):
-        return self.plot_state(arrdict.numpyify(self.state_dict()), e=e)
+        ax = self.plot_state(arrdict.numpyify(self.state_dict()), e=e)
+        plt.close(ax.figure)
+        return ax
 
 def board_size(s):
     return len(s.strip().splitlines())

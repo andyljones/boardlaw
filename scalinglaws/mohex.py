@@ -4,6 +4,8 @@ import os
 from select import select
 from logging import getLogger
 import shlex
+from . import hex
+from rebar import arrdict
 
 log = getLogger(__name__)
 
@@ -93,11 +95,11 @@ class MoHex:
 
 class MoHexAgent:
 
-    def __init__(self, env=None, n_envs=None, boardsize=None):
-        n_envs = env.n_envs if n_envs is None else n_envs
-        boardsize = env.boardsize if boardsize is None else boardsize
-        self._proxies = [MoHex(env.boardsize) for _ in range(n_envs)]
-        self._prev_obs = torch.zeros((n_envs, boardsize, boardsize, 2), device=env.device)
+    def __init__(self, env=None, n_envs=None, boardsize=None, device=None):
+        if env is not None:
+            n_envs, boardsize, device = env.n_envs, env.boardsize, env.device
+        self._proxies = [MoHex(boardsize) for _ in range(n_envs)]
+        self._prev_obs = torch.zeros((n_envs, boardsize, boardsize, 2), device=device)
 
     def __call__(self, inputs):
         seated_obs = inputs.obs
@@ -125,8 +127,15 @@ class MoHexAgent:
         for future, seat in zip(futures, inputs.seats):
             row, col = future()
             actions.append((row, col) if seat == 0 else (col, row))
+
+        actions = torch.tensor(actions, dtype=torch.long, device=inputs.seats.device)
+
+        # To linear indices
+        boardsize = self._prev_obs.size(1)
+        actions = actions[:, 0]*boardsize + actions[:, 1]
         
-        return torch.tensor(actions, dtype=torch.long, device=inputs.seats.device)
+        return arrdict.arrdict(
+            actions=actions)
 
     def display(self, e=0):
         return self._proxies[e].display()
@@ -134,7 +143,7 @@ class MoHexAgent:
     def __getitem__(self, m):
         n_envs, boardsize = self._prev_obs.shape[:2]
         m = hex.as_mask(m, n_envs, self._prev_obs.device)
-        subagent = MoHexAgent(n_envs=n_envs, boardsize=boardsize)
+        subagent = type(self)(n_envs=n_envs, boardsize=boardsize, device=self._prev_obs.device)
         #TODO: Should I fork these processes?
         subagent._proxies = [self._proxies[i] for i in range(n_envs) if m[i]]
         subagent._prev_obs = self._prev_obs[m]
