@@ -35,44 +35,33 @@ class RandomAgent:
 
 class RandomRolloutAgent:
 
-    def __init__(self, env, n_rollouts):
-        self.env = env
+    def __init__(self, n_rollouts):
         self.n_rollouts = n_rollouts
 
-    def rollout(self, inputs):
-        B, _ = inputs.valid.shape
-        env = self.env
-        original = env.state_dict()
+    def rollout(self, world):
+        B, _ = world.valid.shape
 
-        live = torch.ones((B,), dtype=torch.bool, device=env.device)
-        reward = torch.zeros((B, env.n_seats), dtype=torch.float, device=env.device)
+        live = torch.ones((B,), dtype=torch.bool, device=world.device)
+        reward = torch.zeros((B, world.n_seats), dtype=torch.float, device=world.device)
         while True:
             if not live.any():
                 break
 
-            actions = torch.distributions.Categorical(probs=inputs.valid.float()).sample()
+            actions = torch.distributions.Categorical(probs=world.valid.float()).sample()
 
-            responses, inputs = env.step(actions)
+            world, responses = world.step(actions)
 
             reward += responses.rewards * live.unsqueeze(-1).float()
             live = live & ~responses.terminal
 
-        env.load_state_dict(original)
-
         return reward
 
-    def __call__(self, inputs, value=True):
-        v = torch.stack([self.rollout(inputs) for _ in range(self.n_rollouts)]).mean(0)
+    def __call__(self, world, value=True, **kwargs):
+        v = torch.stack([self.rollout(world) for _ in range(self.n_rollouts)]).mean(0)
         return arrdict.arrdict(
-            logits=torch.log(inputs.valid.float()/inputs.valid.sum(-1, keepdims=True)),
-            actions=torch.distributions.Categorical(probs=inputs.valid.float()).sample(),
+            logits=torch.log(world.valid.float()/world.valid.sum(-1, keepdims=True)),
+            actions=torch.distributions.Categorical(probs=world.valid.float()).sample(),
             v=v)
-
-    def __getitem__(self, m):
-        return type(self)(self.env[m], self.n_rollouts)
-
-    def __setitem__(self, m, subagent):
-        self.env[m] = subagent.env
 
 def uniform_logits(valid):
     return torch.log(valid.float()/valid.sum(-1, keepdims=True))

@@ -1,30 +1,25 @@
 import torch
 from rebar import arrdict
 
-def apply(agents, inputs):
+def apply(world, agents):
     indices, actions = [], []
     for i, agent in enumerate(agents):
-        m = inputs.seats == i
+        m = world.seats == i
         if m.any():
             indices.append(m.nonzero().squeeze(1))
-            subagent = agent[m]
-            actions.append(subagent(inputs[m]).actions)
-            agent[m] = subagent
+            actions.append(agent(world[m]).actions)
     indices, actions = torch.cat(indices), arrdict.cat(actions)
     return actions[torch.argsort(indices)]
 
-def rollout(env, agents, n_steps):
-    inputs = env.reset()
+def rollout(world, agents, n_steps):
     trace = []
     for _ in range(n_steps):
-        actions = apply(agents, inputs)
-        responses, new_inputs = env.step(actions)
+        actions = apply(world, agents)
+        world, trans = world.step(actions)
         trace.append(arrdict.arrdict(
-            inputs=inputs,
             actions=actions,
-            responses=responses,
-            state=env.state_dict()))
-        inputs = new_inputs
+            trans=trans,
+            world=world))
     return arrdict.stack(trace)
 
 def plot_all(f):

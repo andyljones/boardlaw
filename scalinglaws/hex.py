@@ -8,10 +8,10 @@ import numpy as np
 # Empty, 
 # black, black win, black-north-connected, black-south-connected
 # white, white win, white-west-connected, white-east-connected
-_STRINGS = '.bB^vwW<>'
+_CHARS = '.bB^vwW<>'
 
-def _cell_states(device):
-    return {s: torch.tensor(i, dtype=torch.int, device=device) for i, s in enumerate(_STRINGS)}
+def _cell_ords(device):
+    return {s: torch.tensor(i, dtype=torch.int, device=device) for i, s in enumerate(_CHARS)}
 
 class BoardHelper:
 
@@ -21,7 +21,7 @@ class BoardHelper:
         self.device = self.board.device
         self.envs = torch.arange(self.n_envs, device=self.device)
 
-        self._STATES = _cell_states(self.device)
+        self._ORDS = _cell_ords(self.device)
 
         self._IS_EDGE = {
             '^': lambda idxs: idxs[..., 0] == 0,
@@ -52,8 +52,8 @@ class BoardHelper:
 
     def colours(self, x):
         colours = x.clone()
-        colours[(x == self._STATES['^']) | (x == self._STATES['v'])] = self._STATES['b']
-        colours[(x == self._STATES['<']) | (x == self._STATES['>'])] = self._STATES['w']
+        colours[(x == self._ORDS['^']) | (x == self._ORDS['v'])] = self._ORDS['b']
+        colours[(x == self._ORDS['<']) | (x == self._ORDS['>'])] = self._ORDS['w']
         return colours
 
     def flood(self, actions):
@@ -61,7 +61,7 @@ class BoardHelper:
         moves = self.cells(actions)
         colors = self.colours(moves)
 
-        active = torch.stack([moves == self._STATES[s] for s in '<>^v'], 0).any(0)
+        active = torch.stack([moves == self._ORDS[s] for s in '<>^v'], 0).any(0)
 
         idxs = torch.cat([self.envs[:, None], actions], 1)[active]
         while idxs.size(0) > 0:
@@ -74,7 +74,7 @@ class BoardHelper:
             idxs = touched.nonzero()
 
     def reset(self, terminate):
-        self.board[terminate] = self._STATES['.']
+        self.board[terminate] = self._ORDS['.']
 
     def step(self, seat, actions):
         assert (self.cells(actions) == 0).all(), 'One of the actions is to place a token on an already-occupied cell'
@@ -83,21 +83,21 @@ class BoardHelper:
 
         black = seat == 0
         white = seat == 1
-        conns = {s: ((neighbours == self._STATES[s]).any(-1)) | self._IS_EDGE[s](actions) for s in self._IS_EDGE}
+        conns = {s: ((neighbours == self._ORDS[s]).any(-1)) | self._IS_EDGE[s](actions) for s in self._IS_EDGE}
 
         new_cells = torch.zeros_like(self.cells(actions))
         
-        new_cells[black] = self._STATES['b']
-        new_cells[black & conns['^']] = self._STATES['^']
-        new_cells[black & conns['v']] = self._STATES['v']
-        new_cells[black & conns['^'] & conns['v']] = self._STATES['B']
+        new_cells[black] = self._ORDS['b']
+        new_cells[black & conns['^']] = self._ORDS['^']
+        new_cells[black & conns['v']] = self._ORDS['v']
+        new_cells[black & conns['^'] & conns['v']] = self._ORDS['B']
 
-        new_cells[white] = self._STATES['w']
-        new_cells[white & conns['<']] = self._STATES['<']
-        new_cells[white & conns['>']] = self._STATES['>']
-        new_cells[white & conns['<'] & conns['>']] = self._STATES['W']
+        new_cells[white] = self._ORDS['w']
+        new_cells[white & conns['<']] = self._ORDS['<']
+        new_cells[white & conns['>']] = self._ORDS['>']
+        new_cells[white & conns['<'] & conns['>']] = self._ORDS['W']
 
-        terminal = ((new_cells == self._STATES['B']) | (new_cells == self._STATES['W']))
+        terminal = ((new_cells == self._ORDS['B']) | (new_cells == self._ORDS['W']))
 
         self.cells(actions, new_cells)
         self.flood(actions)
@@ -105,8 +105,8 @@ class BoardHelper:
 
         return terminal
 
-HexStateBase = arrdict.namedarrtuple('HexStateBase', ('board', 'seat'))
-class HexState(HexStateBase):
+HexWorldBase = arrdict.namedarrtuple('HexWorldBase', ('board', 'seat'))
+class HexWorld(HexWorldBase):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -119,7 +119,35 @@ class HexState(HexStateBase):
         self.obs_space = heads.Tensor((self.boardsize, self.boardsize, 2))
         self.action_space = heads.Masked(self.boardsize*self.boardsize)
 
-    def _next_state(self, actions):
+    @property
+    def obs(self):
+        ords = _cell_ords(self.device)
+        black_view = torch.stack([
+            torch.stack([self.board == ords[s] for s in 'b^vB']).any(0),
+            torch.stack([self.board == ords[s] for s in 'w<>W']).any(0)], -1).float()
+
+        # White player sees a transposed board
+        white_view = black_view.transpose(1, 2).flip(3)
+        obs = black_view.where(self.seat[:, None, None, None] == 0, white_view)
+
+        return obs
+
+    @property
+    def valid(self):
+        return (self.obs == 0).all(-1).reshape(self.n_envs, -1)
+
+    @property
+    def seats(self):
+        return self.seat
+
+    def step(self, actions):
+        """Args:
+            actions: (n_env, 2)-int tensor between (0, 0) and (boardsize, boardsize). Cells are indexed in row-major
+            order from the top-left.
+            
+        Returns:
+
+        """
         if actions.ndim == 1:
             actions = torch.stack([actions // self.boardsize, actions % self.boardsize], -1)
 
@@ -135,34 +163,7 @@ class HexState(HexStateBase):
         new_seat = 1 - self.seat
         new_seat[terminal] = 0
 
-        new_state = type(self)(board=helper.board, seat=new_seat)
-
-        return terminal, new_state
-
-    def observe(self):
-        cell_states = _cell_states(self.device)
-        black_view = torch.stack([
-            torch.stack([self.board == cell_states[s] for s in 'b^vB']).any(0),
-            torch.stack([self.board == cell_states[s] for s in 'w<>W']).any(0)], -1).float()
-
-        # White player sees a transposed board
-        white_view = black_view.transpose(1, 2).flip(3)
-        obs = black_view.where(self.seat[:, None, None, None] == 0, white_view)
-
-        return arrdict.arrdict(
-            obs=obs,
-            valid=(obs == 0).all(-1).reshape(self.n_envs, -1),
-            seats=self.seat).clone()
-
-    def step(self, actions):
-        """Args:
-            actions: (n_env, 2)-int tensor between (0, 0) and (boardsize, boardsize). Cells are indexed in row-major
-            order from the top-left.
-            
-        Returns:
-
-        """
-        terminal, new_state = self._next_state(actions)
+        new_world = type(self)(board=helper.board, seat=new_seat)
 
         rewards = torch.zeros((self.n_envs, self.n_seats), device=self.device)
         rewards.scatter_(1, self.seat[:, None].long(), terminal[:, None].float())
@@ -171,7 +172,7 @@ class HexState(HexStateBase):
         transition = arrdict.arrdict(
             terminal=terminal, 
             rewards=rewards)
-        return transition, new_state
+        return new_world, transition
 
     @classmethod
     def plot_state(cls, state, e=0, ax=None):
@@ -232,7 +233,7 @@ class HexState(HexStateBase):
 
 def create(n_envs, boardsize=11, device='cuda'):
     # As per OpenSpiel and convention, black plays first.
-    return HexState(
+    return HexWorld(
         board=torch.full((n_envs, boardsize, boardsize), 0, device=device, dtype=torch.int),
         seat=torch.full((n_envs,), 0, device=device, dtype=torch.int))
 
@@ -284,7 +285,7 @@ def test_basic():
     for _ in range(20):
         o = s.observe()
         actions = torch.distributions.Categorical(probs=o.valid.float()).sample()
-        t, s = s.step(actions)
+        s, _ = s.step(actions)
 
 def open_spiel_board(state):
     # state ordering taken from hex.h 
@@ -294,7 +295,7 @@ def open_spiel_board(state):
     return '\n'.join(' '*i + ' '.join(r) for i, r in enumerate(strs))
 
 def open_spiel_display_str(env, e):
-    strs = _STRINGS
+    strs = _CHARS
     board = env.board[e].clone()
     strings = np.vectorize(strs.__getitem__)(board.cpu().numpy())
     return '\n'.join(' '*i + ' '.join(r) for i, r in enumerate(strings))
@@ -311,7 +312,7 @@ def test_open_spiel():
         new = ours.observe()
         seat = new.seats[e]
         our_action = torch.distributions.Categorical(probs=new.valid.float()).sample()
-        t, ours = ours.step(our_action)
+        ours, _ = ours.step(our_action)
 
         if seat == 0:
             their_action = our_action[e]
@@ -331,14 +332,14 @@ def test_open_spiel():
 
 def benchmark(n_envs=4096, n_steps=256):
     import aljpy
-    state = create(n_envs)
+    world = create(n_envs)
 
     torch.cuda.synchronize()
     with aljpy.timer() as timer:
         for _ in range(n_steps):
-            obs = state.observe()
+            obs = world.observe()
             actions = torch.distributions.Categorical(probs=obs.valid.float()).sample()
-            _, state = state.step(actions)
+            world, _ = world.step(actions)
         
         torch.cuda.synchronize()
     print(f'{n_envs*n_steps/timer.time():.0f} samples/sec')
