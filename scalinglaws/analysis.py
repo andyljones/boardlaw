@@ -40,12 +40,12 @@ def plot_all(f):
         return fig
     return proxy
 
-def record(env, agents, n_steps, N=None):
+def record(world, agents, n_steps, N=None):
     from rebar.recording import ParallelEncoder
-    trace = rollout(env, agents, n_steps)
+    trace = rollout(world, agents, n_steps)
 
-    state = arrdict.numpyify(trace.state)
-    with ParallelEncoder(plot_all(env.plot_state), N=N, fps=1) as encoder:
+    state = arrdict.numpyify(trace.world)
+    with ParallelEncoder(plot_all(world.plot_state), N=N, fps=1) as encoder:
         for i in range(state.board.shape[0]):
             encoder(state[i])
     return encoder
