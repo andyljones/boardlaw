@@ -10,11 +10,11 @@ log = getLogger(__name__)
 def as_chunk(buffer):
     chunk = arrdict.stack(buffer)
     with stats.defer():
-        i, r = chunk.inputs, chunk.responses
-        n_trajs = r.terminal.sum()
-        n_inputs = r.terminal.size(0)
-        n_samples = r.terminal.nelement()
-        rewards = chunk.responses.rewards.sum(0).sum(0)
+        t = chunk.transition
+        n_trajs = t.terminal.sum()
+        n_inputs = t.terminal.size(0)
+        n_samples = t.terminal.nelement()
+        rewards = chunk.transition.rewards.sum(0).sum(0)
         stats.rate('sample-rate/actor', n_samples)
         stats.mean('traj-length', n_samples, n_trajs)
         stats.cumsum('count/traj', n_trajs)
@@ -64,27 +64,25 @@ def optimize(network, opt, batch):
         # stats.rel_gradient_norm('rel-norm-grad', agent)
 
 def run():
-    env = hex.Hex(n_envs=512, boardsize=5, device='cuda')
-    network = networks.Network(env.obs_space, env.action_space, width=128).to(env.device)
-    agent = mcts.MCTSAgent(env, network, n_nodes=16)
+    world = hex.create(n_envs=512, boardsize=5, device='cuda')
+    network = networks.Network(world.obs_space, world.action_space, width=128).to(world.device)
+    agent = mcts.MCTSAgent(network, n_nodes=16)
     opt = torch.optim.Adam(network.parameters(), lr=3e-4, amsgrad=True)
 
     run_name = 'az-test'
     compositor = widgets.Compositor()
     paths.clear(run_name)
     with logging.via_dir(run_name, compositor), stats.via_dir(run_name, compositor):
-        inputs = env.reset()
-
         while True:
             buffer = []
             for _ in range(32):
-                decisions = agent(inputs, responses, value=True)
-                responses, new_inputs = env.step(decisions.actions)
+                decisions = agent(world, value=True)
+                new_world, transition = world.step(decisions.actions)
                 buffer.append(arrdict.arrdict(
-                    inputs=inputs,
+                    world=world,
                     decisions=decisions,
-                    responses=responses).detach())
-                inputs = new_inputs.detach()
+                    transition=transition).detach())
+                world = new_world
                 
             chunk = as_chunk(buffer)
 

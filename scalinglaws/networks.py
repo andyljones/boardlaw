@@ -29,27 +29,23 @@ class Network(nn.Module):
             heads.intake(obs_space, width),
             Residual(width),
             Residual(width),
-            Residual(width),
-            Residual(width),
             # lstm.LSTM(width),
             out)
         self.value = recurrence.Sequential(
             heads.intake(obs_space, width),
             Residual(width),
             Residual(width),
-            Residual(width),
-            Residual(width),
             # lstm.LSTM(width),
             heads.ValueOutput(width))
 
-    def forward(self, inputs, value=False):
-        kwargs = {k: v for k, v in inputs.items() if k != 'obs'}
+    def forward(self, world, value=False):
+        obs = world.obs
         outputs = arrdict.arrdict(
-            logits=self.policy(inputs.obs, **kwargs))
+            logits=self.policy(world.obs, valid=world.valid))
 
         if value:
             #TODO: Maybe the env should handle this? 
             # Or there should be an output space for values? 
-            v = self.value(inputs.obs, **kwargs)
-            outputs['v'] = scatter_values(v, inputs.seats)
+            v = self.value(obs, valid=world.valid)
+            outputs['v'] = scatter_values(v, world.seats)
         return outputs
