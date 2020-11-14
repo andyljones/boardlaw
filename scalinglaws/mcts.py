@@ -56,6 +56,7 @@ class MCTS:
             terminal=torch.zeros_like(self.terminal[:, self.sim]),
             rewards=torch.zeros_like(self.rewards[:, self.sim]))
 
+        #TODO: Handle termination properly
         while True:
             interior = (next != -1)
             if not interior.any():
@@ -160,9 +161,10 @@ class MCTS:
             if p >= 0:
                 r = int(self.relation[e][i].cpu())
                 q = float(qs[p, r])
+                n = int(ns[p, r])
                 edge = (p, i)
                 edges.append(edge)
-                labels[edge] = f'{r}, {q:.2f}'
+                labels[edge] = f'{r}\n{q:.2f}, {n}'
                 edge_vals[edge] = (q - q_min)/(q_max - q_min + 1e-6)
             
         G = nx.from_edgelist(edges)
@@ -171,7 +173,7 @@ class MCTS:
 
         pos = nx.kamada_kawai_layout(G)
         nx.draw(G, pos, node_color=colors, edge_color=edge_colors, width=5)
-        nx.draw_networkx_edge_labels(G, pos, edge_labels=labels)
+        nx.draw_networkx_edge_labels(G, pos, edge_labels=labels, font_size='x-small')
         nx.draw_networkx_labels(G, pos, labels={i: i for i in range(self.n_nodes)})
 
         return plt.gca()
@@ -187,20 +189,19 @@ def mcts(world, agent, **kwargs):
 
 class MCTSAgent:
 
-    def __init__(self, env, evaluator, **kwargs):
-        self.env = env
+    def __init__(self, evaluator, **kwargs):
         self.evaluator = evaluator
         self.kwargs = kwargs
 
-    def __call__(self, inputs, value=True):
-        m = mcts(self.env, inputs, self.evaluator, **self.kwargs)
+    def __call__(self, world, value=True):
+        m = mcts(world, self.evaluator, **self.kwargs)
         r = m.root()
         return arrdict.arrdict(
             logits=r.logits,
             v=r.v,
             actions=torch.distributions.Categorical(logits=r.logits).sample())
 
-from . import validation 
+from . import validation, analysis
 
 def test_trivial():
     env = validation.InstantWin(device='cpu')
@@ -277,33 +278,34 @@ def test_planted_game():
     bw.
     wb.
     """
-    m = full_game_mcts(competitive, 31, 1, c_puct=1.)
-    expected = torch.tensor([[-1., +1.]], device=m.device)
-    torch.testing.assert_allclose(m.root().v, expected)
-    m.root().logits
+    m = full_game_mcts(competitive, 31, 4, c_puct=100.)
+    expected = torch.tensor([[-1/3., +1/3.]], device=m.device)
+    assert ((m.root().v - expected).abs() < 1/3).all()
 
 def test_full_game():
-    env = hex.Hex(boardsize=3, device='cpu')
-    black = MCTSAgent(env, validation.RandomRolloutAgent(env, 4), n_nodes=16, c_puct=.5)
-    white = validation.RandomAgent(env)
-    trace, inputs = validation.rollout(env, [black, white], 128)
-    trace.responses.rewards.sum(0)/trace.responses.rewards.abs().sum(0)
+    world = hex.create(1, boardsize=3, device='cpu')
+    black = MCTSAgent(validation.RandomRolloutAgent(4), n_nodes=16, c_puct=.5)
+    white = validation.RandomAgent()
+    trace = analysis.rollout(world, [black, white], 128)
+    winrates = trace.trans.rewards.sum(0).sum(0)/trace.trans.terminal.sum(0).sum(0)
 
-def benchmark():
+def benchmark(T=16):
     import pandas as pd
     import aljpy
     import matplotlib.pyplot as plt
+    from . import hex
 
     results = []
     for n in np.logspace(0, 14, 15, base=2, dtype=int):
+        env = hex.create(n_envs=n, boardsize=3, device='cuda')
+        black = MCTSAgent(validation.RandomAgent(), n_nodes=16, c_puct=.5)
+        white = validation.RandomAgent()
+
         torch.cuda.synchronize()
         with aljpy.timer() as timer:
-            env = hex.Hex(n_envs=n, boardsize=3, device='cuda')
-            black = MCTSAgent(env, validation.RandomAgent(env), n_nodes=16, c_puct=.5)
-            white = validation.RandomAgent(env)
-            trace, inputs = validation.rollout(env, [black, white], 16)
+            trace = analysis.rollout(env, [black, white], 16)
             torch.cuda.synchronize()
-        results.append({'n_envs': n, 'runtime': timer.time(), 'samples': trace.inputs.seats.nelement()})
+        results.append({'n_envs': n, 'runtime': timer.time(), 'samples': T*n})
         print(results[-1])
     df = pd.DataFrame(results)
         

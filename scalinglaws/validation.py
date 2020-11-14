@@ -23,15 +23,12 @@ class ProxyAgent:
 
 class RandomAgent:
 
-    def __init__(self, env):
-        self.n_seats = env.n_seats
-
-    def __call__(self, inputs, value=True):
-        B, _ = inputs.valid.shape
+    def __call__(self, world, value=True):
+        B, _ = world.valid.shape
         return arrdict.arrdict(
-            logits=torch.log(inputs.valid.float()/inputs.valid.sum(-1, keepdims=True)),
-            actions=torch.distributions.Categorical(probs=inputs.valid.float()).sample(),
-            v=torch.zeros((B, self.n_seats), device=inputs.valid.device))
+            logits=torch.log(world.valid.float()/world.valid.sum(-1, keepdims=True)),
+            actions=torch.distributions.Categorical(probs=world.valid.float()).sample(),
+            v=torch.zeros((B, world.n_seats), device=world.device))
 
 class RandomRolloutAgent:
 
