@@ -1,5 +1,6 @@
 from multiprocessing import Value
 import numpy as np
+import inspect
 from functools import partialmethod
 from . import dotdict
 try:
@@ -7,6 +8,10 @@ try:
     TORCH = True
 except ModuleNotFoundError:
     TORCH = False
+
+def _is_valid_field(x):
+    return (isinstance(x, str) or (isinstance(x, tuple) and all(isinstance(xx, str) for xx in x)))
+
 
 def _arrdict_factory():
     # This is done with a factory because I am a lazy man and I didn't fancy defining all the binary ops on 
@@ -31,17 +36,13 @@ def _arrdict_factory():
         def __setitem__(self, x, y):
             # Valid keys to stick in an arrdict are strings and tuples of strings.
             # Anything else could plausibly be a tensor index.
-            if (isinstance(x, str) or 
-                    (isinstance(x, tuple) and all(isinstance(xx, str) for xx in x))):
+            if _is_valid_field(x):
                 super().__setitem__(x, y)
             elif isinstance(y, type(self)):
                 for k in self:
                     self[k][x] = y[k]
             else:
                 raise ValueError('Setting items must be done with a string key or by passing an arrdict')
-
-        def __setattr__(self, key, value):
-            raise ValueError('Setting by attribute is not allowed; set by key instead')
 
         def __binary_op__(self, name, rhs):
             if isinstance(rhs, dict):
@@ -65,14 +66,14 @@ arrdict = _arrdict_factory()
 
 def namedarrtuple(name, fields):
 
-    def __init__(self, **kwargs):
-        if set(fields) != set(kwargs):
-            raise KeyError('This NamedArrTuple subclass must be created with exactly the fields ' + ', '.join(fields))
-        super(arrdict, self).__init__(**kwargs)
+    def __init__(self, *args, **kwargs):
+        super(arrdict, self).__init__(*args, **kwargs)
+        if set(fields) != set(self):
+            raise KeyError('This NamedArrTuple subclass must be created with exactly the fields {fields}')
 
     def __setitem__(self, x, y):
-        if x not in fields:
-            raise KeyError(f'Key {x} is not in this immutable NamedArrTuple, and so cannot be added')
+        if _is_valid_field(x) and (x not in fields):
+            raise KeyError(f'Key "{x}" is not in this immutable NamedArrTuple, and so cannot be added')
         super(arrdict, self).__setitem__(x, y)
 
     def __delitem__(self, x):

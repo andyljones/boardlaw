@@ -260,6 +260,8 @@ class Hex:
         plt.close(ax.figure)
         return ax
 
+## TESTS ##
+
 def board_size(s):
     return len(s.strip().splitlines())
 
@@ -299,9 +301,6 @@ def from_string(s, **kwargs):
     for a in board_actions(s):
         response, inputs = env.step(a[None])
     return env, inputs
-
-
-## TESTS ##
 
 def test_basic():
     h = Hex(1, 3, device='cpu')
@@ -367,9 +366,7 @@ def benchmark(n_envs=4096, n_steps=256):
     torch.cuda.synchronize()
     with aljpy.timer() as timer:
         for _ in range(n_steps):
-            flat_mask = inputs.mask.reshape(n_envs, -1).float()
-            probs = flat_mask/flat_mask.sum(-1, keepdims=True)
-            actions = torch.distributions.Categorical(probs=probs).sample()
+            actions = torch.distributions.Categorical(probs=inputs.valid.float()).sample()
             _, inputs = env.step(actions)
         
         torch.cuda.synchronize()
