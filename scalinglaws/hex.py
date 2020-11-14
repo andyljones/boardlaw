@@ -127,8 +127,8 @@ class HexWorld(HexWorldBase):
             torch.stack([self.board == ords[s] for s in 'w<>W']).any(0)], -1).float()
 
         # White player sees a transposed board
-        white_view = black_view.transpose(1, 2).flip(3)
-        obs = black_view.where(self.seat[:, None, None, None] == 0, white_view)
+        white_view = black_view.transpose(-3, -2).flip(-1)
+        obs = black_view.where(self.seat[..., None, None, None] == 0, white_view)
 
         return obs
 
@@ -148,6 +148,10 @@ class HexWorld(HexWorldBase):
         Returns:
 
         """
+        if self.board.ndim != 3:
+            #TODO: Support stepping arbitrary batchings. Only needs a reshaping.
+            raise ValueError('You can only step a board with a single batch dimension')
+
         if actions.ndim == 1:
             actions = torch.stack([actions // self.boardsize, actions % self.boardsize], -1)
 
@@ -175,8 +179,9 @@ class HexWorld(HexWorldBase):
         return new_world, transition
 
     @classmethod
-    def plot_state(cls, state, e=0, ax=None):
-        board = state[e].board
+    def plot_state(cls, state, e=None, ax=None):
+        e = (0,)*(state.board.ndim-2) if e is None else e
+        board = state.board[e]
         width = board.shape[1]
 
         ax = plt.subplots()[1] if ax is None else ax
@@ -226,7 +231,7 @@ class HexWorld(HexWorldBase):
 
         return ax.figure
 
-    def display(self, e=0):
+    def display(self, e=None):
         ax = self.plot_state(arrdict.numpyify(arrdict.arrdict(self)), e=e)
         plt.close(ax.figure)
         return ax
