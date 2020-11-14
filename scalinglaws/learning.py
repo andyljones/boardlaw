@@ -1,10 +1,10 @@
 import torch
 import numpy as np
 
-def batch_indices(chunk, batch_size):
-    T, B = chunk.responses.terminal.shape
+def batch_indices(exemplar, batch_size):
+    T, B = exemplar.shape[:2]
     batch_width = batch_size//T
-    indices = torch.randperm(B, device=chunk.responses.terminal.device)
+    indices = torch.randperm(B, device=exemplar.device)
     indices = [indices[i:i+batch_width] for i in range(0, B, batch_width)]
     return indices
 

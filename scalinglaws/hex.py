@@ -138,7 +138,8 @@ class HexWorld(HexWorldBase):
 
     @property
     def valid(self):
-        return (self.obs == 0).all(-1).reshape(self.n_envs, -1)
+        shape = self.board.shape[:-2]
+        return (self.obs == 0).all(-1).reshape(*shape, -1)
 
     @property
     def seats(self):

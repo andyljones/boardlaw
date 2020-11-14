@@ -28,16 +28,16 @@ def as_chunk(buffer):
     return chunk
 
 def optimize(network, opt, batch):
-    i, d0, r = batch.inputs, batch.decisions, batch.responses
-    d = network(i, value=True)
+    w, d0, t = batch.world, batch.decisions, batch.transition
+    d = network(w, value=True)
 
     target_logits = d0.logits
     actual_probs = d.logits.exp()
-    policy_terms = -(actual_probs*target_logits).where(batch.inputs.valid, torch.zeros_like(actual_probs))
+    policy_terms = -(actual_probs*target_logits).where(w.valid, torch.zeros_like(actual_probs))
     policy_loss = policy_terms.sum(axis=1).mean()
 
-    terminal = torch.stack([r.terminal, r.terminal], -1)
-    target_value = learning.reward_to_go(r.rewards, d0.v, terminal, terminal, gamma=1)
+    terminal = torch.stack([t.terminal, t.terminal], -1)
+    target_value = learning.reward_to_go(t.rewards, d0.v, terminal, terminal, gamma=1)
     value_loss = (target_value - d.v).square().mean()
     
     loss = policy_loss + value_loss
@@ -58,7 +58,7 @@ def optimize(network, opt, batch):
         stats.mean('v-target/mean', target_value.mean())
         stats.mean('v-target/std', target_value.std())
 
-        stats.rate('sample-rate/learner', r.terminal.nelement())
+        stats.rate('sample-rate/learner', t.terminal.nelement())
         stats.rate('step-rate/learner', 1)
         stats.cumsum('count/learner-steps', 1)
         # stats.rel_gradient_norm('rel-norm-grad', agent)
@@ -86,7 +86,7 @@ def run():
                 
             chunk = as_chunk(buffer)
 
-            for idxs in learning.batch_indices(chunk, 2048):
+            for idxs in learning.batch_indices(chunk.transition.terminal, 2048):
                 optimize(network, opt, chunk[:, idxs])
                 log.info('learner stepped')
 
