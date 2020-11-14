@@ -4,29 +4,29 @@ from rebar import arrdict
 
 class MCTS:
 
-    def __init__(self, env, n_nodes, c_puct=2.5):
-        self.device = env.device
-        self.n_envs = env.n_envs
+    def __init__(self, world, n_nodes, c_puct=2.5):
+        self.device = world.device
+        self.n_envs = world.n_envs
         self.n_nodes = n_nodes
-        self.n_seats = env.n_seats
+        self.n_seats = world.n_seats
         assert n_nodes > 1, 'MCTS requires at least two nodes'
 
-        self.envs = torch.arange(env.n_envs, device=self.device)
+        self.envs = torch.arange(world.n_envs, device=self.device)
 
-        n_actions = np.prod(env.action_space)
-        self.children = self.envs.new_full((env.n_envs, self.n_nodes, n_actions), -1)
-        self.parents = self.envs.new_full((env.n_envs, self.n_nodes), -1)
-        self.relation = self.envs.new_full((env.n_envs, self.n_nodes), -1)
+        n_actions = np.prod(world.action_space)
+        self.children = self.envs.new_full((world.n_envs, self.n_nodes, n_actions), -1)
+        self.parents = self.envs.new_full((world.n_envs, self.n_nodes), -1)
+        self.relation = self.envs.new_full((world.n_envs, self.n_nodes), -1)
 
         #TODO: All of these but the children tensor should not have a 'actions' dim; the field can be attributed
         # to the parent 
-        self.log_pi = torch.full((env.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
-        self.valid = torch.full((env.n_envs, self.n_nodes, n_actions), False, device=self.device, dtype=torch.bool)
-        self.n = torch.full((env.n_envs, self.n_nodes, n_actions), 0, device=self.device, dtype=torch.int)
-        self.w = torch.full((env.n_envs, self.n_nodes, n_actions, self.n_seats), np.nan, device=self.device)
-        self.terminal = torch.full((env.n_envs, self.n_nodes), False, device=self.device, dtype=torch.bool)
-        self.rewards = torch.full((env.n_envs, self.n_nodes, self.n_seats), 0., device=self.device, dtype=torch.float)
-        self.seats = torch.full((env.n_envs, self.n_nodes), -1, device=self.device, dtype=torch.long)
+        self.log_pi = torch.full((world.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
+        self.valid = torch.full((world.n_envs, self.n_nodes, n_actions), False, device=self.device, dtype=torch.bool)
+        self.n = torch.full((world.n_envs, self.n_nodes, n_actions), 0, device=self.device, dtype=torch.int)
+        self.w = torch.full((world.n_envs, self.n_nodes, n_actions, self.n_seats), np.nan, device=self.device)
+        self.terminal = torch.full((world.n_envs, self.n_nodes), False, device=self.device, dtype=torch.bool)
+        self.rewards = torch.full((world.n_envs, self.n_nodes, self.n_seats), 0., device=self.device, dtype=torch.float)
+        self.seats = torch.full((world.n_envs, self.n_nodes), -1, device=self.device, dtype=torch.long)
 
         self.sim = 0
 
@@ -69,28 +69,18 @@ class MCTS:
 
         return torch.stack(trace), current, final_actions
 
-    def play(self, env, inputs, trace):
+    def play(self, world, trace):
         #TODO: There's a bunch of weirdness here around envs that terminate early. Would
         # be a lot better to implement maskable envs.
-        final_inputs = inputs.clone()
-        final_responses = arrdict.arrdict(
+        world = world.clone()
+        transition = arrdict.arrdict(
             terminal=torch.zeros_like(self.terminal[:, self.sim]),
             rewards=torch.zeros_like(self.rewards[:, self.sim]))
-        final_state = env.state_dict()
         for a in trace:
             active = a != -1
-            dummies = torch.distributions.Categorical(probs=inputs.valid.float()).sample()
-            dummies[active] = a[active]
-            responses, inputs = env.step(dummies)
-            state = env.state_dict()
+            world[active], transition[active] = world[active].step(a[active])
 
-            final_inputs[active] = inputs[active]
-            final_responses[active] = responses[active]
-            final_state[active] = state[active]
-
-        env.load_state_dict(final_state)
-
-        return final_responses, final_inputs
+        return world, transition
 
     def backup(self, current, v):
         v = v.clone()
@@ -113,43 +103,41 @@ class MCTS:
 
             current[active] = parent
 
-    def initialize(self, env, inputs, agent):
-        self.valid[:, self.sim] = inputs.valid
-        self.seats[:, self.sim] = inputs.seats
+    def initialize(self, world, agent):
+        self.valid[:, self.sim] = world.valid
+        self.seats[:, self.sim] = world.seats
         self.terminal[:, self.sim] = False
         self.rewards[:, self.sim] = 0
 
-        decisions = agent(inputs, value=True)
+        decisions = agent(world, value=True)
         self.log_pi[:, self.sim] = decisions.logits
         self.w[:, self.sim] = 0.
         self.n[:, self.sim] = 0 
 
         self.sim += 1
 
-    def simulate(self, env, inputs, agent):
+    def simulate(self, world, agent):
         if self.sim >= self.n_nodes:
             raise ValueError('Called simulate more times than were declared in the constructor')
 
-        original_state = env.state_dict()
         trace, leaf, final_actions = self.descend()
         self.children[self.envs, leaf, final_actions] = self.sim
         self.parents[self.envs, self.sim] = leaf
         self.relation[self.envs, self.sim] = final_actions
 
-        response, inputs = self.play(env, inputs, trace)
+        world, transition = self.play(world, trace)
 
-        self.valid[:, self.sim] = inputs.valid
-        self.seats[:, self.sim] = inputs.seats
-        self.terminal[:, self.sim] = response.terminal
-        self.rewards[:, self.sim] = response.rewards
+        self.valid[:, self.sim] = world.valid
+        self.seats[:, self.sim] = world.seats
+        self.terminal[:, self.sim] = transition.terminal
+        self.rewards[:, self.sim] = transition.rewards
 
-        decisions = agent(inputs, value=True)
+        decisions = agent(world, value=True)
         self.log_pi[:, self.sim] = decisions.logits
         self.w[:, self.sim] = 0
         self.n[:, self.sim] = 0 
 
         self.backup(self.sim, decisions.v)
-        env.load_state_dict(original_state)
 
         self.sim += 1
 
@@ -199,12 +187,12 @@ class MCTS:
 
         return plt.gca()
 
-def mcts(env, inputs, agent, **kwargs):
-    mcts = MCTS(env, **kwargs)
+def mcts(world, agent, **kwargs):
+    mcts = MCTS(world, **kwargs)
 
-    mcts.initialize(env, inputs, agent)
+    mcts.initialize(world, agent)
     for _ in range(mcts.n_nodes-1):
-        mcts.simulate(env, inputs, agent)
+        mcts.simulate(world, agent)
 
     return mcts
 
@@ -222,13 +210,6 @@ class MCTSAgent:
             logits=r.logits,
             v=r.v,
             actions=torch.distributions.Categorical(logits=r.logits).sample())
-
-    def __getitem__(self, m):
-        return type(self)(self.env[m], self.evaluator[m], **self.kwargs)
-
-    def __setitem__(self, m, subagent):
-        self.env[m] = subagent.env
-        self.evaluator[m] = subagent.evaluator
 
 from . import validation 
 
@@ -278,9 +259,9 @@ def test_multienv():
 
 def full_game_mcts(s, n_nodes, n_rollouts, **kwargs):
     from . import hex
-    env, inputs = hex.from_string(s, device='cpu')
-    agent = validation.RandomRolloutAgent(env, n_rollouts=n_rollouts)
-    return mcts(env, inputs, agent, n_nodes=n_nodes, **kwargs)
+    world = hex.from_string(s, device='cpu')
+    agent = validation.RandomRolloutAgent(n_rollouts)
+    return mcts(world, agent, n_nodes=n_nodes, **kwargs)
 
 def test_planted_game():
     black_wins = """
