@@ -1,161 +1,158 @@
 import torch
-import numpy as np
-from rebar import arrdict
 from . import heads
+from rebar import arrdict
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import numpy as np
 
-def as_mask(m, n_envs, device):
-    if not isinstance(m, torch.Tensor):
-        dtype = {bool: torch.bool, int: torch.long}[type(m[0])]
-        m = torch.as_tensor(m, dtype=dtype)
-    if m.device != device:
-        m = m.to(device)
-    if m.dtype == torch.long:
-        mask = torch.zeros(n_envs, dtype=torch.bool, device=device)
-        mask[m] = True
-        m = mask
-    assert isinstance(m, torch.Tensor) and m.dtype == torch.bool
-    return m
+# Empty, 
+# black, black win, black-north-connected, black-south-connected
+# white, white win, white-west-connected, white-east-connected
+_STRINGS = '.bB^vwW<>'
 
+def _cell_states(device):
+    return {s: torch.tensor(i, dtype=torch.int, device=device) for i, s in enumerate(_STRINGS)}
 
+class BoardHelper:
 
-class Hex:
-    """Based on `OpenSpiel's implementation <https://github.com/deepmind/open_spiel/blob/master/open_spiel/games/hex.cc>`_.
-    """
+    def __init__(self, board):
+        self.board = board.clone()
+        self.n_envs, self.boardsize = board.shape[:2]
+        self.device = self.board.device
+        self.envs = torch.arange(self.n_envs, device=self.device)
 
-    # Empty, 
-    # black, black win, black-north-connected, black-south-connected
-    # white, white win, white-west-connected, white-east-connected
-    _STRINGS = '.bB^vwW<>'
-
-    def __init__(self, n_envs=1, boardsize=11, device='cuda'):
-        self.n_envs = n_envs
-        self.n_seats = 2
-        self.boardsize = boardsize
-        self.device = torch.device(device)
-
-        self._STATES = {s: torch.tensor(i, dtype=torch.int, device=device) for i, s in enumerate(self._STRINGS)}
+        self._STATES = _cell_states(self.device)
 
         self._IS_EDGE = {
             '^': lambda idxs: idxs[..., 0] == 0,
-            'v': lambda idxs: idxs[..., 0] == boardsize-1,
+            'v': lambda idxs: idxs[..., 0] == self.boardsize-1,
             '<': lambda idxs: idxs[..., 1] == 0,
-            '>': lambda idxs: idxs[..., 1] == boardsize-1}
+            '>': lambda idxs: idxs[..., 1] == self.boardsize-1}
 
-        self._NEIGHBOURS = torch.tensor([(-1, 0), (-1, +1), (0, -1), (0, +1), (+1, -1), (+1, +0)], device=device, dtype=torch.long)
+        self._NEIGHBOURS = torch.tensor([(-1, 0), (-1, +1), (0, -1), (0, +1), (+1, -1), (+1, +0)], device=self.device, dtype=torch.long)
 
-        self._board = torch.full((n_envs, boardsize, boardsize), 0, device=device, dtype=torch.int)
-
-        # As per OpenSpiel and convention, black plays first.
-        self._seat = torch.full((n_envs,), 0, device=device, dtype=torch.int)
-        self._envs = torch.arange(self.n_envs, device=device)
-        self._step = torch.zeros(self.n_envs, device=device)
-
-        self.obs_space = heads.Tensor((self.boardsize, self.boardsize, 2))
-        self.action_space = heads.Masked(self.boardsize*self.boardsize)
-
-    def _states(self, idxs, val=None):
+    def cells(self, idxs, val=None):
         if idxs.size(-1) == 2:
             rows, cols = idxs[..., 0], idxs[..., 1]
-            envs = self._envs[(slice(None),) + (None,)*(idxs.ndim-2)].expand_as(rows)
+            envs = self.envs[(slice(None),) + (None,)*(idxs.ndim-2)].expand_as(rows)
         else: # idxs.size(-1) == 3
             envs, rows, cols = idxs[..., 0], idxs[..., 1], idxs[..., 2]
         
         if val is None:
-            return self._board[envs, rows, cols]
+            return self.board[envs, rows, cols]
         else:
-            self._board[envs, rows, cols] = val
+            self.board[envs, rows, cols] = val
     
-    def _terminate(self, terminate):
-        self._board[terminate] = self._STATES['.']
-        self._seat[terminate] = 0
-
-    def _neighbours(self, idxs):
+    def neighbours(self, idxs):
         if idxs.size(1) == 3:
-            neighbours = self._neighbours(idxs[:, 1:])
+            neighbours = self.neighbours(idxs[:, 1:])
             envs = idxs[:, None, [0]].expand(-1, len(self._NEIGHBOURS), 1)
             return torch.cat([envs, neighbours], 2)
         return (idxs[:, None, :] + self._NEIGHBOURS).clamp(0, self.boardsize-1)
 
-    def _colours(self, x):
+    def colours(self, x):
         colours = x.clone()
         colours[(x == self._STATES['^']) | (x == self._STATES['v'])] = self._STATES['b']
         colours[(x == self._STATES['<']) | (x == self._STATES['>'])] = self._STATES['w']
         return colours
 
-    def _flood(self, actions):
+    def flood(self, actions):
         # This eats 70% of the game's runtime.
-        moves = self._states(actions)
-        colors = self._colours(moves)
+        moves = self.cells(actions)
+        colors = self.colours(moves)
 
         active = torch.stack([moves == self._STATES[s] for s in '<>^v'], 0).any(0)
 
-        idxs = torch.cat([self._envs[:, None], actions], 1)[active]
+        idxs = torch.cat([self.envs[:, None], actions], 1)[active]
         while idxs.size(0) > 0:
-            self._states(idxs, moves[idxs[:, 0]])
-            neighbour_idxs = self._neighbours(idxs)
-            possible = self._states(neighbour_idxs) == colors[idxs[:, 0], None]
+            self.cells(idxs, moves[idxs[:, 0]])
+            neighbour_idxs = self.neighbours(idxs)
+            possible = self.cells(neighbour_idxs) == colors[idxs[:, 0], None]
 
-            touched = torch.zeros_like(self._board, dtype=torch.bool)
+            touched = torch.zeros_like(self.board, dtype=torch.bool)
             touched[tuple(neighbour_idxs[possible].T)] = True
             idxs = touched.nonzero()
 
-    def _update_states(self, actions):
+    def reset(self, terminate):
+        self.board[terminate] = self._STATES['.']
+
+    def step(self, seat, actions):
+        assert (self.cells(actions) == 0).all(), 'One of the actions is to place a token on an already-occupied cell'
+
+        neighbours = self.cells(self.neighbours(actions))
+
+        black = seat == 0
+        white = seat == 1
+        conns = {s: ((neighbours == self._STATES[s]).any(-1)) | self._IS_EDGE[s](actions) for s in self._IS_EDGE}
+
+        new_cells = torch.zeros_like(self.cells(actions))
+        
+        new_cells[black] = self._STATES['b']
+        new_cells[black & conns['^']] = self._STATES['^']
+        new_cells[black & conns['v']] = self._STATES['v']
+        new_cells[black & conns['^'] & conns['v']] = self._STATES['B']
+
+        new_cells[white] = self._STATES['w']
+        new_cells[white & conns['<']] = self._STATES['<']
+        new_cells[white & conns['>']] = self._STATES['>']
+        new_cells[white & conns['<'] & conns['>']] = self._STATES['W']
+
+        terminal = ((new_cells == self._STATES['B']) | (new_cells == self._STATES['W']))
+
+        self.cells(actions, new_cells)
+        self.flood(actions)
+        self.reset(terminal)
+
+        return terminal
+
+HexStateBase = arrdict.namedarrtuple('HexStateBase', ('board', 'seat'))
+class HexState(HexStateBase):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.n_seats = 2
+        self.n_envs = self.board.shape[0]
+        self.boardsize = self.board.shape[1]
+        self.device = self.board.device
+
+        self.obs_space = heads.Tensor((self.boardsize, self.boardsize, 2))
+        self.action_space = heads.Masked(self.boardsize*self.boardsize)
+
+    def _next_state(self, actions):
         if actions.ndim == 1:
             actions = torch.stack([actions // self.boardsize, actions % self.boardsize], -1)
+
+        helper = BoardHelper(self.board)
 
         # White player sees a transposed board, so their actions need transposing back.
         black_actions = actions
         white_actions = actions.flip(1)
-        actions = torch.where(self._seat[:, None] == 0, black_actions, white_actions)
+        actions = torch.where(self.seat[:, None] == 0, black_actions, white_actions)
 
-        assert (self._states(actions) == 0).all(), 'One of the actions is to place a token on an already-occupied cell'
+        terminal = helper.step(self.seat, actions)
 
-        neighbours = self._states(self._neighbours(actions))
+        new_seat = 1 - self.seat
+        new_seat[terminal] = 0
 
-        black = self._seat == 0
-        white = self._seat == 1
-        conns = {s: ((neighbours == self._STATES[s]).any(-1)) | self._IS_EDGE[s](actions) for s in self._IS_EDGE}
+        new_state = type(self)(board=helper.board, seat=new_seat)
 
-        new_state = torch.zeros_like(self._states(actions))
-        
-        new_state[black] = self._STATES['b']
-        new_state[black & conns['^']] = self._STATES['^']
-        new_state[black & conns['v']] = self._STATES['v']
-        new_state[black & conns['^'] & conns['v']] = self._STATES['B']
+        return terminal, new_state
 
-        new_state[white] = self._STATES['w']
-        new_state[white & conns['<']] = self._STATES['<']
-        new_state[white & conns['>']] = self._STATES['>']
-        new_state[white & conns['<'] & conns['>']] = self._STATES['W']
-
-        self._states(actions, new_state)
-        self._flood(actions)
-
-        terminal = ((new_state == self._STATES['B']) | (new_state == self._STATES['W']))
-
-        return terminal
-
-    def _observe(self):
+    def observe(self):
+        cell_states = _cell_states(self.device)
         black_view = torch.stack([
-            torch.stack([self._board == self._STATES[s] for s in 'b^vB']).any(0),
-            torch.stack([self._board == self._STATES[s] for s in 'w<>W']).any(0)], -1).float()
+            torch.stack([self.board == cell_states[s] for s in 'b^vB']).any(0),
+            torch.stack([self.board == cell_states[s] for s in 'w<>W']).any(0)], -1).float()
 
         # White player sees a transposed board
         white_view = black_view.transpose(1, 2).flip(3)
-        obs = black_view.where(self._seat[:, None, None, None] == 0, white_view)
+        obs = black_view.where(self.seat[:, None, None, None] == 0, white_view)
 
         return arrdict.arrdict(
             obs=obs,
             valid=(obs == 0).all(-1).reshape(self.n_envs, -1),
-            seats=self._seat,
-            step=self._step).clone()
-
-    def reset(self):
-        terminal = torch.ones(self.n_envs, dtype=bool, device=self.device)
-        self._terminate(terminal)
-        return self._observe()
+            seats=self.seat).clone()
 
     def step(self, actions):
         """Args:
@@ -165,43 +162,16 @@ class Hex:
         Returns:
 
         """
-        terminal = self._update_states(actions)
-        rewards = torch.zeros((self.n_envs, self.n_seats), device=self.device)
-        rewards[self._envs, self._seat.long()] = terminal.float()
-        rewards[self._envs, 1-self._seat.long()] = -terminal.float()
+        terminal, new_state = self._next_state(actions)
 
-        self._seat = 1 - self._seat
-        self._step += 1
-        self._terminate(terminal)
-        responses = arrdict.arrdict(
+        rewards = torch.zeros((self.n_envs, self.n_seats), device=self.device)
+        rewards.scatter_(1, self.seat[:, None].long(), terminal[:, None].float())
+        rewards.scatter_(1, 1-self.seat[:, None].long(), -terminal[:, None].float())
+
+        transition = arrdict.arrdict(
             terminal=terminal, 
             rewards=rewards)
-        return responses, self._observe()
-
-    def state_dict(self):
-        return arrdict.arrdict(
-            board=self._board, 
-            step=self._step,
-            seat=self._seat).clone()
-
-    def load_state_dict(self, sd):
-        self._board[:] = sd.board
-        self._seat[:] = sd.seat
-        self._step[:] = sd.step
-
-    def __getitem__(self, m):
-        m = as_mask(m, self.n_envs, self.device)
-        n_envs = m.sum()
-        subenv = type(self)(n_envs, self.boardsize, self.device)
-        substate = self.state_dict()[m]
-        subenv.load_state_dict(substate)
-        return subenv
-
-    def __setitem__(self, m, subenv):
-        m = as_mask(m, self.n_envs, self.device)
-        current = self.state_dict()
-        current[m] = subenv.state_dict()
-        self.load_state_dict(current)
+        return transition, new_state
 
     @classmethod
     def plot_state(cls, state, e=0, ax=None):
@@ -256,9 +226,15 @@ class Hex:
         return ax.figure
 
     def display(self, e=0):
-        ax = self.plot_state(arrdict.numpyify(self.state_dict()), e=e)
+        ax = self.plot_state(arrdict.numpyify(arrdict.arrdict(self)), e=e)
         plt.close(ax.figure)
         return ax
+
+def create(n_envs, boardsize=11, device='cuda'):
+    # As per OpenSpiel and convention, black plays first.
+    return HexState(
+        board=torch.full((n_envs, boardsize, boardsize), 0, device=device, dtype=torch.int),
+        seat=torch.full((n_envs,), 0, device=device, dtype=torch.int))
 
 ## TESTS ##
 
@@ -297,23 +273,18 @@ def from_string(s, **kwargs):
     '''
     
     """
-    env = Hex(boardsize=board_size(s), **kwargs)
+    state = create(n_envs=1, boardsize=board_size(s), **kwargs)
     for a in board_actions(s):
-        response, inputs = env.step(a[None])
-    return env, inputs
+        response, state = state.step(a[None])
+    return state
 
 def test_basic():
-    h = Hex(1, 3, device='cpu')
-
-    n = h.reset()
+    s = create(1, 3, device='cpu')
 
     for _ in range(20):
-        mask = (~n.obs.any(-1))
-
-        options = torch.nonzero(mask)
-        move = options[torch.randint(options.size(0), ()), 1:]
-        
-        o, n = h.step(move[None])
+        o = s.observe()
+        actions = torch.distributions.Categorical(probs=o.valid.float()).sample()
+        t, s = s.step(actions)
 
 def open_spiel_board(state):
     # state ordering taken from hex.h 
@@ -323,8 +294,8 @@ def open_spiel_board(state):
     return '\n'.join(' '*i + ' '.join(r) for i, r in enumerate(strs))
 
 def open_spiel_display_str(env, e):
-    strs = env._STRINGS
-    board = env._board[e].clone()
+    strs = _STRINGS
+    board = env.board[e].clone()
     strings = np.vectorize(strs.__getitem__)(board.cpu().numpy())
     return '\n'.join(' '*i + ' '.join(r) for i, r in enumerate(strings))
 
@@ -332,15 +303,15 @@ def test_open_spiel():
     import pyspiel
 
     e = 1
-    ours = Hex(3, 11, device='cpu')
-    new = ours.reset()
+    ours = create(3, 11, device='cpu')
 
     theirs = pyspiel.load_game("hex")
     state = theirs.new_initial_state()
     while True:
-        seat = new.seat[e]
-        our_action = torch.distributions.Categorical(probs=new.mask.float()).sample()
-        old, new = ours.step(our_action)
+        new = ours.observe()
+        seat = new.seats[e]
+        our_action = torch.distributions.Categorical(probs=new.valid.float()).sample()
+        t, ours = ours.step(our_action)
 
         if seat == 0:
             their_action = our_action[e]
@@ -350,7 +321,7 @@ def test_open_spiel():
 
         state.apply_action(their_action)
             
-        if new.terminal[e]:
+        if t.terminal[e]:
             assert state.is_terminal()
             break
             
@@ -360,26 +331,25 @@ def test_open_spiel():
 
 def benchmark(n_envs=4096, n_steps=256):
     import aljpy
-    env = Hex(n_envs)
+    state = create(n_envs)
 
-    inputs = env.reset()
     torch.cuda.synchronize()
     with aljpy.timer() as timer:
         for _ in range(n_steps):
-            actions = torch.distributions.Categorical(probs=inputs.valid.float()).sample()
-            _, inputs = env.step(actions)
+            obs = state.observe()
+            actions = torch.distributions.Categorical(probs=obs.valid.float()).sample()
+            _, state = state.step(actions)
         
         torch.cuda.synchronize()
     print(f'{n_envs*n_steps/timer.time():.0f} samples/sec')
 
 def test_subenvs():
-    env = hex.Hex(n_envs=3, boardsize=5, device='cpu')
-    inputs = env.reset()
-    subenv = env[[1]]
-    subresponse, subinputs = subenv.step(torch.tensor([[0, 0]], dtype=torch.long))
-    env[[1]] = subenv
+    state = create(n_envs=3, boardsize=5, device='cpu')
+    substate = state[[1]].clone()
+    _, substate = substate.step(torch.tensor([[0, 0]], dtype=torch.long))
+    state[[1]] = substate
 
-    board = env.state_dict().board
+    board = state.board
     assert (board[[0, 2]] == 0).all()
     assert (board[1][1:, :] == 0).all()
     assert (board[1][:, 1:] == 0).all()

@@ -40,7 +40,7 @@ class dotdict(OrderedDict):
     
     def copy(self):
         """Shallow-copy the dotdict"""
-        return type(self)(super().copy()) 
+        return type(self)(**self) 
     
     def pipe(self, f, *args, **kwargs):
         """Returns ``f(self, *args, **kwargs)`` . 

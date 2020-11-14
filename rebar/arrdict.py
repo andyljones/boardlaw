@@ -69,7 +69,7 @@ def namedarrtuple(name, fields):
     def __init__(self, *args, **kwargs):
         super(arrdict, self).__init__(*args, **kwargs)
         if set(fields) != set(self):
-            raise KeyError('This NamedArrTuple subclass must be created with exactly the fields {fields}')
+            raise KeyError(f'This NamedArrTuple subclass must be created with exactly the fields {fields}')
 
     def __setitem__(self, x, y):
         if _is_valid_field(x) and (x not in fields):
