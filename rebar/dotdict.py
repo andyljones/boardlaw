@@ -19,12 +19,14 @@ class dotdict(OrderedDict):
             return self[key]
         else:
             try:
-                return self.cast([(k, getattr(v, key)) for k, v in self.items()])
+                gotten = [(k, getattr(v, key)) for k, v in self.items()]
             except AttributeError:
                 raise AttributeError(f"There is no member called '{key}' and one of the leaves has no attribute '{key}'") from None
+            else:
+                return type(self)(gotten)
 
     def __call__(self, *args, **kwargs):
-        return self.cast([(k, v(*args, **kwargs)) for k, v in self.items()])
+        return type(self)([(k, v(*args, **kwargs)) for k, v in self.items()])
 
     def __str__(self):
         return treestr(self)
@@ -40,11 +42,7 @@ class dotdict(OrderedDict):
     
     def copy(self):
         """Shallow-copy the dotdict"""
-        return type(self)(self) 
-
-    def cast(self, x):
-        """Returns a copy of `x` using the appropriate dotdict subclass"""
-        return type(self)(x)
+        return type(self)(**self) 
     
     def pipe(self, f, *args, **kwargs):
         """Returns ``f(self, *args, **kwargs)`` . 
@@ -120,14 +118,6 @@ def treestr(t):
 
     return '\n'.join(s)
 
-def cast(x, y):
-    """Exists to delegate to x.cast(y) if available, else returning y"""
-    if isinstance(x, dotdict):
-        return x.cast(y)
-    elif isinstance(y, dict):
-        return y
-    raise ValueError('Only dicts should be being cast')
-
 def mapping(f):
     """Wraps ``f`` so that when called on a dotdict, ``f`` instead gets called on the dotdict's values
     and a dotdict of the results is returned. Extra ``*args`` and ``**kwargs`` passed to the wrapper are
@@ -150,7 +140,7 @@ def mapping(f):
     @wraps(f)
     def g(x, *args, **kwargs):
         if isinstance(x, dict):
-            return cast(x, ([(k, g(v, *args, **kwargs)) for k, v in x.items()]))
+            return type(x)([(k, g(v, *args, **kwargs)) for k, v in x.items()])
         if isinstance(f, str):
             return getattr(x, f)(*args, **kwargs)
         return f(x, *args, **kwargs)
@@ -176,7 +166,7 @@ def starmapping(f):
     @wraps(f)
     def g(x, *args, **kwargs):
         if isinstance(x, dict):
-            return cast(x, ([(k, g(x[k], *(a[k] for a in args))) for k in x]))
+            return type(x)([(k, g(x[k], *(a[k] for a in args))) for k in x])
         if isinstance(f, str):
             return getattr(x, f)(*args)
         else:

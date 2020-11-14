@@ -1,7 +1,6 @@
-from rebar.arrdict import arrtype
 import torch
 from . import heads
-from rebar import dotdict, arrdict
+from rebar import arrdict
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
@@ -111,6 +110,10 @@ class HexWorld(HexWorldBase):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if not isinstance(self.board, torch.Tensor):
+            # Need this conditional to deal with the case where we're calling a method like `self.clone()`, and the
+            # intermediate arrdict generated is full of methods, which will break this here init function.
+            return 
 
         self.n_seats = 2
         self.n_envs = self.board.shape[0]
@@ -237,18 +240,6 @@ class HexWorld(HexWorldBase):
         plt.close(ax.figure)
         return ax
 
-    def copy(self):
-        return type(self)(**self)
-    
-    def cast(self, x):
-        t = arrdict.arrtype(x)
-        if t is torch.Tensor:
-            return type(self)(**x)
-        if t is np.ndarray:
-            return arrdict.arrdict(**x)
-        else:
-            return dotdict.dotdict(**x)
-
 def create(n_envs, boardsize=11, device='cuda'):
     # As per OpenSpiel and convention, black plays first.
     return HexWorld(
@@ -294,7 +285,7 @@ def from_string(s, **kwargs):
     """
     state = create(n_envs=1, boardsize=board_size(s), **kwargs)
     for a in board_actions(s):
-        state, response = state.step(a[None])
+        state, trans = state.step(a[None])
     return state
 
 def test_basic():

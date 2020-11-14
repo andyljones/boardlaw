@@ -50,12 +50,6 @@ def _arrdict_factory():
             else:
                 return super().__getattr__(name)(rhs)
 
-        def cast(self, x):
-            if all(isinstance(y, (torch.Tensor, np.ndarray)) for y in x):
-                return type(self)(x)
-            else:
-                return dotdict.dotdict(x)
-
     # Add binary methods
     # https://docs.python.org/3/reference/datamodel.html#emulating-numeric-types
     binaries = [
@@ -86,20 +80,6 @@ def namedarrtuple(name, fields):
         raise KeyError('Cannot delete keys from this immutable NameArrTuple subclass')
 
     return type(name, (arrdict,), {'__init__': __init__, '__setitem__': __setitem__})
-
-cast = dotdict.cast
-
-def arrtype(x):
-    if isinstance(x, arrdict):
-        types = {arrtype(y) for y in x.values()}
-        if len(types) == 1:
-            return list(types)[0]
-    if isinstance(x, torch.Tensor):
-        return torch.Tensor
-    if isinstance(x, np.ndarray):
-        return np.ndarray
-    return None
-
 
 @dotdict.mapping
 def torchify(a):
@@ -155,7 +135,7 @@ def stack(x, *args, **kwargs):
     """
     if isinstance(x[0], dict):
         ks = x[0].keys()
-        return cast(x[0], ({k: stack([y[k] for y in x], *args, **kwargs) for k in ks}))
+        return x[0].__class__({k: stack([y[k] for y in x], *args, **kwargs) for k in ks})
     if TORCH and isinstance(x[0], torch.Tensor):
         return torch.stack(x, *args, **kwargs)
     if isinstance(x[0], np.ndarray):
@@ -182,7 +162,7 @@ def cat(x, *args, **kwargs):
     """
     if isinstance(x[0], dict):
         ks = x[0].keys()
-        return cast(x[0], ({k: cat([y[k] for y in x], *args, **kwargs) for k in ks}))
+        return x[0].__class__({k: cat([y[k] for y in x], *args, **kwargs) for k in ks})
     if TORCH and isinstance(x[0], torch.Tensor):
         return torch.cat(x, *args, **kwargs)
     if isinstance(x[0], np.ndarray):
@@ -198,6 +178,7 @@ def clone(t):
     if hasattr(t, 'copy'):
         return t.copy()
     return t
+
 
 def test_arrdict_setitem():
     d = arrdict(

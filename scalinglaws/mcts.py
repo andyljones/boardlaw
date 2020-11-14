@@ -46,11 +46,16 @@ class MCTS:
         values[~self.valid[envs, nodes]] = -np.inf
         return values.max(-1).indices
 
-    def descend(self):
-        trace = []
+    def descend(self, world):
         current = torch.full_like(self.envs, -1)
         next = torch.full_like(self.envs, 0)
-        final_actions = torch.full_like(self.envs, -1)
+
+        actions = torch.full_like(self.envs, -1)
+        world = world.clone()
+        transition = arrdict.arrdict(
+            terminal=torch.zeros_like(self.terminal[:, self.sim]),
+            rewards=torch.zeros_like(self.rewards[:, self.sim]))
+
         while True:
             interior = (next != -1)
             if not interior.any():
@@ -58,29 +63,15 @@ class MCTS:
 
             current[interior] = next[interior]
 
-            actions = torch.full_like(self.envs, -1)
-            actions[interior] = self.sample(self.envs[interior], current[interior])
-            trace.append(actions)
+            choice = self.sample(self.envs[interior], current[interior])
+            actions[interior] = choice
 
-            final_actions[interior] = actions[interior]
+            world[interior], transition[interior] = world[interior].step(choice)
 
             next = next.clone()
-            next[interior] = self.children[self.envs[interior], current[interior], actions[interior]]
+            next[interior] = self.children[self.envs[interior], current[interior], choice]
 
-        return torch.stack(trace), current, final_actions
-
-    def play(self, world, trace):
-        #TODO: There's a bunch of weirdness here around envs that terminate early. Would
-        # be a lot better to implement maskable envs.
-        world = world.clone()
-        transition = arrdict.arrdict(
-            terminal=torch.zeros_like(self.terminal[:, self.sim]),
-            rewards=torch.zeros_like(self.rewards[:, self.sim]))
-        for a in trace:
-            active = a != -1
-            world[active], transition[active] = world[active].step(a[active])
-
-        return world, transition
+        return current, actions, transition, world
 
     def backup(self, current, v):
         v = v.clone()
@@ -120,12 +111,10 @@ class MCTS:
         if self.sim >= self.n_nodes:
             raise ValueError('Called simulate more times than were declared in the constructor')
 
-        trace, leaf, final_actions = self.descend()
-        self.children[self.envs, leaf, final_actions] = self.sim
+        leaf, actions, transition, world = self.descend(world)
+        self.children[self.envs, leaf, actions] = self.sim
         self.parents[self.envs, self.sim] = leaf
-        self.relation[self.envs, self.sim] = final_actions
-
-        world, transition = self.play(world, trace)
+        self.relation[self.envs, self.sim] = actions
 
         self.valid[:, self.sim] = world.valid
         self.seats[:, self.sim] = world.seats
@@ -173,7 +162,7 @@ class MCTS:
                 q = float(qs[p, r])
                 edge = (p, i)
                 edges.append(edge)
-                labels[edge] = f'{r}, {q:.1f}'
+                labels[edge] = f'{r}, {q:.2f}'
                 edge_vals[edge] = (q - q_min)/(q_max - q_min + 1e-6)
             
         G = nx.from_edgelist(edges)
