@@ -204,11 +204,11 @@ class Hex:
         self.load_state_dict(current)
 
     @classmethod
-    def plot_state(cls, state, e=0):
+    def plot_state(cls, state, e=0, ax=None):
         board = state[e].board
         width = board.shape[1]
 
-        fig, ax = plt.subplots()
+        ax = plt.subplots()[1] if ax is None else ax
         ax.set_aspect(1)
 
         sin60 = np.sin(np.pi/3)
@@ -234,7 +234,7 @@ class Hex:
 
         radius = .5/sin60
         data_to_pixels = ax.transData.get_matrix()[0, 0]
-        pixels_to_points = 1/fig.get_dpi()*72.
+        pixels_to_points = 1/ax.figure.get_dpi()*72.
         size = np.pi*(data_to_pixels*pixels_to_points*radius)**2
         sizes = (size,)*len(coords)
 
@@ -253,7 +253,7 @@ class Hex:
         ax.set_xticks([])
         ax.set_yticks([])
 
-        return fig
+        return ax.figure
 
     def display(self, e=0):
         ax = self.plot_state(arrdict.numpyify(self.state_dict()), e=e)

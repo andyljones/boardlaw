@@ -41,7 +41,7 @@ def _arrdict_factory():
                 raise ValueError('Setting items must be done with a string key or by passing an arrdict')
 
         def __setattr__(self, key, value):
-            raise ValueError('Setting by attribute is not allowed')
+            raise ValueError('Setting by attribute is not allowed; set by key instead')
 
         def __binary_op__(self, name, rhs):
             if isinstance(rhs, dict):

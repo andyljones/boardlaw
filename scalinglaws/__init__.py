@@ -14,6 +14,7 @@ def as_chunk(buffer):
         n_trajs = r.terminal.sum()
         n_inputs = r.terminal.size(0)
         n_samples = r.terminal.nelement()
+        rewards = chunk.responses.rewards.sum(0).sum(0)
         stats.rate('sample-rate/actor', n_samples)
         stats.mean('traj-length', n_samples, n_trajs)
         stats.cumsum('count/traj', n_trajs)
@@ -22,14 +23,11 @@ def as_chunk(buffer):
         stats.cumsum('count/samples', n_samples)
         stats.rate('step-rate/chunks', 1)
         stats.rate('step-rate/inputs', n_inputs)
-        stats.mean('step-reward', r.rewards.sum(), n_samples)
-        stats.mean('traj-reward/mean', r.rewards.sum(), n_trajs)
-        stats.mean('traj-reward/positive', r.rewards.clamp(0, None).sum(), n_trajs)
-        stats.mean('traj-reward/negative', r.rewards.clamp(None, 0).sum(), n_trajs)
+        stats.mean('reward/seat-0', rewards[0], n_trajs)
+        stats.mean('reward/seat-1', rewards[1], n_trajs)
     return chunk
 
 def optimize(network, opt, batch):
-    #TODO: Env should emit batch data delayed so that it can fix the terminal/reward itself.
     i, d0, r = batch.inputs, batch.decisions, batch.responses
     d = network(i, value=True)
 

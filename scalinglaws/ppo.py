@@ -25,13 +25,9 @@ def as_chunk(buffer):
     return chunk
 
 def optimize(agent, opt, batch, entropy=1e-2, gamma=.99, clip=.2):
-    #TODO: Env should emit batch data delayed so that it can fix the terminal/reward itself.
-    deinterlaced = matchers.deinterlace(matchers.symmetrize(batch))
-
-    i, d0, r = deinterlaced.inputs, deinterlaced.decisions, deinterlaced.responses
+    i, d0, r = batch.inputs, batch.decisions, batch.responses
     d = agent(i, value=True)
 
-    logits = learning.flatten(d.logits)
     old_logits = learning.flatten(learning.gather(d0.logits, d0.actions))
     new_logits = learning.flatten(learning.gather(d.logits, d0.actions))
     ratio = (new_logits - old_logits).exp().clamp(.05, 20)
@@ -46,6 +42,7 @@ def optimize(agent, opt, batch, entropy=1e-2, gamma=.99, clip=.2):
     clip_adv = torch.clamp(ratio, 1-clip, 1+clip)*normed_adv
     p_loss = -torch.min(free_adv, clip_adv).mean()
 
+    logits = learning.flatten(d.logits)
     h_loss = (logits.exp()*logits).sum(-1).mean()
     loss = v_loss + p_loss + entropy*h_loss
     
