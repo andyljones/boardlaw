@@ -63,6 +63,23 @@ def _arrdict_factory():
 
 arrdict = _arrdict_factory()
 
+def namedarrtuple(name, fields):
+
+    def __init__(self, **kwargs):
+        if set(fields) != set(kwargs):
+            raise KeyError('This NamedArrTuple subclass must be created with exactly the fields ' + ', '.join(fields))
+        super(arrdict, self).__init__(**kwargs)
+
+    def __setitem__(self, x, y):
+        if x not in fields:
+            raise KeyError(f'Key {x} is not in this immutable NamedArrTuple, and so cannot be added')
+        super(arrdict, self).__setitem__(x, y)
+
+    def __delitem__(self, x):
+        raise KeyError('Cannot delete keys from this immutable NameArrTuple subclass')
+
+    return type(name, (arrdict,), {'__init__': __init__, '__setitem__': __setitem__})
+
 @dotdict.mapping
 def torchify(a):
     """Converts an array or a dict of numpy arrays to CPU tensors.
@@ -178,3 +195,14 @@ def test_arrdict_setattr_error():
 
     with np.testing.assert_raises(ValueError):
         d.a = 'b'
+
+def test_namedarrtuple():
+    D = namedarrtuple('TestNamedArrTuple', ('one', 'two'))
+
+    d = D(one=1, two=2)
+
+    d['one'] = -1
+
+    with np.testing.assert_raises(KeyError):
+        d['three'] = 3
+
