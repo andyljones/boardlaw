@@ -95,17 +95,18 @@ class MoHex:
 
 class MoHexAgent:
 
-    def __init__(self, env=None):
-        # If env is None, then we're just interested in creating an empty shell that we'll manually
-        # initialize.
-        if env is not None:
-            self._proxies = [MoHex(env.boardsize) for _ in range(env.n_envs)]
-            self._prev_obs = torch.zeros((env.n_envs, env.boardsize, env.boardsize, 2), device=env.device)
+    def __init__(self):
+        self._proxies = None
+        self._prev_obs = None
 
-    def __call__(self, inputs):
-        seated_obs = inputs.obs
-        oppo_obs = inputs.obs.transpose(1, 2).flip(3)
-        obs = seated_obs.where(inputs.seats[:, None, None, None] == 0, oppo_obs)
+    def __call__(self, world):
+        if self._proxies is None:
+            self._proxies = [MoHex(world.boardsize) for _ in range(world.n_envs)]
+            self._prev_obs = torch.zeros((world.n_envs, world.boardsize, world.boardsize, 2), device=world.device)
+
+        seated_obs = world.obs
+        oppo_obs = world.obs.transpose(1, 2).flip(3)
+        obs = seated_obs.where(world.seats[:, None, None, None] == 0, oppo_obs)
 
         reset = ((obs == 0) & (self._prev_obs != 0)).any(-1).any(-1).any(-1)
         for env in reset.nonzero():
@@ -120,16 +121,16 @@ class MoHexAgent:
         self._prev_obs = obs
 
         futures = []
-        for proxy, seat in zip(self._proxies, inputs.seats):
+        for proxy, seat in zip(self._proxies, world.seats):
             color = 'bw'[seat]
             futures.append(proxy.solve_async(color))
         
         actions = []
-        for future, seat in zip(futures, inputs.seats):
+        for future, seat in zip(futures, world.seats):
             row, col = future()
             actions.append((row, col) if seat == 0 else (col, row))
 
-        actions = torch.tensor(actions, dtype=torch.long, device=inputs.seats.device)
+        actions = torch.tensor(actions, dtype=torch.long, device=world.device)
 
         # To linear indices
         boardsize = self._prev_obs.size(1)
@@ -140,22 +141,6 @@ class MoHexAgent:
 
     def display(self, e=0):
         return self._proxies[e].display()
-
-    def __getitem__(self, m):
-        n_envs = self._prev_obs.size(0)
-        m = hex.as_mask(m, n_envs, self._prev_obs.device)
-        subagent = type(self)()
-        #TODO: Should I fork these processes? Else it should be that
-        # the masking is a view. Right now it's a bit weird where half the 
-        # subagent's state is shared and half isn't.
-        subagent._proxies = [self._proxies[i] for i in range(n_envs) if m[i]]
-        subagent._prev_obs = self._prev_obs[m]
-        return subagent
-
-    def __setitem__(self, m, subagent):
-        n_envs, _ = self._prev_obs.shape[:2]
-        m = hex.as_mask(m, n_envs, self._prev_obs.device)
-        self._prev_obs[m] = subagent._prev_obs
 
 def test():
     env = hex.Hex(boardsize=3)
