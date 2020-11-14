@@ -68,6 +68,12 @@ class RandomRolloutAgent:
             actions=torch.distributions.Categorical(probs=inputs.valid.float()).sample(),
             v=v)
 
+    def __getitem__(self, m):
+        return type(self)(self.env[m], self.n_rollouts)
+
+    def __setitem__(self, m, subagent):
+        self.env[m] = subagent.env
+
 def uniform_logits(valid):
     return torch.log(valid.float()/valid.sum(-1, keepdims=True))
     

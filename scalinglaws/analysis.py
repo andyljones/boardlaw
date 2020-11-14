@@ -34,6 +34,7 @@ def plot_all(f):
         import matplotlib.pyplot as plt
 
         B = state.seat.shape[0]
+        assert B < 65, f'Plotting {B} traces will be prohibitively slow' 
         n_rows = int(B**.5)
         n_cols = int(np.ceil(B/n_rows))
         fig, axes = plt.subplots(n_rows, n_cols, sharex=True, sharey=True)
@@ -44,12 +45,12 @@ def plot_all(f):
         return fig
     return proxy
 
-def record(env, agents, n_steps):
+def record(env, agents, n_steps, N=None):
     from rebar.recording import ParallelEncoder
     trace = rollout(env, agents, n_steps)
 
     state = arrdict.numpyify(trace.state)
-    with ParallelEncoder(plot_all(env.plot_state), N=0, fps=1) as encoder:
+    with ParallelEncoder(plot_all(env.plot_state), N=N, fps=1) as encoder:
         for i in range(state.board.shape[0]):
             encoder(state[i])
     return encoder

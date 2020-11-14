@@ -210,13 +210,13 @@ def mcts(env, inputs, agent, **kwargs):
 
 class MCTSAgent:
 
-    def __init__(self, env, network, **kwargs):
+    def __init__(self, env, evaluator, **kwargs):
         self.env = env
-        self.network = network
+        self.evaluator = evaluator
         self.kwargs = kwargs
 
     def __call__(self, inputs, value=True):
-        m = mcts(self.env, inputs, self.network, **self.kwargs)
+        m = mcts(self.env, inputs, self.evaluator, **self.kwargs)
         r = m.root()
         return arrdict.arrdict(
             logits=r.logits,
@@ -224,10 +224,11 @@ class MCTSAgent:
             actions=torch.distributions.Categorical(logits=r.logits).sample())
 
     def __getitem__(self, m):
-        return type(self)(self.env[m], self.network, **self.kwargs)
+        return type(self)(self.env[m], self.evaluator[m], **self.kwargs)
 
     def __setitem__(self, m, subagent):
         self.env[m] = subagent.env
+        self.evaluator[m] = subagent.evaluator
 
 from . import validation 
 
