@@ -64,7 +64,7 @@ def _arrdict_factory():
 
 arrdict = _arrdict_factory()
 
-def namedarrtuple(name, fields):
+def namedarrtuple(name='AnonymousNamedArrTuple', fields=()):
 
     def __init__(self, *args, **kwargs):
         super(arrdict, self).__init__(*args, **kwargs)

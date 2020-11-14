@@ -10,16 +10,13 @@ What to test?
 import torch
 from rebar import arrdict
 from . import heads
-from collections import namedtuple
 
 class ProxyAgent:
 
-    def __call__(self, inputs, value=False):
-        decisions = arrdict.arrdict(
-            logits=inputs.logits)
-        if value:
-            decisions['v'] = inputs.v
-        return decisions
+    def __call__(self, world, value=False):
+        return arrdict.arrdict(
+            logits=world.logits,
+            v=world.v)
 
 class RandomAgent:
 
@@ -53,7 +50,7 @@ class RandomRolloutAgent:
 
         return reward
 
-    def __call__(self, world, value=True, **kwargs):
+    def __call__(self, world, value=True):
         v = torch.stack([self.rollout(world) for _ in range(self.n_rollouts)]).mean(0)
         return arrdict.arrdict(
             logits=torch.log(world.valid.float()/world.valid.sum(-1, keepdims=True)),
@@ -63,45 +60,36 @@ class RandomRolloutAgent:
 def uniform_logits(valid):
     return torch.log(valid.float()/valid.sum(-1, keepdims=True))
     
-class InstantWin:
+class InstantWin(arrdict.namedarrtuple(fields=('envs',))):
 
-    def __init__(self, n_envs=1, device='cuda'):
-        self.device = torch.device(device)
-        self.n_envs = n_envs
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not isinstance(self.envs, torch.Tensor):
+            # Need this conditional to deal with the case where we're calling a method like `self.clone()`, and the
+            # intermediate arrdict generated is full of methods, which will break this here init function.
+            return 
+
+        self.device = self.envs.device
+        self.n_envs = len(self.envs)
         self.n_seats = 1
 
         self.obs_space = (0,)
         self.action_space = (1,)
+    
+        self.valid = torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device)
+        self.seats = torch.zeros((self.n_envs,), dtype=torch.long, device=self.device)
 
-    def _observe(self):
-        valid = torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device)
-        return arrdict.arrdict(
-            valid=valid,
-            seats=torch.zeros((self.n_envs,), dtype=torch.long, device=self.device),
-            logits=uniform_logits(valid),
-            v=torch.ones((self.n_envs, self.n_seats), dtype=torch.float, device=self.device))
-
-    def reset(self):
-        return self._observe()
+        self.logits = uniform_logits(self.valid)
+        self.v = torch.ones((self.n_envs, self.n_seats), dtype=torch.float, device=self.device)
 
     def step(self, actions):
-        responses = arrdict.arrdict(
+        trans = arrdict.arrdict(
             terminal=torch.ones((self.n_envs,), dtype=torch.bool, device=self.device),
             rewards=torch.ones((self.n_envs, self.n_seats), dtype=torch.float, device=self.device))
-        
-        return responses, self._observe()
+        return self, trans
 
-    def state_dict(self):
-        return arrdict.arrdict()
-
-    def load_state_dict(self, sd):
-        pass
-
-    def __getitem__(self, m):
-        return InstantWin(self.n_envs)
-
-    def __setitem__(self, x):
-        pass
+def instant_win(n_envs=1, device='cuda'):
+    return InstantWin(envs=torch.arange(n_envs, device=device))
 
 class FirstWinsSecondLoses:
 

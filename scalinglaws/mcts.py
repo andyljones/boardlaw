@@ -204,14 +204,12 @@ class MCTSAgent:
 from . import validation, analysis
 
 def test_trivial():
-    env = validation.InstantWin(device='cpu')
+    world = validation.InstantWin(device='cpu')
     agent = validation.ProxyAgent()
 
-    inputs = env.reset()
+    m = mcts(world, agent, n_nodes=3)
 
-    m = mcts(env, inputs, agent, n_nodes=3)
-
-    expected = torch.tensor([[+1.]], device=env.device)
+    expected = torch.tensor([[+1.]], device=world.device)
     torch.testing.assert_allclose(m.root().v, expected)
 
 def test_two_player():
