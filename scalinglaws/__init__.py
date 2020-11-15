@@ -4,11 +4,11 @@ from rebar import paths, widgets, logging, stats, arrdict, storing
 from . import hex, mcts, networks, learning
 from torch.nn import functional as F
 from logging import getLogger
+from itertools import cycle
 
 log = getLogger(__name__)
 
-def as_chunk(buffer):
-    chunk = arrdict.stack(buffer)
+def chunk_stats(chunk):
     with stats.defer():
         t = chunk.transition
         n_trajs = t.terminal.sum()
@@ -64,7 +64,12 @@ def optimize(network, opt, batch):
         # stats.rel_gradient_norm('rel-norm-grad', agent)
 
 def run():
-    world = hex.create(n_envs=512, boardsize=5, device='cuda')
+    buffer_length = 32
+    batch_size = 2048
+    n_envs = 512
+    buffer_inc = batch_size//n_envs
+
+    world = hex.create(n_envs=n_envs, boardsize=5, device='cuda')
     network = networks.Network(world.obs_space, world.action_space, width=128).to(world.device)
     agent = mcts.MCTSAgent(network, n_nodes=16)
     opt = torch.optim.Adam(network.parameters(), lr=3e-4, amsgrad=True)
@@ -73,9 +78,10 @@ def run():
     compositor = widgets.Compositor()
     paths.clear(run_name)
     with logging.via_dir(run_name, compositor), stats.via_dir(run_name, compositor):
+        buffer = []
+        idxs = cycle(learning.batch_indices(buffer_length, n_envs, batch_size))
         while True:
-            buffer = []
-            for _ in range(32):
+            while len(buffer) < buffer_length:
                 decisions = agent(world, value=True)
                 new_world, transition = world.step(decisions.actions)
                 buffer.append(arrdict.arrdict(
@@ -83,12 +89,15 @@ def run():
                     decisions=decisions,
                     transition=transition).detach())
                 world = new_world
+                log.info('actor stepped')
                 
-            chunk = as_chunk(buffer)
+            chunk = arrdict.stack(buffer)
+            chunk_stats(chunk[-buffer_inc:])
 
-            for idxs in learning.batch_indices(chunk.transition.terminal, 2048):
-                optimize(network, opt, chunk[:, idxs])
-                log.info('learner stepped')
+            optimize(network, opt, chunk[:, next(idxs)])
+            log.info('learner stepped')
+            
+            buffer = buffer[buffer_inc:]
 
             storing.store_latest(run_name, {'network': network, 'opt': opt}, throttle=60)
             storing.store_periodic(run_name, {'network': network, 'opt': opt}, throttle=600)
