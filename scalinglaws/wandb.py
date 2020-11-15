@@ -10,3 +10,6 @@ def init(**kwargs):
     logger = logging.getLogger("wandb")
     logger.setLevel(logging.ERROR)
     wandb.init(**{'project': 'scalinglaws', 'dir': './.wandb'}, **kwargs)
+
+def mean(key, num, denom):
+    pass
