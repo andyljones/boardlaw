@@ -1,8 +1,7 @@
 import numpy as np
 import torch
-import replicate
 from rebar import paths, widgets, logging, stats, arrdict, storing
-from . import hex, mcts, networks, learning, wandb
+from . import hex, mcts, networks, learning
 from torch.nn import functional as F
 from logging import getLogger
 from itertools import cycle
@@ -75,8 +74,9 @@ def run():
     agent = mcts.MCTSAgent(network, n_nodes=16)
     opt = torch.optim.Adam(network.parameters(), lr=3e-4, amsgrad=True)
 
-    wandb.init(name='az-test', project='scalinglaws')
+    run_name = 'az-test'
     compositor = widgets.Compositor()
+    paths.clear(run_name)
     with logging.via_dir(run_name, compositor), stats.via_dir(run_name, compositor):
         buffer = []
         idxs = cycle(learning.batch_indices(buffer_length, n_envs, batch_size))
