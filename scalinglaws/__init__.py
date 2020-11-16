@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from rebar import paths, widgets, logging, stats, arrdict, storing
-from . import hex, mcts, networks, learning
+from . import hex, mcts, networks, learning, validation
 from torch.nn import functional as F
 from logging import getLogger
 from itertools import cycle
@@ -23,8 +23,8 @@ def chunk_stats(chunk):
         stats.cumsum('count/samples', n_samples)
         stats.rate('step-rate/chunks', 1)
         stats.rate('step-rate/inputs', n_inputs)
-        stats.mean('reward/seat-0', rewards[0], n_trajs)
-        stats.mean('reward/seat-1', rewards[1], n_trajs)
+        for i, r in enumerate(rewards):
+            stats.mean(f'reward/seat-{i}', r, n_trajs)
     return chunk
 
 def optimize(network, opt, batch):
@@ -36,7 +36,7 @@ def optimize(network, opt, batch):
     actual_probs = d.logits.exp()
     policy_loss = -(actual_probs*target_logits).sum(axis=1).mean()
 
-    terminal = torch.stack([t.terminal, t.terminal], -1)
+    terminal = torch.stack([t.terminal for _ in range(w.n_seats)], -1)
     target_value = learning.reward_to_go(t.rewards, d0.v, terminal, terminal, gamma=1)
     value_loss = (target_value - d.v).square().mean()
     
@@ -69,12 +69,12 @@ def run():
     n_envs = 512
     buffer_inc = batch_size//n_envs
 
-    world = hex.Hex.initial(n_envs=n_envs, boardsize=5, device='cuda')
-    network = networks.Network(world.obs_space, world.action_space, width=128).to(world.device)
-    agent = mcts.MCTSAgent(network, n_nodes=96)
+    world = validation.AllOnes.initial(n_envs=n_envs, length=1, device='cuda')
+    network = networks.Network(world.obs_space, world.action_space, width=4).to(world.device)
+    agent = mcts.MCTSAgent(network, n_nodes=4)
     opt = torch.optim.Adam(network.parameters(), lr=3e-4, amsgrad=True)
 
-    run_name = paths.timestamp('az-test')
+    run_name = 'validation'
     compositor = widgets.Compositor()
     paths.clear(run_name)
     with logging.via_dir(run_name, compositor), stats.via_dir(run_name, compositor):

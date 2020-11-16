@@ -104,7 +104,7 @@ class MCTS:
         
             current[active] = self.tree.parents[self.envs[active], current[active]]
 
-    def simulate(self, agent):
+    def simulate(self, evaluator):
         if self.sim >= self.n_nodes:
             raise ValueError('Called simulate more times than were declared in the constructor')
 
@@ -125,7 +125,8 @@ class MCTS:
         self.worlds[self.envs, leaves] = world
         self.transitions[self.envs, leaves] = transition
 
-        decisions = agent(world, value=True)
+        with torch.no_grad():
+            decisions = evaluator(world, value=True)
         self.log_pi[self.envs, leaves] = decisions.logits
 
         self.backup(leaves, decisions.v)
@@ -173,7 +174,7 @@ class MCTS:
             
             if p >= 0:
                 r = int(self.tree.relation[e, i].cpu())
-                q, n = float(qs[i]), float(ns[i])
+                q, n = float(qs[i]), int(ns[i])
                 edges[(p, i)] = {
                     'label': f'{r}\n{q:.2f}, {n}',
                     'color':  (q - q_min)/(q_max - q_min + 1e-6)}

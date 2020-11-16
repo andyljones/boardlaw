@@ -47,5 +47,5 @@ class Network(nn.Module):
             #TODO: Maybe the env should handle this? 
             # Or there should be an output space for values? 
             v = self.value(obs, valid=world.valid)
-            outputs['v'] = scatter_values(v, world.seats)
+            outputs['v'] = scatter_values(v, world.seats) if world.n_seats == 2 else v[..., None]
         return outputs

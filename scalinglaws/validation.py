@@ -140,23 +140,25 @@ class AllOnes(arrdict.namedarrtuple(fields=('history', 'idx'))):
         self.n_seats = 1
         self.length = self.history.size(1)
 
-        self.obs_space = (0,)
-        self.action_space = (2,)
+        self.obs_space = heads.Tensor((1,))
+        self.action_space = heads.Masked(2)
 
-        self.valid = torch.ones((self.n_envs, 2), dtype=torch.bool, device=self.device)
-        self.seats = torch.zeros((self.n_envs,), dtype=torch.int, device=self.device)
+        self.valid = torch.ones(self.idx.shape + (2,), dtype=torch.bool, device=self.device)
+        self.seats = torch.zeros_like(self.idx)
 
         self.logits = uniform_logits(self.valid)
 
         correct_so_far = (self.history == 1).sum(-1) == self.idx
         correct_to_go = 2**((self.history == 1).sum(-1) - self.length).float()
+
         v = correct_so_far.float()*correct_to_go
         self.v = v[..., None]
 
-    def step(self, actions):
+        self.obs = self.idx[..., None].float()/self.length
 
+    def step(self, actions):
         history = self.history.clone()
-        history[:, self.idx] = actions
+        history.scatter_(1, self.idx[:, None], actions[:, None])
         idx = self.idx + 1 
 
         transition = arrdict.arrdict(
