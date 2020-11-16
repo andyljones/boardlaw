@@ -1,10 +1,10 @@
-import torch
 import numpy as np
+import torch
 from rebar import arrdict
 
 class MCTS:
 
-    def __init__(self, world, n_nodes, c_puct=2.5):
+    def __init__(self, world, n_nodes, c_puct=2.5): 
         self.device = world.device
         self.n_envs = world.n_envs
         self.n_nodes = n_nodes
@@ -14,128 +14,127 @@ class MCTS:
         self.envs = torch.arange(world.n_envs, device=self.device)
 
         n_actions = np.prod(world.action_space)
-        self.children = self.envs.new_full((world.n_envs, self.n_nodes, n_actions), -1)
-        self.parents = self.envs.new_full((world.n_envs, self.n_nodes), -1)
-        self.relation = self.envs.new_full((world.n_envs, self.n_nodes), -1)
+        self.tree = arrdict.arrdict(
+            children=self.envs.new_full((world.n_envs, self.n_nodes, n_actions), -1),
+            parents=self.envs.new_full((world.n_envs, self.n_nodes), -1),
+            relation=self.envs.new_full((world.n_envs, self.n_nodes), -1))
 
-        #TODO: All of these but the children tensor should not have a 'actions' dim; the field can be attributed
-        # to the parent 
+        self.worlds = arrdict.stack([world for _ in range(self.n_nodes)], 1)
+        
+        self.transitions = arrdict.arrdict(
+            rewards=torch.full((world.n_envs, self.n_nodes, self.n_seats), 0., device=self.device, dtype=torch.float),
+            terminal=torch.full((world.n_envs, self.n_nodes), False, device=self.device, dtype=torch.bool))
+
         self.log_pi = torch.full((world.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
-        self.valid = torch.full((world.n_envs, self.n_nodes, n_actions), False, device=self.device, dtype=torch.bool)
-        self.n = torch.full((world.n_envs, self.n_nodes, n_actions), 0, device=self.device, dtype=torch.int)
-        self.w = torch.full((world.n_envs, self.n_nodes, n_actions, self.n_seats), np.nan, device=self.device)
-        self.terminal = torch.full((world.n_envs, self.n_nodes), False, device=self.device, dtype=torch.bool)
-        self.rewards = torch.full((world.n_envs, self.n_nodes, self.n_seats), 0., device=self.device, dtype=torch.float)
-        self.seats = torch.full((world.n_envs, self.n_nodes), -1, device=self.device, dtype=torch.long)
+
+        self.stats = arrdict.arrdict(
+            n=torch.full((world.n_envs, self.n_nodes), 0, device=self.device, dtype=torch.int),
+            w=torch.full((world.n_envs, self.n_nodes, self.n_seats), 0., device=self.device))
 
         self.sim = 0
+        self.worlds[:, 0] = world
 
         # https://github.com/LeelaChessZero/lc0/issues/694
         self.c_puct = c_puct
 
+    def action_stats(self, envs, nodes):
+        children = self.tree.children[envs, nodes]
+        mask = (children != -1)
+        stats = self.stats[envs[:, None].expand_as(children), children]
+        n = stats.n.where(mask, torch.zeros_like(stats.n))
+        w = stats.w.where(mask[..., None], torch.zeros_like(stats.w))
+
+        q = w/n[..., None]
+        q[n == 0] = 0.
+
+        return q, n
+
     def sample(self, envs, nodes):
-        seat = self.seats[envs, nodes]
+        worlds = self.worlds[envs, nodes]
+        q, n = self.action_stats(envs, nodes)
 
         pi = self.log_pi[envs, nodes].exp()
-        q = self.w[envs, nodes, :, seat]/self.n[envs, nodes]
-        n = self.n[envs, nodes]
+
+        seats = worlds.seats[:, None, None].expand(-1, q.size(1), -1)
+        q = q.gather(2, seats.long()).squeeze(-1)
 
         N = n.sum(-1, keepdims=True)
 
         values = q + self.c_puct*pi*N/(1 + n)
-        values[~self.valid[envs, nodes]] = -np.inf
+        values[~worlds.valid] = -np.inf
         return values.max(-1).indices
 
-    def descend(self, world):
-        current = torch.full_like(self.envs, -1)
-        next = torch.full_like(self.envs, 0)
-
-        actions = torch.full_like(self.envs, -1)
-        world = world.clone()
-        transition = arrdict.arrdict(
-            terminal=torch.zeros_like(self.terminal[:, self.sim]),
-            rewards=torch.zeros_like(self.rewards[:, self.sim]))
-
-        #TODO: Handle termination properly
-        while True:
-            interior = (next != -1)
-            if not interior.any():
-                break
-
-            current[interior] = next[interior]
-
-            choice = self.sample(self.envs[interior], current[interior])
-            actions[interior] = choice
-
-            world[interior], transition[interior] = world[interior].step(choice)
-
-            next = next.clone()
-            next[interior] = self.children[self.envs[interior], current[interior], choice]
-
-        return current, actions, transition, world
-
-    def backup(self, current, v):
-        v = v.clone()
-        current = torch.full_like(self.envs, current)
-        while True:
-            active = (self.parents[self.envs, current] != -1)
-            if not active.any():
-                break
-
-            parent = self.parents[self.envs[active], current[active]]
-            relation = self.relation[self.envs[active], current[active]]
-
-            t = self.terminal[self.envs[active], current[active]]
-            v[self.envs[active][t]] = 0. 
-
-            v[active] += self.rewards[self.envs[active], current[active]]
-
-            self.n[self.envs[active], parent, relation] += 1
-            self.w[self.envs[active], parent, relation] += v[active]
-
-            current[active] = parent
-
-    def initialize(self, world, agent):
-        self.valid[:, self.sim] = world.valid
-        self.seats[:, self.sim] = world.seats
-        self.terminal[:, self.sim] = False
-        self.rewards[:, self.sim] = 0
-
-        decisions = agent(world, value=True)
+    def initialize(self, agent):
+        decisions = agent(self.worlds[:, 0], value=True)
         self.log_pi[:, self.sim] = decisions.logits
-        self.w[:, self.sim] = 0.
-        self.n[:, self.sim] = 0 
 
         self.sim += 1
 
-    def simulate(self, world, agent):
+    def descend(self):
+        current = torch.full_like(self.envs, 0)
+        actions = torch.full_like(self.envs, -1)
+        parents = torch.full_like(self.envs, 0)
+
+        while True:
+            interior = ~torch.isnan(self.log_pi[self.envs, current]).any(-1)
+            terminal = self.transitions.terminal[self.envs, current]
+            active = interior & ~terminal
+            if not active.any():
+                break
+
+            actions[active] = self.sample(self.envs[active], current[active])
+            parents[active] = current[active]
+            current[active] = self.tree.children[self.envs[active], current[active], actions[active]]
+        
+        return parents, actions
+
+    def backup(self, leaves, v):
+        current, v = leaves.clone(), v.clone()
+        while True:
+            active = (current != -1)
+            if not active.any():
+                break
+
+            t = self.transitions.terminal[self.envs[active], current[active]]
+            v[self.envs[active][t]] = 0. 
+            v[active] += self.transitions.rewards[self.envs[active], current[active]]
+
+            self.stats.n[self.envs[active], current[active]] += 1
+            self.stats.w[self.envs[active], current[active]] += v[active]
+        
+            current[active] = self.tree.parents[self.envs[active], current[active]]
+
+    def simulate(self, agent):
         if self.sim >= self.n_nodes:
             raise ValueError('Called simulate more times than were declared in the constructor')
 
-        leaf, actions, transition, world = self.descend(world)
-        self.children[self.envs, leaf, actions] = self.sim
-        self.parents[self.envs, self.sim] = leaf
-        self.relation[self.envs, self.sim] = actions
+        parents, actions = self.descend()
 
-        self.valid[:, self.sim] = world.valid
-        self.seats[:, self.sim] = world.seats
-        self.terminal[:, self.sim] = transition.terminal
-        self.rewards[:, self.sim] = transition.rewards
+        # If the transition is terminal - and so we stopped our descent early
+        # we don't want to end up creating a new node. 
+        leaves = self.tree.children[self.envs, parents, actions]
+        leaves[leaves == -1] = self.sim
+
+        self.tree.children[self.envs, parents, actions] = leaves
+        self.tree.parents[self.envs, leaves] = parents
+        self.tree.relation[self.envs, leaves] = actions
+
+        old_world = self.worlds[self.envs, parents]
+        world, transition = old_world.step(actions)
+
+        self.worlds[self.envs, leaves] = world
+        self.transitions[self.envs, leaves] = transition
 
         decisions = agent(world, value=True)
-        self.log_pi[:, self.sim] = decisions.logits
-        self.w[:, self.sim] = 0
-        self.n[:, self.sim] = 0 
+        self.log_pi[self.envs, leaves] = decisions.logits
 
-        self.backup(self.sim, decisions.v)
+        self.backup(leaves, decisions.v)
 
         self.sim += 1
 
     def root(self):
-        p = self.n[:, 0].float()/self.n[:, 0].sum(-1, keepdims=True)
-
-        q = self.w[:, 0, :]/self.n[:, 0, ..., None]
-        q[p == 0] = 0.
+        q, n = self.action_stats(self.envs, torch.zeros_like(self.envs))
+        p = n.float()/n.sum(-1, keepdims=True)
 
         #TODO: Is this how I should be evaluating root value?
         # Not actually used in AlphaZero at all, but it's nice to have around for validation
@@ -149,41 +148,54 @@ class MCTS:
         import networkx as nx
         import matplotlib.pyplot as plt
 
-        root_seat = self.seats[e, 0]
+        root_seat = self.worlds[:, 0].seats[e]
 
-        edges, labels, edge_vals = [], {}, {}
-        ws = self.w[e, ..., root_seat]
-        ns = self.n[e]
+        ws = self.stats.w[e, ..., root_seat]
+        ns = self.stats.n[e]
         qs = (ws/ns).where(ns > 0, torch.zeros_like(ws)).cpu()
         q_min, q_max = np.nanmin(qs), np.nanmax(qs)
-        for i, p in enumerate(self.parents[e].cpu()):
-            p = int(p)
-            if p >= 0:
-                r = int(self.relation[e][i].cpu())
-                q = float(qs[p, r])
-                n = int(ns[p, r])
-                edge = (p, i)
-                edges.append(edge)
-                labels[edge] = f'{r}\n{q:.2f}, {n}'
-                edge_vals[edge] = (q - q_min)/(q_max - q_min + 1e-6)
+
+        nodes, edges = {}, {}
+        for i in range(self.sim):
+            p = int(self.tree.parents[e, i].cpu())
+            if (i == 0) or (p >= 0):
+                t = self.transitions.terminal[e, i].cpu().numpy()
+                if i == 0:
+                    color = 'C0'
+                elif t:
+                    color = 'C3'
+                else:
+                    color = 'C2'
+                nodes[i] = {
+                    'label': f'{i}', 
+                    'color': color}
             
+            if p >= 0:
+                r = int(self.tree.relation[e, i].cpu())
+                q, n = float(qs[i]), float(ns[i])
+                edges[(p, i)] = {
+                    'label': f'{r}\n{q:.2f}, {n}',
+                    'color':  (q - q_min)/(q_max - q_min + 1e-6)}
+
         G = nx.from_edgelist(edges)
-        colors = ['C1' if t else 'C2' for t in self.terminal.float()[e].cpu().numpy()]
-        edge_colors = [edge_vals[e] for e in G.edges()]
 
         pos = nx.kamada_kawai_layout(G)
-        nx.draw(G, pos, node_color=colors, edge_color=edge_colors, width=5)
-        nx.draw_networkx_edge_labels(G, pos, edge_labels=labels, font_size='x-small')
-        nx.draw_networkx_labels(G, pos, labels={i: i for i in range(self.n_nodes)})
+        nx.draw(G, pos, 
+            node_color=[nodes[i]['color'] for i in G.nodes()],
+            edge_color=[edges[e]['color'] for e in G.edges()], width=5)
+        nx.draw_networkx_edge_labels(G, pos, font_size='x-small',
+            edge_labels={e: d['label'] for e, d in edges.items()})
+        nx.draw_networkx_labels(G, pos, 
+            labels={i: d['label'] for i, d in nodes.items()})
 
         return plt.gca()
 
 def mcts(world, agent, **kwargs):
     mcts = MCTS(world, **kwargs)
 
-    mcts.initialize(world, agent)
+    mcts.initialize(agent)
     for _ in range(mcts.n_nodes-1):
-        mcts.simulate(world, agent)
+        mcts.simulate(agent)
 
     return mcts
 
@@ -204,7 +216,7 @@ class MCTSAgent:
 from . import validation, analysis
 
 def test_trivial():
-    world = validation.InstantWin(device='cpu')
+    world = validation.InstantWin.initial(device='cpu')
     agent = validation.ProxyAgent()
 
     m = mcts(world, agent, n_nodes=3)
@@ -213,36 +225,33 @@ def test_trivial():
     torch.testing.assert_allclose(m.root().v, expected)
 
 def test_two_player():
-    env = validation.FirstWinsSecondLoses(device='cpu')
+    world = validation.FirstWinsSecondLoses.initial(device='cpu')
     agent = validation.ProxyAgent()
-    inputs = env.reset()
 
-    m = mcts(env, inputs, agent, n_nodes=3)
+    m = mcts(world, agent, n_nodes=3)
 
-    expected = torch.tensor([[+1., -1.]], device=env.device)
+    expected = torch.tensor([[+1., -1.]], device=world.device)
     torch.testing.assert_allclose(m.root().v, expected)
 
 def test_depth():
-    env = validation.AllOnes(length=4, device='cpu')
+    world = validation.AllOnes.initial(length=3, device='cpu')
     agent = validation.ProxyAgent()
-    inputs = env.reset()
 
-    m = mcts(env, inputs, agent, n_nodes=15)
+    m = mcts(world, agent, n_nodes=15)
 
-    expected = torch.tensor([[1/8.]], device=env.device)
+    expected = torch.tensor([[1/8.]], device=world.device)
     torch.testing.assert_allclose(m.root().v, expected)
 
 def test_multienv():
     # Need to use a fairly complex env here to make sure we've not got 
     # any singleton dims hanging around internally. They can really ruin
     # a tester's day. 
-    env = validation.AllOnes(n_envs=2, length=3)
+    world = validation.AllOnes.initial(n_envs=2, length=3)
     agent = validation.ProxyAgent()
-    inputs = env.reset()
 
-    m = mcts(env, inputs, agent, n_nodes=15)
+    m = mcts(world, agent, n_nodes=15)
 
-    expected = torch.tensor([[1/8.], [1/8.]], device=env.device)
+    expected = torch.tensor([[1/8.], [1/8.]], device=world.device)
     torch.testing.assert_allclose(m.root().v, expected)
 
 def full_game_mcts(s, n_nodes, n_rollouts, **kwargs):
@@ -281,6 +290,7 @@ def test_planted_game():
     assert ((m.root().v - expected).abs() < 1/3).all()
 
 def test_full_game():
+    from . import hex
     world = hex.Hex.initial(1, boardsize=3, device='cpu')
     black = MCTSAgent(validation.RandomRolloutAgent(4), n_nodes=16, c_puct=.5)
     white = validation.RandomAgent()
@@ -296,7 +306,7 @@ def benchmark(T=16):
     results = []
     for n in np.logspace(0, 14, 15, base=2, dtype=int):
         env = hex.Hex.initial(n_envs=n, boardsize=3, device='cuda')
-        black = MCTSAgent(validation.RandomAgent(), n_nodes=16, c_puct=.5)
+        black = MCTSAgent(validation.RandomAgent(), n_nodes=16)
         white = validation.RandomAgent()
 
         torch.cuda.synchronize()

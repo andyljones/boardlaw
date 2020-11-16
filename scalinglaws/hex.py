@@ -284,13 +284,13 @@ def from_string(s, **kwargs):
     '''
     
     """
-    state = initial(n_envs=1, boardsize=board_size(s), **kwargs)
+    state = Hex.initial(n_envs=1, boardsize=board_size(s), **kwargs)
     for a in board_actions(s):
         state, trans = state.step(a[None])
     return state
 
 def test_basic():
-    s = initial(1, 3, device='cpu')
+    s = Hex.initial(1, 3, device='cpu')
 
     for _ in range(20):
         o = s.observe()
@@ -314,7 +314,7 @@ def test_open_spiel():
     import pyspiel
 
     e = 1
-    ours = initial(3, 11, device='cpu')
+    ours = Hex.initial(3, 11, device='cpu')
 
     theirs = pyspiel.load_game("hex")
     state = theirs.new_initial_state()
@@ -342,7 +342,7 @@ def test_open_spiel():
 
 def benchmark(n_envs=4096, n_steps=256):
     import aljpy
-    world = initial(n_envs)
+    world = Hex.initial(n_envs)
 
     torch.cuda.synchronize()
     with aljpy.timer() as timer:
@@ -355,7 +355,7 @@ def benchmark(n_envs=4096, n_steps=256):
     print(f'{n_envs*n_steps/timer.time():.0f} samples/sec')
 
 def test_subenvs():
-    state = initial(n_envs=3, boardsize=5, device='cpu')
+    state = Hex.initial(n_envs=3, boardsize=5, device='cpu')
     substate = state[[1]].clone()
     _, substate = substate.step(torch.tensor([[0, 0]], dtype=torch.long))
     state[[1]] = substate
