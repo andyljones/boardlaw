@@ -75,7 +75,7 @@ class MCTS:
     def descend(self):
         current = torch.full_like(self.envs, 0)
         actions = torch.full_like(self.envs, -1)
-        leaves = torch.full_like(self.envs, 0)
+        parents = torch.full_like(self.envs, 0)
 
         while True:
             interior = ~torch.isnan(self.log_pi[self.envs, current]).any(-1)
@@ -85,14 +85,13 @@ class MCTS:
                 break
 
             actions[active] = self.sample(self.envs[active], current[active])
-            leaves[active] = current[active]
+            parents[active] = current[active]
             current[active] = self.tree.children[self.envs[active], current[active], actions[active]]
         
-        return leaves, actions
+        return parents, actions
 
-    def backup(self, v):
-        v = v.clone()
-        current = torch.full_like(self.envs, self.sim)
+    def backup(self, leaves, v):
+        current, v = leaves.clone(), v.clone()
         while True:
             active = (current != -1)
             if not active.any():
@@ -101,8 +100,6 @@ class MCTS:
             self.stats.n[self.envs[active], current[active]] += 1
             self.stats.w[self.envs[active], current[active]] += v[active]
 
-            t = self.transitions.terminal[self.envs[active], current[active]]
-            v[self.envs[active][t]] = 0. 
             v[active] += self.transitions.rewards[self.envs[active], current[active]]
         
             current[active] = self.tree.parents[self.envs[active], current[active]]
@@ -111,21 +108,27 @@ class MCTS:
         if self.sim >= self.n_nodes:
             raise ValueError('Called simulate more times than were declared in the constructor')
 
-        leaves, actions = self.descend()
-        self.tree.children[self.envs, leaves, actions] = self.sim
-        self.tree.parents[:, self.sim] = leaves
-        self.tree.relation[:, self.sim] = actions
+        parents, actions = self.descend()
 
-        old_world = self.worlds[self.envs, leaves]
+        # If the transition is terminal - and so we stopped our descent early
+        # we don't want to end up creating a new node. 
+        leaves = self.tree.children[self.envs, parents, actions]
+        leaves[leaves == -1] = self.sim
+
+        self.tree.children[self.envs, parents, actions] = leaves
+        self.tree.parents[self.envs, leaves] = parents
+        self.tree.relation[self.envs, leaves] = actions
+
+        old_world = self.worlds[self.envs, parents]
         world, transition = old_world.step(actions)
 
-        self.worlds[:, self.sim] = world
-        self.transitions[:, self.sim] = transition
+        self.worlds[self.envs, leaves] = world
+        self.transitions[self.envs, leaves] = transition
 
         decisions = agent(world, value=True)
-        self.log_pi[:, self.sim] = decisions.logits
+        self.log_pi[self.envs, leaves] = decisions.logits
 
-        self.backup(decisions.v)
+        self.backup(leaves, decisions.v)
 
         self.sim += 1
 
@@ -147,30 +150,38 @@ class MCTS:
 
         root_seat = self.worlds[:, 0].seats[e]
 
-        edges, labels, edge_vals = [], {}, {}
         ws = self.stats.w[e, ..., root_seat]
         ns = self.stats.n[e]
         qs = (ws/ns).where(ns > 0, torch.zeros_like(ws)).cpu()
         q_min, q_max = np.nanmin(qs), np.nanmax(qs)
-        for i, p in enumerate(self.tree.parents[e].cpu()):
-            p = int(p)
+
+        nodes, edges = {}, {}
+        for i in range(self.sim):
+            p = int(self.tree.parents[e, i].cpu())
+            if (i == 0) or (p >= 0):
+                t = self.transitions.terminal[e, i].cpu().numpy()
+                color = 'C1' if t else 'C2'
+                nodes[i] = {
+                    'label': f'{i}', 
+                    'color': color}
+            
             if p >= 0:
                 r = int(self.tree.relation[e, i].cpu())
-                q = float(qs[i])
-                n = int(ns[i])
-                edge = (p, i)
-                edges.append(edge)
-                labels[edge] = f'{r}\n{q:.2f}, {n}'
-                edge_vals[edge] = (q - q_min)/(q_max - q_min + 1e-6)
-            
+                q, n = float(qs[i]), float(ns[i])
+                edges[(p, i)] = {
+                    'label': f'{r}\n{q:.2f}, {n}',
+                    'color':  (q - q_min)/(q_max - q_min + 1e-6)}
+
         G = nx.from_edgelist(edges)
-        colors = ['C1' if t else 'C2' for t in self.transitions.terminal.float()[e].cpu().numpy()]
-        edge_colors = [edge_vals[e] for e in G.edges()]
 
         pos = nx.kamada_kawai_layout(G)
-        nx.draw(G, pos, node_color=colors, edge_color=edge_colors, width=5)
-        nx.draw_networkx_edge_labels(G, pos, edge_labels=labels, font_size='x-small')
-        nx.draw_networkx_labels(G, pos, labels={i: i for i in range(self.n_nodes)})
+        nx.draw(G, pos, 
+            node_color=[nodes[i]['color'] for i in G.nodes()],
+            edge_color=[edges[e]['color'] for e in G.edges()], width=5)
+        nx.draw_networkx_edge_labels(G, pos, font_size='x-small',
+            edge_labels={e: d['label'] for e, d in edges.items()})
+        nx.draw_networkx_labels(G, pos, 
+            labels={i: d['label'] for i, d in nodes.items()})
 
         return plt.gca()
 
