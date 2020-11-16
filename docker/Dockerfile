@@ -84,6 +84,7 @@ RUN pip install cmake && \\
     # TODO: The install.sh bit will fail here after getting the subrepos we're after.
     cd open_spiel && install.sh && pip install -e . \\
 
+# Set up MoHex
 RUN apt-get install libdb-dev libboost-all-dev && \\
     cd / && \\
     git clone https://github.com/cgao3/benzene-vanilla-cmake.git mohex && \\
@@ -92,6 +93,14 @@ RUN apt-get install libdb-dev libboost-all-dev && \\
     cmake ../ && \\
     make -j4 && \\
     ln -s src/mohex/mohex /bin/mohex
+
+# Only commit the input cells of notebooks
+# https://stackoverflow.com/questions/18734739/using-ipython-notebooks-under-version-control
+RUN curl https://raw.githubusercontent.com/toobaz/ipynb_output_filter/master/ipynb_output_filter.py > /bin/ipynb_output_filter.py && \\
+    echo "*.ipynb   filter=ipynb_output_filter" > /root/.gitattributes && \\
+    git config --global core.attributesfile /root/.gitattributes && \\
+    git config --global filter.ipynb_output_filter.clean /bin/ipynb_output_filter.py && \\
+    git config --global filter.ipynb_output_filter.smudge cat
 
 # Set up the entrypoint script
 ADD dev.sh /usr/bin/
