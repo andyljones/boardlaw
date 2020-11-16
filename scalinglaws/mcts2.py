@@ -37,12 +37,24 @@ class MCTS:
         # https://github.com/LeelaChessZero/lc0/issues/694
         self.c_puct = c_puct
 
+    def action_stats(self, envs, nodes):
+        children = self.tree.children[envs, nodes]
+        mask = (children != -1)
+        stats = self.stats[envs, children]
+        n = stats.n.where(mask, torch.zeros_like(stats.n))
+        w = stats.w.where(mask[..., None], torch.zeros_like(stats.w))
+
+        q = w/n[..., None]
+        q[n == 0] = 0.
+
+        return q, n
+
     def sample(self, envs, nodes):
         worlds = self.worlds[envs, nodes]
+        q, n = self.action_stats(envs, nodes)
 
         pi = self.log_pi[envs, nodes].exp()
-        n = self.stats.n[envs, nodes]
-        q = self.stats.w[envs, nodes, worlds.seats.long()]/n
+        q = q[envs, :, worlds.seats.long()]
 
         N = n.sum(-1, keepdims=True)
 
@@ -67,12 +79,14 @@ class MCTS:
 
         while True:
             interior = ~torch.isnan(self.log_pi[self.envs, current]).any(-1)
-            if not interior.any():
+            terminal = self.transitions.terminal[self.envs, current]
+            active = interior & ~terminal
+            if not active.any():
                 break
 
-            actions[interior] = self.sample(self.envs[interior], current[interior])
-            leaves[interior] = current[interior]
-            current[interior] = self.tree.children[self.envs[interior], current[interior], actions[interior]]
+            actions[active] = self.sample(self.envs[active], current[active])
+            leaves[active] = current[active]
+            current[active] = self.tree.children[self.envs[active], current[active], actions[active]]
         
         return leaves, actions
 
@@ -116,15 +130,8 @@ class MCTS:
         self.sim += 1
 
     def root(self):
-        mask = (self.tree.children[:, 0] != -1)
-        stats = self.stats[self.envs[:, None], self.tree.children[:, 0]]
-        n = stats.n.where(mask, torch.zeros_like(stats.n))
-        w = stats.w.where(mask[..., None], torch.zeros_like(stats.w))
-
-        p = stats.n.float()/stats.n.sum(-1, keepdims=True)
-
-        q = stats.w/stats.n[..., None]
-        q[p == 0] = 0.
+        q, n = self.action_stats(self.envs, torch.zeros_like(self.envs))
+        p = n.float()/n.sum(-1, keepdims=True)
 
         #TODO: Is this how I should be evaluating root value?
         # Not actually used in AlphaZero at all, but it's nice to have around for validation
