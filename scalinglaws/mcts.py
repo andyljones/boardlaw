@@ -2,6 +2,19 @@ import numpy as np
 import torch
 from rebar import arrdict
 
+def search(f, x_min, x_max, eps=1e-3):
+    y_min, y_max = f(x_min), f(x_max)
+    while (abs(y_max - y_min) > eps).any():
+        assert (torch.sign(y_min) != torch.sign(y_max)).any()
+
+        x_mid = (x_min + x_max)/2
+        y_mid = f(y_min)
+
+        x_min = torch.where(torch.sign(y_mid) == torch.sign(y_min), x_mid, x_min)
+        x_max = torch.where(torch.sign(y_mid) == torch.sign(y_max), x_mid, x_max)
+    
+    return (x_min + x_max)/2
+
 class MCTS:
 
     def __init__(self, world, n_nodes, c_puct=2.5): 
@@ -13,9 +26,9 @@ class MCTS:
 
         self.envs = torch.arange(world.n_envs, device=self.device)
 
-        n_actions = np.prod(world.action_space)
+        self.n_actions = np.prod(world.action_space)
         self.tree = arrdict.arrdict(
-            children=self.envs.new_full((world.n_envs, self.n_nodes, n_actions), -1),
+            children=self.envs.new_full((world.n_envs, self.n_nodes, self.n_actions), -1),
             parents=self.envs.new_full((world.n_envs, self.n_nodes), -1),
             relation=self.envs.new_full((world.n_envs, self.n_nodes), -1))
 
@@ -25,7 +38,7 @@ class MCTS:
             rewards=torch.full((world.n_envs, self.n_nodes, self.n_seats), 0., device=self.device, dtype=torch.float),
             terminal=torch.full((world.n_envs, self.n_nodes), False, device=self.device, dtype=torch.bool))
 
-        self.log_pi = torch.full((world.n_envs, self.n_nodes, n_actions), np.nan, device=self.device)
+        self.log_pi = torch.full((world.n_envs, self.n_nodes, self.n_actions), np.nan, device=self.device)
 
         self.stats = arrdict.arrdict(
             n=torch.full((world.n_envs, self.n_nodes), 0, device=self.device, dtype=torch.int),
@@ -63,6 +76,31 @@ class MCTS:
         values = q + self.c_puct*pi*N/(1 + n)
         values[~worlds.valid] = -np.inf
         return values.max(-1).indices
+
+    def reg_probs(self, envs, nodes):
+        # https://arxiv.org/pdf/2007.12509.pdf
+        worlds = self.worlds[envs, nodes]
+        q, n = self.action_stats(envs, nodes)
+
+        seats = worlds.seats[:, None, None].expand(-1, q.size(1), -1)
+        q = q.gather(2, seats.long()).squeeze(-1)
+
+        pi = self.log_pi[envs, nodes].exp()
+
+        N = n.sum(-1, keepdims=True)
+        lambda_n = self.c_puct*N/(self.n_actions + N)
+
+        policy = lambda alpha: lambda_n[:, None]*pi/(alpha[:, None] - q)
+
+        alpha_min = (q + lambda_n*pi).max(-1)
+        alpha_max = q.max(-1) + lambda_n*pi
+        alpha_star = search(lambda alpha: policy(alpha).sum(-1) - 1, alpha_min, alpha_max)
+
+        return policy(alpha_star)
+
+    def reg_sample(self, env, nodes):
+        probs = self.reg_probs(env, nodes)
+        return torch.distributions.Categorical(probs=probs).sample()
 
     def initialize(self, agent):
         decisions = agent(self.worlds[:, 0], value=True)
