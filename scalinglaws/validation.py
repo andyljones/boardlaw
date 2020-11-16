@@ -69,8 +69,6 @@ class InstantWin(arrdict.namedarrtuple(fields=('envs',))):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if not isinstance(self.envs, torch.Tensor):
-            # Need this conditional to deal with the case where we're calling a method like `self.clone()`, and the
-            # intermediate arrdict generated is full of methods, which will break this here init function.
             return 
 
         self.device = self.envs.device
@@ -101,8 +99,6 @@ class FirstWinsSecondLoses(arrdict.namedarrtuple(fields=('seats',))):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if not isinstance(self.seats, torch.Tensor):
-            # Need this conditional to deal with the case where we're calling a method like `self.clone()`, and the
-            # intermediate arrdict generated is full of methods, which will break this here init function.
             return 
 
         self.device = self.seats.device
@@ -126,56 +122,51 @@ class FirstWinsSecondLoses(arrdict.namedarrtuple(fields=('seats',))):
         return type(self)(seats=1-self.seats), trans
 
 
-class AllOnes:
+class AllOnes(arrdict.namedarrtuple(fields=('history', 'idx'))):
 
-    def __init__(self, n_envs=1, length=4, device='cpu'):
-        self.device = device 
-        self.n_envs = n_envs
+    @classmethod
+    def initial(cls, n_envs=1, length=4, device='cuda'):
+        return cls(
+            history=torch.full((n_envs, length), -1, dtype=torch.long, device=device),
+            idx=torch.full((n_envs,), 0, dtype=torch.long, device=device))
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not isinstance(self.idx, torch.Tensor):
+            return 
+
+        self.device = self.idx.device 
+        self.n_envs = len(self.idx)
         self.n_seats = 1
-        self.length = length
+        self.length = self.history.size(1)
 
         self.obs_space = (0,)
         self.action_space = (2,)
-        self.history = torch.full((n_envs, length), -1, dtype=torch.long, device=self.device)
-        self.idx = torch.full((n_envs,), 0, dtype=torch.long, device=self.device)
 
-    def _observe(self):
-        correct_so_far = (self.history == 1).sum(-1) == self.idx+1
+        self.valid = torch.ones((self.n_envs, 2), dtype=torch.bool, device=self.device)
+        self.seats = torch.zeros((self.n_envs,), dtype=torch.int, device=self.device)
+
+        self.logits = uniform_logits(self.valid)
+
+        correct_so_far = (self.history == 1).sum(-1) == self.idx
         correct_to_go = 2**((self.history == 1).sum(-1) - self.length).float()
         v = correct_so_far.float()*correct_to_go
-
-        valid = torch.ones((self.n_envs, 2), dtype=torch.bool, device=self.device)
-        return arrdict.arrdict(
-            valid=valid,
-            seats=torch.zeros((self.n_envs,), dtype=torch.int, device=self.device),
-            logits=uniform_logits(valid),
-            v=v[..., None]).clone()
-
-    def reset(self):
-        return self._observe()
+        self.v = v[..., None]
 
     def step(self, actions):
-        self.history[:, self.idx] = actions
 
-        inputs = self._observe()
+        history = self.history.clone()
+        history[:, self.idx] = actions
+        idx = self.idx + 1 
 
-        self.idx += 1 
+        transition = arrdict.arrdict(
+            terminal=(idx == self.length),
+            rewards=((idx == self.length) & (history == 1).all(-1))[:, None].float())
 
-        response = arrdict.arrdict(
-            terminal=(self.idx == self.length),
-            rewards=((self.idx == self.length) & (self.history == 1).all(-1))[:, None].float())
-
-        self.idx[response.terminal] = 0
-        self.history[response.terminal] = -1
+        idx[transition.terminal] = 0
+        history[transition.terminal] = -1
         
-        return response, inputs
-
-    def state_dict(self):
-        return arrdict.arrdict(
-            history=self.history,
-            idx=self.idx).clone()
-
-    def load_state_dict(self, d):
-        self.history = d.history
-        self.idx = d.idx
-
+        world = type(self)(
+            history=history,
+            idx=idx)
+        return world, transition

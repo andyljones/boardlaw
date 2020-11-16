@@ -218,13 +218,12 @@ def test_two_player():
     torch.testing.assert_allclose(m.root().v, expected)
 
 def test_depth():
-    env = validation.AllOnes(length=4, device='cpu')
+    world = validation.AllOnes.initial(length=3, device='cpu')
     agent = validation.ProxyAgent()
-    inputs = env.reset()
 
-    m = mcts(env, inputs, agent, n_nodes=15)
+    m = mcts(world, agent, n_nodes=15)
 
-    expected = torch.tensor([[1/8.]], device=env.device)
+    expected = torch.tensor([[1/8.]], device=world.device)
     torch.testing.assert_allclose(m.root().v, expected)
 
 
