@@ -200,13 +200,33 @@ class MCTSAgent:
 from . import validation, analysis
 
 def test_trivial():
-    world = validation.InstantWin(envs=torch.arange(1, device='cpu'))
+    world = validation.InstantWin.create(device='cpu')
     agent = validation.ProxyAgent()
 
     m = mcts(world, agent, n_nodes=3)
 
     expected = torch.tensor([[+1.]], device=world.device)
     torch.testing.assert_allclose(m.root().v, expected)
+
+def test_two_player():
+    world = validation.FirstWinsSecondLoses.create(device='cpu')
+    agent = validation.ProxyAgent()
+
+    m = mcts(world, agent, n_nodes=3)
+
+    expected = torch.tensor([[+1., -1.]], device=world.device)
+    torch.testing.assert_allclose(m.root().v, expected)
+
+def test_depth():
+    env = validation.AllOnes(length=4, device='cpu')
+    agent = validation.ProxyAgent()
+    inputs = env.reset()
+
+    m = mcts(env, inputs, agent, n_nodes=15)
+
+    expected = torch.tensor([[1/8.]], device=env.device)
+    torch.testing.assert_allclose(m.root().v, expected)
+
 
 def full_game_mcts(s, n_nodes, n_rollouts, **kwargs):
     from . import hex

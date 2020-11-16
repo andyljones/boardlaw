@@ -62,6 +62,10 @@ def uniform_logits(valid):
     
 class InstantWin(arrdict.namedarrtuple(fields=('envs',))):
 
+    @classmethod
+    def create(cls, n_envs=1, device='cuda'):
+        return cls(envs=torch.arange(n_envs, device=device))
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if not isinstance(self.envs, torch.Tensor):
@@ -88,51 +92,39 @@ class InstantWin(arrdict.namedarrtuple(fields=('envs',))):
             rewards=torch.ones((self.n_envs, self.n_seats), dtype=torch.float, device=self.device))
         return self, trans
 
-def instant_win(n_envs=1, device='cuda'):
-    return InstantWin(envs=torch.arange(n_envs, device=device))
+class FirstWinsSecondLoses(arrdict.namedarrtuple(fields=('seats',))):
 
-class FirstWinsSecondLoses:
+    @classmethod
+    def create(cls, n_envs=1, device='cuda'):
+        return cls(seats=torch.zeros(n_envs, device=device, dtype=torch.int))
 
-    def __init__(self, n_envs=1, device='cuda'):
-        self.device = torch.device(device)
-        self.n_envs = n_envs
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not isinstance(self.seats, torch.Tensor):
+            # Need this conditional to deal with the case where we're calling a method like `self.clone()`, and the
+            # intermediate arrdict generated is full of methods, which will break this here init function.
+            return 
+
+        self.device = self.seats.device
+        self.n_envs = len(self.seats)
         self.n_seats = 2
 
         self.obs_space = (0,)
         self.action_space = (1,)
+    
+        self.valid = torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device)
+        self.seats = self.seats
 
-        self._seats = torch.zeros((self.n_envs,), dtype=torch.long, device=self.device)
-
-    def _observe(self):
-        valid = torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device)
-        return arrdict.arrdict(
-            valid=valid,
-            seats=self._seats,
-            logits=uniform_logits(valid),
-            v=torch.tensor([[+1., -1.]], device=self.device).expand(self.n_envs, 2)).clone()
-
-    def reset(self):
-        return self._observe()
+        self.logits = uniform_logits(self.valid)
+        self.v = torch.stack([torch.ones_like(self.seats), -torch.ones_like(self.seats)], -1).float()
 
     def step(self, actions):
-        terminal = (self._seats == 1)
-        responses = arrdict.arrdict(
+        terminal = (self.seats == 1)
+        trans = arrdict.arrdict(
             terminal=terminal,
             rewards=torch.stack([terminal.float(), -terminal.float()], -1))
+        return type(self)(seats=1-self.seats), trans
 
-        self._seats += 1
-        self._seats[responses.terminal] = 0
-
-        inputs = self._observe()
-        
-        return responses, inputs
-
-    def state_dict(self):
-        return arrdict.arrdict(
-            seat=self._seats).clone()
-
-    def load_state_dict(self, sd):
-        self._seats[:] = sd.seat
 
 class AllOnes:
 
