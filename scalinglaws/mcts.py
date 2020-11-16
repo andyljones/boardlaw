@@ -2,17 +2,31 @@ import numpy as np
 import torch
 from rebar import arrdict
 
-def search(f, x_min, x_max, eps=1e-3):
+def search(f, x_min, x_max, tol=1e-3):
+    # Widen the borders just a lil, to handle annoying floating-point issues.
     while True: 
         x_mid = (x_min + x_max)/2
         y_min, y_mid, y_max = f(x_min), f(x_mid), f(x_max)
+        s_min, s_mid, s_max = torch.sign(y_min), torch.sign(y_mid), torch.sign(y_max)
+        c_min, c_mid, c_max = y_min.abs() < tol/2, y_mid.abs() < tol, y_max.abs() < tol/2
 
-        if (abs(y_mid) < eps).all():
+        if c_mid.all():
             return x_mid
 
-        assert (torch.sign(y_min) != torch.sign(y_max)).all()
-        x_min = torch.where(torch.sign(y_mid) == torch.sign(y_min), x_mid, x_min)
-        x_max = torch.where(torch.sign(y_mid) == torch.sign(y_max), x_mid, x_max)
+        assert ((s_min != s_max) | c_min | c_max).all()
+        in_left = (s_min != s_mid) | c_min
+        x_min[~in_left] = x_mid[~in_left]
+        x_max[in_left] = x_mid[in_left]
+
+def regularized_policy(pi, q, lambda_n):
+    policy = lambda alpha: lambda_n[:, None]*pi/(alpha[:, None] - q + 1e-6)
+    error = lambda alpha: policy(alpha).sum(-1) - 1
+
+    alpha_min = (q + lambda_n[:, None]*pi).max(-1).values
+    alpha_max = q.max(-1).values + lambda_n
+    alpha_star = search(error, alpha_min, alpha_max)
+
+    return policy(alpha_star)
 
 class MCTS:
 
@@ -61,26 +75,8 @@ class MCTS:
 
         return q, n
 
-    def sample_old(self, envs, nodes):
-        worlds = self.worlds[envs, nodes]
-        q, n = self.action_stats(envs, nodes)
-
-        pi = self.log_pi[envs, nodes].exp()
-
-        seats = worlds.seats[:, None, None].expand(-1, q.size(1), -1)
-        q = q.gather(2, seats.long()).squeeze(-1)
-
-        N = n.sum(-1, keepdims=True)
-
-        values = q + self.c_puct*pi*N/(1 + n)
-        values[~worlds.valid] = -np.inf
-        return values.max(-1).indices
-
     def policy(self, envs, nodes):
-
         pi = self.log_pi[envs, nodes].exp()
-        if self.sim <= 1:
-            return pi
 
         # https://arxiv.org/pdf/2007.12509.pdf
         worlds = self.worlds[envs, nodes]
@@ -92,13 +88,11 @@ class MCTS:
         N = n.sum(-1)
         lambda_n = self.c_puct*N/(self.n_actions + N)
 
-        policy = lambda alpha: lambda_n[:, None]*pi/(alpha[:, None] - q)
+        policy = pi.clone()
+        if (N > 0).any():
+            policy[N > 0] = regularized_policy(pi[N > 0], q[N > 0], lambda_n[N > 0])
 
-        alpha_min = (q + lambda_n[:, None]*pi).max(-1).values
-        alpha_max = q.max(-1).values + lambda_n
-        alpha_star = search(lambda alpha: policy(alpha).sum(-1) - 1, alpha_min, alpha_max)
-
-        return policy(alpha_star)
+        return policy
 
     def sample(self, env, nodes):
         probs = self.policy(env, nodes)
