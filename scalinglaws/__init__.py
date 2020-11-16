@@ -64,14 +64,14 @@ def optimize(network, opt, batch):
         # stats.rel_gradient_norm('rel-norm-grad', agent)
 
 def run():
-    buffer_length = 32
+    buffer_length = 1
     batch_size = 2048
-    n_envs = 512
+    n_envs = 2048
     buffer_inc = batch_size//n_envs
 
     world = validation.AllOnes.initial(n_envs=n_envs, length=1, device='cuda')
     network = networks.Network(world.obs_space, world.action_space, width=4).to(world.device)
-    agent = mcts.MCTSAgent(network, n_nodes=4)
+    agent = mcts.MCTSAgent(network, n_nodes=16)
     opt = torch.optim.Adam(network.parameters(), lr=3e-4, amsgrad=True)
 
     run_name = 'validation'
