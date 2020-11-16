@@ -85,7 +85,7 @@ class MCTS:
             actions[active] = self.sample(self.envs[active], current[active])
             parents[active] = current[active]
             current[active] = self.tree.children[self.envs[active], current[active], actions[active]]
-        
+
         return parents, actions
 
     def backup(self, leaves, v):
@@ -135,6 +135,7 @@ class MCTS:
     def root(self):
         q, n = self.action_stats(self.envs, torch.zeros_like(self.envs))
         p = n.float()/n.sum(-1, keepdims=True)
+        p[n == 0] = 0
 
         #TODO: Is this how I should be evaluating root value?
         # Not actually used in AlphaZero at all, but it's nice to have around for validation

@@ -163,6 +163,7 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seat'))):
             #TODO: Support stepping arbitrary batchings. Only needs a reshaping.
             raise ValueError('You can only step a board with a single batch dimension')
 
+        assert (0 <= actions).all(), 'You passed a negative action'
         if actions.ndim == 1:
             actions = torch.stack([actions // self.boardsize, actions % self.boardsize], -1)
 

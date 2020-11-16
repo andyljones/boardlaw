@@ -32,9 +32,9 @@ def optimize(network, opt, batch):
     d = network(w, value=True)
 
     target_logits = d0.logits
+    target_logits[torch.isinf(target_logits)] = 0.
     actual_probs = d.logits.exp()
-    policy_terms = -(actual_probs*target_logits).where(w.valid, torch.zeros_like(actual_probs))
-    policy_loss = policy_terms.sum(axis=1).mean()
+    policy_loss = -(actual_probs*target_logits).sum(axis=1).mean()
 
     terminal = torch.stack([t.terminal, t.terminal], -1)
     target_value = learning.reward_to_go(t.rewards, d0.v, terminal, terminal, gamma=1)
