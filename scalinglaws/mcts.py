@@ -8,22 +8,26 @@ def search(f, x_min, x_max, tol=1e-3):
         x_mid = (x_min + x_max)/2
         y_min, y_mid, y_max = f(x_min), f(x_mid), f(x_max)
         s_min, s_mid, s_max = torch.sign(y_min), torch.sign(y_mid), torch.sign(y_max)
-        c_min, c_mid, c_max = y_min.abs() < tol/2, y_mid.abs() < tol, y_max.abs() < tol/2
+        c_min, c_mid, c_max = y_min.abs() < tol, y_mid.abs() < tol, y_max.abs() < tol
 
         if c_mid.all():
             return x_mid
+        if torch.isnan(y_min + y_mid + y_max).any():
+            raise ValueError('Hit a nan')
+        if not ((s_min != s_max) | c_min | c_max).all():
+            raise ValueError('Root has escaped interval')
 
-        assert ((s_min != s_max) | c_min | c_max).all()
         in_left = (s_min != s_mid) | c_min
         x_min[~in_left] = x_mid[~in_left]
         x_max[in_left] = x_mid[in_left]
 
 def regularized_policy(pi, q, lambda_n):
-    policy = lambda alpha: lambda_n[:, None]*pi/(alpha[:, None] - q + 1e-6)
+    alpha_min = (q + lambda_n[:, None]*pi + 1e-6).max(-1).values
+    alpha_max = q.max(-1).values + lambda_n
+
+    policy = lambda alpha: lambda_n[:, None]*pi/(alpha[:, None] - q)
     error = lambda alpha: policy(alpha).sum(-1) - 1
 
-    alpha_min = (q + lambda_n[:, None]*pi).max(-1).values
-    alpha_max = q.max(-1).values + lambda_n
     alpha_star = search(error, alpha_min, alpha_max)
 
     return policy(alpha_star)
@@ -71,7 +75,11 @@ class MCTS:
         w = stats.w.where(mask[..., None], torch.zeros_like(stats.w))
 
         q = w/n[..., None]
-        q[n == 0] = 0.
+
+        # Q scaling + pessimistic initialization
+        q[n == 0] = 0 
+        q = (q - q.min())/(q.max() - q.min() + 1e-6)
+        q[n == 0] = 0 
 
         return q, n
 
@@ -85,12 +93,11 @@ class MCTS:
         seats = worlds.seats[:, None, None].expand(-1, q.size(1), -1)
         q = q.gather(2, seats.long()).squeeze(-1)
 
-        N = n.sum(-1)
+        # N == 0 leads to nans, so let's clamp it at 1
+        N = n.sum(-1).clamp(1, None)
         lambda_n = self.c_puct*N/(self.n_actions + N)
 
-        policy = pi.clone()
-        if (N > 0).any():
-            policy[N > 0] = regularized_policy(pi[N > 0], q[N > 0], lambda_n[N > 0])
+        policy = regularized_policy(pi, q, lambda_n)
 
         return policy
 
