@@ -32,7 +32,7 @@ def plot_all(f):
         assert B < 65, f'Plotting {B} traces will be prohibitively slow' 
         n_rows = int(B**.5)
         n_cols = int(np.ceil(B/n_rows))
-        fig, axes = plt.subplots(n_rows, n_cols, sharex=True, sharey=True)
+        fig, axes = plt.subplots(n_rows, n_cols, sharex=True, sharey=True, squeeze=False)
 
         for e in range(B):
             f(state, e, ax=axes.flatten()[e])
@@ -40,7 +40,7 @@ def plot_all(f):
         return fig
     return proxy
 
-def record(world, agents, n_steps, N=None):
+def record(world, agents, n_steps, N=0):
     from rebar.recording import ParallelEncoder
     trace = rollout(world, agents, n_steps)
 
@@ -49,6 +49,18 @@ def record(world, agents, n_steps, N=None):
         for i in range(state.board.shape[0]):
             encoder(state[i])
     return encoder
+
+def test_record():
+    from rebar import storing
+    from . import networks, mcts, analysis
+
+    n_envs = 1
+    world = hex.Hex.initial(n_envs=n_envs, boardsize=5, device='cuda')
+    network = networks.Network(world.obs_space, world.action_space, width=128).to(world.device)
+    network.load_state_dict(storing.load_latest()['network'])
+    agent = mcts.MCTSAgent(network, n_nodes=96)
+
+    analysis.record(world, [agent, agent], 20, N=0).notebook()
 
 def test_rollout():
     from . import networks, mcts, mohex

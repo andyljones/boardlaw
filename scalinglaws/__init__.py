@@ -71,10 +71,10 @@ def run():
 
     world = hex.Hex.initial(n_envs=n_envs, boardsize=5, device='cuda')
     network = networks.Network(world.obs_space, world.action_space, width=128).to(world.device)
-    agent = mcts.MCTSAgent(network, n_nodes=16)
+    agent = mcts.MCTSAgent(network, n_nodes=96)
     opt = torch.optim.Adam(network.parameters(), lr=3e-4, amsgrad=True)
 
-    run_name = 'az-test'
+    run_name = paths.timestamp('az-test')
     compositor = widgets.Compositor()
     paths.clear(run_name)
     with logging.via_dir(run_name, compositor), stats.via_dir(run_name, compositor):
