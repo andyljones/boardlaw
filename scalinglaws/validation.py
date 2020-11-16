@@ -63,7 +63,7 @@ def uniform_logits(valid):
 class InstantWin(arrdict.namedarrtuple(fields=('envs',))):
 
     @classmethod
-    def create(cls, n_envs=1, device='cuda'):
+    def initial(cls, n_envs=1, device='cuda'):
         return cls(envs=torch.arange(n_envs, device=device))
 
     def __init__(self, *args, **kwargs):
@@ -95,7 +95,7 @@ class InstantWin(arrdict.namedarrtuple(fields=('envs',))):
 class FirstWinsSecondLoses(arrdict.namedarrtuple(fields=('seats',))):
 
     @classmethod
-    def create(cls, n_envs=1, device='cuda'):
+    def initial(cls, n_envs=1, device='cuda'):
         return cls(seats=torch.zeros(n_envs, device=device, dtype=torch.int))
 
     def __init__(self, *args, **kwargs):

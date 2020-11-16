@@ -69,7 +69,7 @@ def run():
     n_envs = 512
     buffer_inc = batch_size//n_envs
 
-    world = hex.Hex.create(n_envs=n_envs, boardsize=5, device='cuda')
+    world = hex.Hex.initial(n_envs=n_envs, boardsize=5, device='cuda')
     network = networks.Network(world.obs_space, world.action_space, width=128).to(world.device)
     agent = mcts.MCTSAgent(network, n_nodes=16)
     opt = torch.optim.Adam(network.parameters(), lr=3e-4, amsgrad=True)

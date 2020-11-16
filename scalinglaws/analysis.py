@@ -52,7 +52,7 @@ def record(world, agents, n_steps, N=None):
 
 def test_rollout():
     from . import networks, mcts, mohex
-    env = hex.Hex.create(n_envs=4, boardsize=5, device='cuda')
+    env = hex.Hex.initial(n_envs=4, boardsize=5, device='cuda')
     network = networks.Network(env.obs_space, env.action_space, width=128).to(env.device)
     agent = mcts.MCTSAgent(env, network, n_nodes=16)
     oppo = mohex.MoHexAgent(env)

@@ -281,7 +281,7 @@ def test_planted_game():
     assert ((m.root().v - expected).abs() < 1/3).all()
 
 def test_full_game():
-    world = hex.Hex.create(1, boardsize=3, device='cpu')
+    world = hex.Hex.initial(1, boardsize=3, device='cpu')
     black = MCTSAgent(validation.RandomRolloutAgent(4), n_nodes=16, c_puct=.5)
     white = validation.RandomAgent()
     trace = analysis.rollout(world, [black, white], 128)
@@ -295,7 +295,7 @@ def benchmark(T=16):
 
     results = []
     for n in np.logspace(0, 14, 15, base=2, dtype=int):
-        env = hex.Hex.create(n_envs=n, boardsize=3, device='cuda')
+        env = hex.Hex.initial(n_envs=n, boardsize=3, device='cuda')
         black = MCTSAgent(validation.RandomAgent(), n_nodes=16, c_puct=.5)
         white = validation.RandomAgent()
 

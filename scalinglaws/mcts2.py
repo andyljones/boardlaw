@@ -200,7 +200,7 @@ class MCTSAgent:
 from . import validation, analysis
 
 def test_trivial():
-    world = validation.InstantWin.create(device='cpu')
+    world = validation.InstantWin.initial(device='cpu')
     agent = validation.ProxyAgent()
 
     m = mcts(world, agent, n_nodes=3)
@@ -209,7 +209,7 @@ def test_trivial():
     torch.testing.assert_allclose(m.root().v, expected)
 
 def test_two_player():
-    world = validation.FirstWinsSecondLoses.create(device='cpu')
+    world = validation.FirstWinsSecondLoses.initial(device='cpu')
     agent = validation.ProxyAgent()
 
     m = mcts(world, agent, n_nodes=3)
