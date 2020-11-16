@@ -143,7 +143,7 @@ class MoHexAgent:
         return self._proxies[e].display()
 
 def test():
-    env = hex.Hex(boardsize=3)
+    env = hex.Hex.create(boardsize=3)
     black = MoHexAgent(env)
     white = MoHexAgent(env)
 
@@ -160,7 +160,7 @@ def benchmark():
 
     results = []
     for n in [1, 2, 4, 8, 16]:
-        env = hex.Hex(n_envs=n, boardsize=11)
+        env = hex.Hex.create(n_envs=n, boardsize=11)
         black = MoHexAgent(env)
         white = MoHexAgent(env)
 

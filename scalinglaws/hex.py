@@ -105,8 +105,14 @@ class BoardHelper:
 
         return terminal
 
-HexWorldBase = arrdict.namedarrtuple('HexWorldBase', ('board', 'seat'))
-class HexWorld(HexWorldBase):
+class Hex(arrdict.namedarrtuple(fields=('board', 'seat'))):
+
+    @classmethod
+    def create(cls, n_envs, boardsize=11, device='cuda'):
+        # As per OpenSpiel and convention, black plays first.
+        return cls(
+            board=torch.full((n_envs, boardsize, boardsize), 0, device=device, dtype=torch.int),
+            seat=torch.full((n_envs,), 0, device=device, dtype=torch.int))
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -240,12 +246,6 @@ class HexWorld(HexWorldBase):
         ax = self.plot_state(arrdict.numpyify(arrdict.arrdict(self)), e=e)
         plt.close(ax.figure)
         return ax
-
-def create(n_envs, boardsize=11, device='cuda'):
-    # As per OpenSpiel and convention, black plays first.
-    return HexWorld(
-        board=torch.full((n_envs, boardsize, boardsize), 0, device=device, dtype=torch.int),
-        seat=torch.full((n_envs,), 0, device=device, dtype=torch.int))
 
 ## TESTS ##
 
