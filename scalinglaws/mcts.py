@@ -5,10 +5,11 @@ from rebar import arrdict
 def search(f, x_min, x_max, tol=1e-3):
     # Widen the borders just a lil, to handle annoying floating-point issues.
     while True: 
-        x_mid = (x_min + x_max)/2
+        # Fuck underflows
+        x_mid = x_min + (x_max - x_min)/2
         y_min, y_mid, y_max = f(x_min), f(x_mid), f(x_max)
         s_min, s_mid, s_max = torch.sign(y_min), torch.sign(y_mid), torch.sign(y_max)
-        c_min, c_mid, c_max = y_min.abs() < tol, y_mid.abs() < tol, y_max.abs() < tol
+        c_min, c_mid, c_max = y_min.abs() < tol/2, y_mid.abs() < tol, y_max.abs() < tol/2
 
         if c_mid.all():
             return x_mid
