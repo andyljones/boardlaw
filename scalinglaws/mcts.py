@@ -2,31 +2,50 @@ import numpy as np
 import torch
 from rebar import arrdict
 
-def search(f, x_min, x_max, tol=1e-3):
-    # Widen the borders just a lil, to handle annoying floating-point issues.
+def search(f, xl, xr, tol=1e-3):
+    # We expect f(xl) >= 0, f(xr) <= 0, but sometimes - thanks to numerical issues
+    # that turn up when you sum a bunch of reciprocals on float32 - that doesn't hold!
+    # So we just call those cases 'bad' and ignore them for the duration of the search.
+    # At the end, we'll fill in with whichever of the left/right is better. 
+    bad = (f(xl) < -tol) | (f(xr) > +tol)
+    xl, xr = xl.clone(), xr.clone()
     while True: 
-        # Fuck underflows
-        x_mid = x_min + (x_max - x_min)/2
-        y_min, y_mid, y_max = f(x_min), f(x_mid), f(x_max)
-        s_min, s_mid, s_max = torch.sign(y_min), torch.sign(y_mid), torch.sign(y_max)
-        c_min, c_mid, c_max = y_min.abs() < tol/2, y_mid.abs() < tol, y_max.abs() < tol/2
+        # Ugh, underflows
+        xm = xl + (xr - xl)/2
+        yl, ym, yr = f(xl), f(xm), f(xr)
 
-        if c_mid.all():
-            return x_mid
-        if torch.isnan(y_min + y_mid + y_max).any():
+        converged = (ym.abs() < tol)
+        underflow = (xm == xl) | (xm == xr)
+        if (converged | underflow | bad).all():
+            fallback_l = bad & (f(xl).abs() <= f(xr).abs())
+            xm[fallback_l] = xl[fallback_l]
+            fallback_r = bad & (f(xl).abs() > f(xr).abs())
+            xm[fallback_r] = xl[fallback_r]
+            return xm
+        if torch.isnan(yl + ym + yr).any():
             raise ValueError('Hit a nan')
-        if not ((s_min != s_max) | c_min | c_max).all():
-            raise ValueError('Root has escaped interval')
+        if (yl < -tol).any():
+            raise ValueError('Left boundary has passed the root')
+        if (yr > tol).any():
+            raise ValueError('Right boundary has passed the root')
 
-        in_left = (s_min != s_mid) | c_min
-        x_min[~in_left] = x_mid[~in_left]
-        x_max[in_left] = x_mid[in_left]
+        in_left = (torch.sign(ym) == -1) & ~bad
+        xr[in_left] = xm[in_left]
+
+        in_right = (torch.sign(ym) == +1) & ~bad
+        xl[in_right] = xm[in_right]
 
 def regularized_policy(pi, q, lambda_n):
-    alpha_min = (q + lambda_n[:, None]*pi + 1e-6).max(-1).values
+    alpha_min = (q + lambda_n[:, None]*pi).max(-1).values
     alpha_max = q.max(-1).values + lambda_n
 
-    policy = lambda alpha: lambda_n[:, None]*pi/(alpha[:, None] - q)
+    def policy(alpha):
+        p = lambda_n[:, None]*pi/(alpha[:, None] - q)
+        # alpha_min guarantees us we're on the right-hand side of 
+        # the singularity, so let's complete it with the positive limit.
+        # Practically, this makes the search a damn sight simpler.
+        p[alpha[:, None] == q] = np.inf
+        return p
     error = lambda alpha: policy(alpha).sum(-1) - 1
 
     alpha_star = search(error, alpha_min, alpha_max)
