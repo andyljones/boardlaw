@@ -236,8 +236,8 @@ class SequentialMatrix(arrdict.namedarrtuple(fields=('payoffs', 'moves', 'seats'
         rewards = torch.zeros_like(self.payoffs[:, 0, 0])
         rewards[terminal] = self.payoffs[
             self.envs[terminal], 
-            self.moves[terminal, 0].long(), 
-            self.moves[terminal, 1].long()]
+            moves[terminal, 0].long(), 
+            moves[terminal, 1].long()]
 
         seats[terminal] = 0
         moves[terminal] = -1
