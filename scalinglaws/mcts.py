@@ -318,7 +318,7 @@ class MCTSAgent:
 from . import validation, analysis
 
 def test_trivial():
-    world = validation.InstantWin.initial(device='cpu')
+    world = validation.Win.initial(device='cpu')
     agent = validation.ProxyAgent()
 
     m = mcts(world, agent, n_nodes=3)
@@ -327,7 +327,7 @@ def test_trivial():
     torch.testing.assert_allclose(m.root().v, expected)
 
 def test_two_player():
-    world = validation.FirstWinsSecondLoses.initial(device='cpu')
+    world = validation.WinnerLoser.initial(device='cpu')
     agent = validation.ProxyAgent()
 
     m = mcts(world, agent, n_nodes=3)
@@ -336,7 +336,7 @@ def test_two_player():
     torch.testing.assert_allclose(m.root().v, expected)
 
 def test_depth():
-    world = validation.AllOnes.initial(length=3, device='cpu')
+    world = validation.All.initial(length=3, device='cpu')
     agent = validation.ProxyAgent()
 
     m = mcts(world, agent, n_nodes=15)
@@ -348,7 +348,7 @@ def test_multienv():
     # Need to use a fairly complex env here to make sure we've not got 
     # any singleton dims hanging around internally. They can really ruin
     # a tester's day. 
-    world = validation.AllOnes.initial(n_envs=2, length=3)
+    world = validation.All.initial(n_envs=2, length=3)
     agent = validation.ProxyAgent()
 
     m = mcts(world, agent, n_nodes=15)

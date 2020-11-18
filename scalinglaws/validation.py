@@ -57,10 +57,12 @@ class RandomRolloutAgent:
             actions=torch.distributions.Categorical(probs=world.valid.float()).sample(),
             v=v)
 
+
 def uniform_logits(valid):
     return torch.log(valid.float()/valid.sum(-1, keepdims=True))
-    
-class InstantWin(arrdict.namedarrtuple(fields=('envs',))):
+
+class Win(arrdict.namedarrtuple(fields=('envs',))):
+    """One-step one-seat win (+1)"""
 
     @classmethod
     def initial(cls, n_envs=1, device='cuda'):
@@ -90,7 +92,8 @@ class InstantWin(arrdict.namedarrtuple(fields=('envs',))):
             rewards=torch.ones((self.n_envs, self.n_seats), dtype=torch.float, device=self.device))
         return self, trans
 
-class FirstWinsSecondLoses(arrdict.namedarrtuple(fields=('seats',))):
+class WinnerLoser(arrdict.namedarrtuple(fields=('seats',))):
+    """First seat wins each turn and gets +1; second loses and gets -1"""
 
     @classmethod
     def initial(cls, n_envs=1, device='cuda'):
@@ -122,7 +125,8 @@ class FirstWinsSecondLoses(arrdict.namedarrtuple(fields=('seats',))):
         return type(self)(seats=1-self.seats), trans
 
 
-class AllOnes(arrdict.namedarrtuple(fields=('history', 'count'))):
+class All(arrdict.namedarrtuple(fields=('history', 'count'))):
+    """Players need to submit 1s each turn; if they do it every turn they get +1, else 0"""
 
     @classmethod
     def initial(cls, n_envs=1, n_seats=1, length=4, device='cuda'):
@@ -178,7 +182,7 @@ class AllOnes(arrdict.namedarrtuple(fields=('history', 'count'))):
         return world, transition
 
 def test_all_ones():
-    game = AllOnes.initial(n_envs=3, n_seats=2, length=3, device='cpu')
+    game = All.initial(n_envs=3, n_seats=2, length=3, device='cpu')
     for s in range(6):
         action = game.seats % 2
         game, transition = game.step(action.long())
@@ -186,3 +190,55 @@ def test_all_ones():
     assert transition.terminal.all()
     assert (transition.rewards[:, 0] == 0).all()
     assert (transition.rewards[:, 1] == 1).all()
+
+
+class SequentialMatrix(arrdict.namedarrtuple(fields=('payoffs', 'moves', 'seats'))):
+
+    @classmethod
+    def initial(cls, payoff, n_envs=1, device='cuda'):
+        return cls(
+            payoffs=torch.as_tensor(payoff).to(device)[None, ...].repeat(n_envs, 1, 1, 1),
+            seats=torch.zeros((n_envs,), dtype=torch.int, device=device),
+            moves=torch.full((n_envs, 2), -1, dtype=torch.int, device=device))
+
+    @classmethod
+    def dilemma(cls, *args, **kwargs):
+        payoff = [
+            [[0., 0.], [1., 0.]],
+            [[0., 1.], [.5, .5]]]
+        return cls.initial(payoff, *args, **kwargs)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not isinstance(self.payoffs, torch.Tensor):
+            return 
+
+        self.n_envs = self.seats.size(-1)
+        self.n_seats = 2
+        self.device = self.seats.device
+
+        self.obs_space = heads.Tensor((1,))
+        self.action_space = heads.Masked(2)
+
+        self.obs = self.moves[..., [0]].float()
+        self.valid = torch.stack([torch.ones_like(self.seats, dtype=torch.bool)]*2, -1)
+
+        self.envs = torch.arange(self.n_envs, device=self.device, dtype=torch.long)
+
+    def step(self, actions):
+        moves = self.moves.clone()
+        moves[self.envs, self.seats.long()] = actions.int()
+    
+        seats = self.seats + 1
+
+        terminal = (seats == 2)
+        rewards = torch.zeros_like(self.payoffs[:, 0, 0])
+        rewards[terminal] = self.payoffs[self.envs[terminal], self.moves[terminal, 0].long(), self.moves[terminal, 1].long()]
+
+        seats[terminal] = 0
+        moves[terminal] = -1
+
+        world = type(self)(payoffs=self.payoffs, seats=seats, moves=moves)
+        transitions = arrdict.arrdict(terminal=terminal, rewards=rewards)
+
+        return world, transitions
