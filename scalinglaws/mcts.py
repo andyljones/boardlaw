@@ -247,7 +247,7 @@ class MCTS:
             v=v)
     
     def n_leaves(self):
-        return (self.tree.children == -1).all(-1).sum(-1)
+        return ((self.tree.children == -1).all(-1) & (self.tree.parents != -1)).sum(-1)
 
     def display(self, e=0):
         import networkx as nx
