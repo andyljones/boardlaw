@@ -1,3 +1,4 @@
+from multiprocessing import Value
 import numpy as np
 import torch
 from rebar import arrdict
@@ -10,14 +11,13 @@ def safe_div(x, y):
     r[x == 0] = 0
     return r
 
-def search(f, g, xl, xr, tol=1e-3):
+def binary_search(f, grad, xl, xr, tol=1e-3):
     # We expect f(xl) >= 0, f(xr) <= 0, but sometimes - thanks to numerical issues
     # that turn up when you sum a bunch of reciprocals on float32 - that doesn't hold!
     # So we just call those cases 'bad' and ignore them for the duration of the search.
     # At the end, we'll fill in with whichever of the left/right is better. 
     bad = (f(xl) < -tol) | (f(xr) > +tol)
     xl, xr = xl.clone(), xr.clone()
-    n_loops = 0
     while True: 
         # Ugh, underflows
         xm = xl + (xr - xl)/2
@@ -44,7 +44,22 @@ def search(f, g, xl, xr, tol=1e-3):
         in_right = (torch.sign(ym) == +1) & ~bad
         xl[in_right] = xm[in_right]
 
-        n_loops += 1
+def newton_search(f, grad, xl, xr, tol=1e-3):
+    # All the asymptotes are on the left of xl, so if we start there and head right we 
+    # should be okay
+    x = xl
+    while True:
+        y = f(x)
+        if (y.abs() < tol).all():
+            return x
+        if torch.isnan(y + x).any():
+            raise ValueError('Hit a nan')
+        if (x < xl).any():
+            raise ValueError('Have escaped on the left')
+        if (x > xr).any():
+            raise ValueError('Have escaped on the right')
+
+        x = x - y/grad(x)
 
 def regularized_policy(pi, q, lambda_n):
     assert (lambda_n > 0).all(), 'Don\'t currently support zero lambda_n'
@@ -52,11 +67,10 @@ def regularized_policy(pi, q, lambda_n):
     alpha_max = q.max(-1).values + lambda_n
 
     policy = lambda alpha: safe_div(lambda_n[:, None]*pi, alpha[:, None] - q)
-    grad = lambda alpha: -safe_div(lambda_n[:, None]*pi, (alpha[:, None] - q).pow(2))
-    
     error = lambda alpha: policy(alpha).sum(-1) - 1
+    grad = lambda alpha: -safe_div(lambda_n[:, None]*pi, (alpha[:, None] - q).pow(2)).sum(-1)
 
-    alpha_star = search(error, grad, alpha_min, alpha_max)
+    alpha_star = newton_search(error, grad, alpha_min, alpha_max)
 
     meta = arrdict.arrdict(
         alpha_min=alpha_min, 
@@ -87,6 +101,9 @@ def test_policy():
     p, meta = regularized_policy(pi, q, lambda_n)
     torch.testing.assert_allclose(meta.alpha_star, torch.tensor([[1.205]]), rtol=.001, atol=.001)
     
+def benchmark():
+    [regularized_policy(**d) for d in torch.load('output/search/benchmark.pkl')]
+
 
 class MCTS:
 
