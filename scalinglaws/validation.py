@@ -122,53 +122,67 @@ class FirstWinsSecondLoses(arrdict.namedarrtuple(fields=('seats',))):
         return type(self)(seats=1-self.seats), trans
 
 
-class AllOnes(arrdict.namedarrtuple(fields=('history', 'idx'))):
+class AllOnes(arrdict.namedarrtuple(fields=('history', 'count'))):
 
     @classmethod
-    def initial(cls, n_envs=1, length=4, device='cuda'):
+    def initial(cls, n_envs=1, n_seats=1, length=4, device='cuda'):
         return cls(
-            history=torch.full((n_envs, length), -1, dtype=torch.long, device=device),
-            idx=torch.full((n_envs,), 0, dtype=torch.long, device=device))
+            history=torch.full((n_envs, length, n_seats), -1, dtype=torch.long, device=device),
+            count=torch.full((n_envs,), 0, dtype=torch.long, device=device))
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if not isinstance(self.idx, torch.Tensor):
+        if not isinstance(self.count, torch.Tensor):
             return 
 
-        self.device = self.idx.device 
-        self.n_envs = len(self.idx)
-        self.n_seats = 1
-        self.length = self.history.size(1)
+        self.n_envs, self.length, self.n_seats = self.history.shape[-3:]
+        self.device = self.count.device 
+
+        self.max_count = self.n_seats * self.length
 
         self.obs_space = heads.Tensor((1,))
         self.action_space = heads.Masked(2)
 
-        self.valid = torch.ones(self.idx.shape + (2,), dtype=torch.bool, device=self.device)
-        self.seats = torch.zeros_like(self.idx)
+        self.valid = torch.ones(self.count.shape + (2,), dtype=torch.bool, device=self.device)
+        self.seats = self.count % self.n_seats
 
+        self.obs = self.count[..., None].float()/self.max_count
+
+        self.envs = torch.arange(self.n_envs, device=self.device)
+
+        # Planted values for validation use
         self.logits = uniform_logits(self.valid)
 
-        correct_so_far = (self.history == 1).sum(-1) == self.idx
+        correct_so_far = (self.history == 1).sum(-1) == self.count[..., None]
         correct_to_go = 2**((self.history == 1).sum(-1) - self.length).float()
 
         v = correct_so_far.float()*correct_to_go
         self.v = v[..., None]
 
-        self.obs = self.idx[..., None].float()/self.length
-
     def step(self, actions):
         history = self.history.clone()
-        history.scatter_(1, self.idx[:, None], actions[:, None])
-        idx = self.idx + 1 
+        idx = self.count//self.n_seats
+        history[self.envs, idx, self.seats] = actions
+        count = self.count + 1 
 
-        transition = arrdict.arrdict(
-            terminal=(idx == self.length),
-            rewards=((idx == self.length) & (history == 1).all(-1))[:, None].float())
+        terminal = (count == self.max_count)
+        reward = ((count == self.max_count)[:, None] & (history == 1).all(-2)).float()
+        transition = arrdict.arrdict(terminal=terminal, rewards=reward)
 
-        idx[transition.terminal] = 0
-        history[transition.terminal] = -1
+        count[terminal] = 0
+        history[terminal] = -1
         
         world = type(self)(
             history=history,
-            idx=idx)
+            count=count)
         return world, transition
+
+def test_all_ones():
+    game = AllOnes.initial(n_envs=3, n_seats=2, length=3, device='cpu')
+    for s in range(6):
+        action = game.seats % 2
+        game, transition = game.step(action.long())
+
+    assert transition.terminal.all()
+    assert (transition.rewards[:, 0] == 0).all()
+    assert (transition.rewards[:, 1] == 1).all()
