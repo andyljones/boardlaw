@@ -7,6 +7,8 @@ import time
 
 
 def memory(device=0):
+    if isinstance(device, torch.device):
+        device = device.index
     total_mem = torch.cuda.get_device_properties(f'cuda:{device}').total_memory
     writing.max(f'gpu-memory/reserve/{device}', torch.cuda.max_memory_reserved(device)/total_mem)
     torch.cuda.reset_max_memory_cached()
