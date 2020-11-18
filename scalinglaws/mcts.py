@@ -11,39 +11,6 @@ def safe_div(x, y):
     r[x == 0] = 0
     return r
 
-def binary_search(f, grad, xl, xr, tol=1e-3):
-    # We expect f(xl) >= 0, f(xr) <= 0, but sometimes - thanks to numerical issues
-    # that turn up when you sum a bunch of reciprocals on float32 - that doesn't hold!
-    # So we just call those cases 'bad' and ignore them for the duration of the search.
-    # At the end, we'll fill in with whichever of the left/right is better. 
-    bad = (f(xl) < -tol) | (f(xr) > +tol)
-    xl, xr = xl.clone(), xr.clone()
-    while True: 
-        # Ugh, underflows
-        xm = xl + (xr - xl)/2
-        yl, ym, yr = f(xl), f(xm), f(xr)
-
-        converged = (ym.abs() < tol)
-        underflow = (xm == xl) | (xm == xr)
-        if (converged | underflow | bad).all():
-            fallback_l = bad & (f(xl).abs() <= f(xr).abs())
-            xm[fallback_l] = xl[fallback_l]
-            fallback_r = bad & (f(xl).abs() > f(xr).abs())
-            xm[fallback_r] = xl[fallback_r]
-            return xm
-        if torch.isnan(yl + ym + yr).any():
-            raise ValueError('Hit a nan')
-        if (yl < -tol).any():
-            raise ValueError('Left boundary has passed the root')
-        if (yr > tol).any():
-            raise ValueError('Right boundary has passed the root')
-
-        in_left = (torch.sign(ym) == -1) & ~bad
-        xr[in_left] = xm[in_left]
-
-        in_right = (torch.sign(ym) == +1) & ~bad
-        xl[in_right] = xm[in_right]
-
 def newton_search(f, grad, xl, xr, tol=1e-3):
     # All the asymptotes are on the left of xl, so if we start there and head right we 
     # should be okay
@@ -74,7 +41,7 @@ def regularized_policy(pi, q, lambda_n):
     error = lambda alpha: policy(alpha).sum(-1) - 1
     grad = lambda alpha: -safe_div(lambda_n[:, None]*pi, (alpha[:, None] - q).pow(2)).sum(-1)
 
-    alpha_star = binary_search(error, grad, alpha_min, alpha_max)
+    alpha_star = newton_search(error, grad, alpha_min, alpha_max)
 
     p = policy(alpha_star)
 
@@ -182,7 +149,7 @@ class MCTS:
         N = n.sum(-1).clamp(1, None)
         lambda_n = self.c_puct*N/(self.n_actions + N)
 
-        policy = regularized_policy(pi, q, lambda_n)
+        policy, _ = regularized_policy(pi, q, lambda_n)
 
         return policy
 
