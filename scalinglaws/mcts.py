@@ -11,77 +11,83 @@ def safe_div(x, y):
     r[x == 0] = 0
     return r
 
-def newton_search(f, grad, xl, xr, tol=1e-3):
-    # All the asymptotes are on the left of xl, so if we start there and head right we 
-    # should be okay
-    x = xl
-    y = torch.zeros_like(x)
-    while True:
-        y_new = f(x)
-        done = (y_new.abs() < tol) | (y == y_new)
-        if done.all():
-            return x
-        y = y_new
+class Solution:
+
+    def __init__(self, pi, q, lambda_n):
+        assert (lambda_n > 0).all(), 'Don\'t currently support zero lambda_n'
+        self.pi = pi
+        self.q = q
+        self.lambda_n = lambda_n
+        self.alpha = (q + lambda_n[:, None]*pi).max(-1).values
+
+        self._solve()
+
+    def policy(self):
+        return safe_div(self.lambda_n[:, None]*self.pi, self.alpha[:, None] - self.q)
+    
+    def error(self):
+        return self.policy().sum(-1) - 1
+
+    def grad(self):
+        return -safe_div(self.lambda_n[:, None]*self.pi, (self.alpha[:, None] - self.q).pow(2)).sum(-1)
+
+    def _solve(self, tol=1e-3):
+        alpha_star = torch.full_like(self.alpha, np.nan)
+        error = torch.full_like(self.alpha, np.inf)
+        acc_done = torch.zeros_like(self.alpha, dtype=torch.bool)
+        while True:
+            new_error = self.error()
+
+            done = (new_error.abs() < tol) | (new_error == error)
+            alpha_star[~acc_done][done] = self.alpha[done]
+            acc_done[~acc_done] = done
+            if acc_done.all():
+                break
+
+            self.pi = self.pi[~done]
+            self.q = self.q[~done]
+            self.lambda_n = self.lambda_n[~done]
+            self.alpha = self.alpha[~done]
+
+            error = new_error[~done]
+            self.alpha -= error/self.grad()
         
-        if torch.isnan(y + x).any():
-            raise ValueError(f'Hit a nan at #{torch.isnan(x+y).nonzero()[0, 0]}')
-        if (x < xl).any():
-            raise ValueError(f'Have escaped on the left at #{(x < xl).nonzero()[0, 0]}')
-        if (x > xr).any():
-            raise ValueError(f'Have escaped on the right at #{(x > xr).nonzero()[0, 0]}')
+        return self.alpha
 
-        x[~done] = (x - y/grad(x))[~done]
-
-def regularized_policy(pi, q, lambda_n):
-    assert (lambda_n > 0).all(), 'Don\'t currently support zero lambda_n'
-    alpha_min = (q + lambda_n[:, None]*pi).max(-1).values
-    alpha_max = q.max(-1).values + lambda_n
-
-    policy = lambda alpha: safe_div(lambda_n[:, None]*pi, alpha[:, None] - q)
-    error = lambda alpha: policy(alpha).sum(-1) - 1
-    grad = lambda alpha: -safe_div(lambda_n[:, None]*pi, (alpha[:, None] - q).pow(2)).sum(-1)
-
-    alpha_star = newton_search(error, grad, alpha_min, alpha_max)
-
-    p = policy(alpha_star)
-
-    meta = arrdict.arrdict(
-        alpha_min=alpha_min, 
-        alpha_max=alpha_max, 
-        alpha_star=alpha_star,
-        error=p.sum(-1) - 1)
-
-    return p, meta
+def solve_policy(pi, q, lambda_n, tol=1e-3):
+    solution = Solution(pi, q, lambda_n)
+    return arrdict.arrdict(
+        polcy=solution.policy(),
+        alpha_star=solution.alpha,
+        error=solution.error())
 
 def test_policy():
     # Case when the root is at the lower bound
     pi = torch.tensor([[.999, .001]])
     q = torch.tensor([[0., 1.]])
     lambda_n = torch.tensor([[.1]])
-    p, meta = regularized_policy(pi, q, lambda_n)
-    torch.testing.assert_allclose(meta.alpha_star, torch.tensor([[1.]]), rtol=.001, atol=.001)
+    soln = solve_policy(pi, q, lambda_n)
+    torch.testing.assert_allclose(soln.alpha_star, torch.tensor([[1.]]), rtol=.001, atol=.001)
 
     # Case when the root is at the upper bound
     pi = torch.tensor([[.5, .5]])
     q = torch.tensor([[1., 1.]])
     lambda_n = torch.tensor([[.1]])
-    p, meta = regularized_policy(pi, q, lambda_n)
-    torch.testing.assert_allclose(meta.alpha_star, torch.tensor([[1.1]]), rtol=.001, atol=.001)
+    soln = solve_policy(pi, q, lambda_n)
+    torch.testing.assert_allclose(soln.alpha_star, torch.tensor([[1.1]]), rtol=.001, atol=.001)
 
     # Case when the root is at the upper bound
     pi = torch.tensor([[.25, .75]])
     q = torch.tensor([[1., .25]])
     lambda_n = torch.tensor([[.5]])
-    p, meta = regularized_policy(pi, q, lambda_n)
-    torch.testing.assert_allclose(meta.alpha_star, torch.tensor([[1.205]]), rtol=.001, atol=.001)
+    soln = solve_policy(pi, q, lambda_n)
+    torch.testing.assert_allclose(soln.alpha_star, torch.tensor([[1.205]]), rtol=.001, atol=.001)
     
 def benchmark_search():
-    metas = []
+    solns = []
     for i, d in enumerate(torch.load('output/search/benchmark.pkl')):
-        p, meta = regularized_policy(**d)
-        metas.append(meta)
-    metas = arrdict.stack(metas)
-
+        solns.append(solve_policy(**d))
+    solns = arrdict.cat(solns)
 
 class MCTS:
 
@@ -149,9 +155,9 @@ class MCTS:
         N = n.sum(-1).clamp(1, None)
         lambda_n = self.c_puct*N/(self.n_actions + N)
 
-        policy, _ = regularized_policy(pi, q, lambda_n)
+        soln = solve_policy(pi, q, lambda_n)
 
-        return policy
+        return soln.policy
 
     def sample(self, env, nodes):
         probs = self.policy(env, nodes)
