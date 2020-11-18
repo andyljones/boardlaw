@@ -48,18 +48,22 @@ def newton_search(f, grad, xl, xr, tol=1e-3):
     # All the asymptotes are on the left of xl, so if we start there and head right we 
     # should be okay
     x = xl
+    y = torch.zeros_like(x)
     while True:
-        y = f(x)
-        if (y.abs() < tol).all():
+        y_new = f(x)
+        done = (y_new.abs() < tol) | (y == y_new)
+        if done.all():
             return x
+        y = y_new
+        
         if torch.isnan(y + x).any():
-            raise ValueError('Hit a nan')
+            raise ValueError(f'Hit a nan at #{torch.isnan(x+y).nonzero()[0, 0]}')
         if (x < xl).any():
-            raise ValueError('Have escaped on the left')
+            raise ValueError(f'Have escaped on the left at #{(x < xl).nonzero()[0, 0]}')
         if (x > xr).any():
-            raise ValueError('Have escaped on the right')
+            raise ValueError(f'Have escaped on the right at #{(x > xr).nonzero()[0, 0]}')
 
-        x = x - y/grad(x)
+        x[~done] = (x - y/grad(x))[~done]
 
 def regularized_policy(pi, q, lambda_n):
     assert (lambda_n > 0).all(), 'Don\'t currently support zero lambda_n'
@@ -101,7 +105,7 @@ def test_policy():
     p, meta = regularized_policy(pi, q, lambda_n)
     torch.testing.assert_allclose(meta.alpha_star, torch.tensor([[1.205]]), rtol=.001, atol=.001)
     
-def benchmark():
+def benchmark_search():
     [regularized_policy(**d) for d in torch.load('output/search/benchmark.pkl')]
 
 
@@ -414,7 +418,7 @@ def test_full_game():
     trace = analysis.rollout(world, [black, white], 128)
     winrates = trace.trans.rewards.sum(0).sum(0)/trace.trans.terminal.sum(0).sum(0)
 
-def benchmark(T=16):
+def benchmark_mcts(T=16):
     import pandas as pd
     import aljpy
     import matplotlib.pyplot as plt
