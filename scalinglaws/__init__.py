@@ -8,12 +8,6 @@ from itertools import cycle
 
 log = getLogger(__name__)
 
-def system_stats():
-    with stats.defer():
-        torch.cuda.reset_peak_memory_stats()
-        stats.mean('system/gpu-alloc', torch.cuda.max_memory_allocated()/1e6)
-        stats.mean('system/gpu-cached', torch.cuda.max_memory_cached()/1e6)
-
 def chunk_stats(chunk):
     with stats.defer():
         t = chunk.transition
@@ -111,4 +105,4 @@ def run():
 
             storing.store_latest(run_name, {'network': network, 'opt': opt}, throttle=60)
             storing.store_periodic(run_name, {'network': network, 'opt': opt}, throttle=600)
-            system_stats()
+            stats.gpu.vitals(device=world.device, throttle=15)

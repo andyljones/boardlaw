@@ -28,7 +28,9 @@ def newton_search(f, grad, x0, tol=1e-3):
     y = torch.zeros_like(x)
     while True:
         y_new = f(x)
-        done = (y_new.abs() < tol) | (y == y_new)
+        # Gonna tolerate the occasional negative y value here, cause we're not gonna be able to fix it with this
+        # scheme.
+        done = (y_new < tol) | (y == y_new)
         if done.all():
             return x
         y = y_new

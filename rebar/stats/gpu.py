@@ -8,7 +8,7 @@ import time
 
 def memory(device=0):
     total_mem = torch.cuda.get_device_properties(f'cuda:{device}').total_memory
-    writing.max(f'gpu-memory/cache/{device}', torch.cuda.max_memory_cached(device)/total_mem)
+    writing.max(f'gpu-memory/reserve/{device}', torch.cuda.max_memory_reserved(device)/total_mem)
     torch.cuda.reset_max_memory_cached()
     writing.max(f'gpu-memory/alloc/{device}', torch.cuda.max_memory_allocated(device)/total_mem)
     torch.cuda.reset_max_memory_allocated()
@@ -41,6 +41,8 @@ def vitals(device=None, throttle=0):
         pass
     elif isinstance(device, int):
         df = df.loc[[device]]
+    elif isinstance(device, torch.device):
+        df = df.loc[[device.index]]
     else:
         df = df.loc[device]
 
