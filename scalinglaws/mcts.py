@@ -156,9 +156,9 @@ class MCTS:
         N = n.sum(-1).clamp(1, None)
         lambda_n = self.c_puct*N/(self.n_actions + N)
 
-        policy, _ = solve_policy(pi, q, lambda_n)
+        soln = solve_policy(pi, q, lambda_n)
 
-        return policy
+        return soln.policy
 
     def sample(self, env, nodes):
         probs = self.policy(env, nodes)
