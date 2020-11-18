@@ -20,7 +20,6 @@ def chunk_stats(chunk):
         n_trajs = t.terminal.sum()
         n_inputs = t.terminal.size(0)
         n_samples = t.terminal.nelement()
-        rewards = chunk.transition.rewards.sum(0).sum(0)
         stats.rate('sample-rate/actor', n_samples)
         stats.mean('traj-length', n_samples, n_trajs)
         stats.cumsum('count/traj', n_trajs)
@@ -29,6 +28,8 @@ def chunk_stats(chunk):
         stats.cumsum('count/samples', n_samples)
         stats.rate('step-rate/chunks', 1)
         stats.rate('step-rate/inputs', n_inputs)
+
+        rewards = chunk.transition.rewards.sum(0).sum(0)
         for i, r in enumerate(rewards):
             stats.mean(f'reward/seat-{i}', r, n_trajs)
     return chunk

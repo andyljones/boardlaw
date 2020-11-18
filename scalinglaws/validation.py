@@ -8,7 +8,7 @@ What to test?
     * 
 """
 import torch
-from rebar import arrdict
+from rebar import arrdict, stats
 from . import heads
 
 class ProxyAgent:
@@ -226,14 +226,18 @@ class SequentialMatrix(arrdict.namedarrtuple(fields=('payoffs', 'moves', 'seats'
         self.envs = torch.arange(self.n_envs, device=self.device, dtype=torch.long)
 
     def step(self, actions):
+        seats = self.seats + 1
+        terminal = (seats == 2)
+
         moves = self.moves.clone()
         moves[self.envs, self.seats.long()] = actions.int()
-    
-        seats = self.seats + 1
+        self._stats(moves[terminal])
 
-        terminal = (seats == 2)
         rewards = torch.zeros_like(self.payoffs[:, 0, 0])
-        rewards[terminal] = self.payoffs[self.envs[terminal], self.moves[terminal, 0].long(), self.moves[terminal, 1].long()]
+        rewards[terminal] = self.payoffs[
+            self.envs[terminal], 
+            self.moves[terminal, 0].long(), 
+            self.moves[terminal, 1].long()]
 
         seats[terminal] = 0
         moves[terminal] = -1
@@ -242,3 +246,11 @@ class SequentialMatrix(arrdict.namedarrtuple(fields=('payoffs', 'moves', 'seats'
         transitions = arrdict.arrdict(terminal=terminal, rewards=rewards)
 
         return world, transitions
+
+    def _stats(self, moves):
+        if not moves.nelement():
+            return
+        for i in range(2):
+            for j in range(2):
+                count = ((moves[..., 0] == i) & (moves[..., 1] == j)).sum()
+                stats.mean(f'outcomes/{i}-{j}', count, moves.nelement()/2)
