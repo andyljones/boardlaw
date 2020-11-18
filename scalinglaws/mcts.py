@@ -11,55 +11,47 @@ def safe_div(x, y):
     r[x == 0] = 0
     return r
 
-class Solution:
+def newton_search(f, grad, x0, tol=1e-3):
+    # Some guidance on what's going on here:
+    # * While the Regularized MCTS paper recommends binary search, it turns out to be pretty slow and - thanks
+    #   to the numerical errors that show up when you run this whole thing in float32 - tricky to implemnt.
+    # * What works better is to exploit the geometry of the problem. The error function is convex and 
+    #   descends from an asymptote somewhere to the left of x0. 
+    # * By taking Newton steps from x0, we head right and so don't run into any more asymptotes.
+    # * More, because the error is convex, Newton's is guaranteed to undershoot the solution.
+    # * The only thing we need to be careful about is when we start near the asymptote. In that case the gradient
+    #   is really large and it's possible that - again, thanks to numerical issues - our steps 
+    #   *won't actually change the error*. I couldn't think of a good solution to this, but so far in practice it
+    #   turns out 'just giving up' works pretty well. It's a rare occurance - 1 in 40k samples of the benchmark
+    #   run I did - and 'just give up' only missed the specified error tol by a small amount.
+    x = x0.clone()
+    y = torch.zeros_like(x)
+    while True:
+        y_new = f(x)
+        done = (y_new.abs() < tol) | (y == y_new)
+        if done.all():
+            return x
+        y = y_new
 
-    def __init__(self, pi, q, lambda_n):
-        assert (lambda_n > 0).all(), 'Don\'t currently support zero lambda_n'
-        self.pi = pi
-        self.q = q
-        self.lambda_n = lambda_n
-        self.alpha = (q + lambda_n[:, None]*pi).max(-1).values
+        x[~done] = (x - y/grad(x))[~done]
 
-        self._solve()
+def solve_policy(pi, q, lambda_n):
+    assert (lambda_n > 0).all(), 'Don\'t currently support zero lambda_n'
+    alpha_min = (q + lambda_n[:, None]*pi).max(-1).values
 
-    def policy(self):
-        return safe_div(self.lambda_n[:, None]*self.pi, self.alpha[:, None] - self.q)
-    
-    def error(self):
-        return self.policy().sum(-1) - 1
+    policy = lambda alpha: safe_div(lambda_n[:, None]*pi, alpha[:, None] - q)
+    error = lambda alpha: policy(alpha).sum(-1) - 1
+    grad = lambda alpha: -safe_div(lambda_n[:, None]*pi, (alpha[:, None] - q).pow(2)).sum(-1)
 
-    def grad(self):
-        return -safe_div(self.lambda_n[:, None]*self.pi, (self.alpha[:, None] - self.q).pow(2)).sum(-1)
+    alpha_star = newton_search(error, grad, alpha_min)
 
-    def _solve(self, tol=1e-3):
-        alpha_star = torch.full_like(self.alpha, np.nan)
-        error = torch.full_like(self.alpha, np.inf)
-        acc_done = torch.zeros_like(self.alpha, dtype=torch.bool)
-        while True:
-            new_error = self.error()
+    p = policy(alpha_star)
 
-            done = (new_error.abs() < tol) | (new_error == error)
-            alpha_star[~acc_done][done] = self.alpha[done]
-            acc_done[~acc_done] = done
-            if acc_done.all():
-                break
-
-            self.pi = self.pi[~done]
-            self.q = self.q[~done]
-            self.lambda_n = self.lambda_n[~done]
-            self.alpha = self.alpha[~done]
-
-            error = new_error[~done]
-            self.alpha -= error/self.grad()
-        
-        return self.alpha
-
-def solve_policy(pi, q, lambda_n, tol=1e-3):
-    solution = Solution(pi, q, lambda_n)
     return arrdict.arrdict(
-        polcy=solution.policy(),
-        alpha_star=solution.alpha,
-        error=solution.error())
+        policy=p,
+        alpha_min=alpha_min, 
+        alpha_star=alpha_star,
+        error=p.sum(-1) - 1)
 
 def test_policy():
     # Case when the root is at the lower bound
@@ -84,10 +76,19 @@ def test_policy():
     torch.testing.assert_allclose(soln.alpha_star, torch.tensor([[1.205]]), rtol=.001, atol=.001)
     
 def benchmark_search():
-    solns = []
-    for i, d in enumerate(torch.load('output/search/benchmark.pkl')):
-        solns.append(solve_policy(**d))
+    import aljpy
+    Ds = torch.load('output/search/benchmark.pkl')
+    ds, solns = [], []
+    torch.cuda.synchronize()
+    with aljpy.timer() as timer:
+        for i, d in enumerate(Ds):
+            ds.append(arrdict.arrdict(d))
+            solns.append(solve_policy(**d))
+        torch.cuda.synchronize()
+    print(f'{1000*timer.time():.0f}ms')
     solns = arrdict.cat(solns)
+    ds = arrdict.cat(ds)
+
 
 class MCTS:
 
@@ -155,9 +156,9 @@ class MCTS:
         N = n.sum(-1).clamp(1, None)
         lambda_n = self.c_puct*N/(self.n_actions + N)
 
-        soln = solve_policy(pi, q, lambda_n)
+        policy, _ = solve_policy(pi, q, lambda_n)
 
-        return soln.policy
+        return policy
 
     def sample(self, env, nodes):
         probs = self.policy(env, nodes)
