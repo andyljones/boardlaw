@@ -74,14 +74,17 @@ def regularized_policy(pi, q, lambda_n):
     error = lambda alpha: policy(alpha).sum(-1) - 1
     grad = lambda alpha: -safe_div(lambda_n[:, None]*pi, (alpha[:, None] - q).pow(2)).sum(-1)
 
-    alpha_star = newton_search(error, grad, alpha_min, alpha_max)
+    alpha_star = binary_search(error, grad, alpha_min, alpha_max)
+
+    p = policy(alpha_star)
 
     meta = arrdict.arrdict(
         alpha_min=alpha_min, 
         alpha_max=alpha_max, 
-        alpha_star=alpha_star)
+        alpha_star=alpha_star,
+        error=p.sum(-1) - 1)
 
-    return policy(alpha_star), meta
+    return p, meta
 
 def test_policy():
     # Case when the root is at the lower bound
@@ -106,7 +109,11 @@ def test_policy():
     torch.testing.assert_allclose(meta.alpha_star, torch.tensor([[1.205]]), rtol=.001, atol=.001)
     
 def benchmark_search():
-    [regularized_policy(**d) for d in torch.load('output/search/benchmark.pkl')]
+    metas = []
+    for i, d in enumerate(torch.load('output/search/benchmark.pkl')):
+        p, meta = regularized_policy(**d)
+        metas.append(meta)
+    metas = arrdict.stack(metas)
 
 
 class MCTS:
