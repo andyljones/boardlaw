@@ -29,7 +29,7 @@ def chunk_stats(chunk):
         stats.cumsum('count/sims', chunk.decisions.n_sims.sum())
         stats.rate('step-rate/chunks', 1)
         stats.rate('step-rate/inputs', n_inputs)
-        stats.mean('mcts-branching', chunk.decisions.branching.mean())
+        stats.mean('mcts-n-leaves', chunk.decisions.n_leaves.float().mean())
 
         rewards = chunk.transition.rewards.sum(0).sum(0)
         for i, r in enumerate(rewards):

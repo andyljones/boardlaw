@@ -246,9 +246,8 @@ class MCTS:
             logits=torch.log(p),
             v=v)
     
-    def branching(self):
-        counts = (self.tree.children != -1).sum(-1)
-        return counts.sum(-1)/(counts >= 1).sum(-1)
+    def n_leaves(self):
+        return (self.tree.children == -1).all(-1).sum(-1)
 
     def display(self, e=0):
         import networkx as nx
@@ -317,7 +316,7 @@ class MCTSAgent:
         return arrdict.arrdict(
             logits=r.logits,
             n_sims=torch.full_like(m.envs, m.sim+1),
-            branching=m.branching(),
+            n_leaves=m.n_leaves(),
             v=r.v,
             actions=torch.distributions.Categorical(logits=r.logits).sample())
 
