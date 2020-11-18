@@ -6,7 +6,7 @@ def apply(world, agents):
     for i, agent in enumerate(agents):
         m = world.seats == i
         if m.any():
-            indices.append(m.nonzero().squeeze(1))
+            indices.append(m.nonzero(as_tuple=False).squeeze(1))
             actions.append(agent(world[m]).actions)
     indices, actions = torch.cat(indices), arrdict.cat(actions)
     return actions[torch.argsort(indices)]
@@ -52,13 +52,13 @@ def record(world, agents, n_steps, N=0):
 
 def test_record():
     from rebar import storing
-    from . import networks, mcts, analysis
+    from . import networks, mcts, analysis, hex
 
     n_envs = 1
     world = hex.Hex.initial(n_envs=n_envs, boardsize=5, device='cuda')
     network = networks.Network(world.obs_space, world.action_space, width=128).to(world.device)
     network.load_state_dict(storing.load_latest()['network'])
-    agent = mcts.MCTSAgent(network, n_nodes=96)
+    agent = mcts.MCTSAgent(network, n_nodes=16)
 
     analysis.record(world, [agent, agent], 20, N=0).notebook()
 

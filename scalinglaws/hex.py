@@ -71,7 +71,7 @@ class BoardHelper:
 
             touched = torch.zeros_like(self.board, dtype=torch.bool)
             touched[tuple(neighbour_idxs[possible].T)] = True
-            idxs = touched.nonzero()
+            idxs = touched.nonzero(as_tuple=False)
 
     def reset(self, terminate):
         self.board[terminate] = self._ORDS['.']

@@ -109,11 +109,11 @@ class MoHexAgent:
         obs = seated_obs.where(world.seats[:, None, None, None] == 0, oppo_obs)
 
         reset = ((obs == 0) & (self._prev_obs != 0)).any(-1).any(-1).any(-1)
-        for env in reset.nonzero():
+        for env in reset.nonzero(as_tuple=False):
             self._proxies[env].clear()
         self._prev_obs[reset] = 0.
 
-        new_moves = (obs != self._prev_obs).nonzero()
+        new_moves = (obs != self._prev_obs).nonzero(as_tuple=False)
         for (env, row, col, seat) in new_moves:
             color = 'bw'[seat]
             self._proxies[env].play(color, (row, col))
