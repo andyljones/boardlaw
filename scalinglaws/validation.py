@@ -203,10 +203,15 @@ class SequentialMatrix(arrdict.namedarrtuple(fields=('payoffs', 'moves', 'seats'
 
     @classmethod
     def dilemma(cls, *args, **kwargs):
-        payoff = [
+        return cls.initial([
             [[0., 0.], [1., 0.]],
-            [[0., 1.], [.5, .5]]]
-        return cls.initial(payoff, *args, **kwargs)
+            [[0., 1.], [.5, .5]]], *args, **kwargs)
+
+    @classmethod
+    def antisymmetric(cls, *args, **kwargs):
+        return cls.initial([
+            [[1., 0.], [1., 1.]],
+            [[0., 0.], [0., .1]]], *args, **kwargs)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
