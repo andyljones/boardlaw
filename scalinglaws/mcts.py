@@ -1,14 +1,23 @@
 import numpy as np
 import torch
 from rebar import arrdict
+import logging
 
-def search(f, xl, xr, tol=1e-3):
+log = logging.getLogger(__name__)
+
+def safe_div(x, y):
+    r = x/y
+    r[x == 0] = 0
+    return r
+
+def search(f, g, xl, xr, tol=1e-3):
     # We expect f(xl) >= 0, f(xr) <= 0, but sometimes - thanks to numerical issues
     # that turn up when you sum a bunch of reciprocals on float32 - that doesn't hold!
     # So we just call those cases 'bad' and ignore them for the duration of the search.
     # At the end, we'll fill in with whichever of the left/right is better. 
     bad = (f(xl) < -tol) | (f(xr) > +tol)
     xl, xr = xl.clone(), xr.clone()
+    n_loops = 0
     while True: 
         # Ugh, underflows
         xm = xl + (xr - xl)/2
@@ -35,22 +44,49 @@ def search(f, xl, xr, tol=1e-3):
         in_right = (torch.sign(ym) == +1) & ~bad
         xl[in_right] = xm[in_right]
 
+        n_loops += 1
+
 def regularized_policy(pi, q, lambda_n):
+    assert (lambda_n > 0).all(), 'Don\'t currently support zero lambda_n'
     alpha_min = (q + lambda_n[:, None]*pi).max(-1).values
     alpha_max = q.max(-1).values + lambda_n
 
-    def policy(alpha):
-        p = lambda_n[:, None]*pi/(alpha[:, None] - q)
-        # alpha_min guarantees us we're on the right-hand side of 
-        # the singularity, so let's complete it with the positive limit.
-        # Practically, this makes the search a damn sight simpler.
-        p[alpha[:, None] == q] = np.inf
-        return p
+    policy = lambda alpha: safe_div(lambda_n[:, None]*pi, alpha[:, None] - q)
+    grad = lambda alpha: -safe_div(lambda_n[:, None]*pi, (alpha[:, None] - q).pow(2))
+    
     error = lambda alpha: policy(alpha).sum(-1) - 1
 
-    alpha_star = search(error, alpha_min, alpha_max)
+    alpha_star = search(error, grad, alpha_min, alpha_max)
 
-    return policy(alpha_star)
+    meta = arrdict.arrdict(
+        alpha_min=alpha_min, 
+        alpha_max=alpha_max, 
+        alpha_star=alpha_star)
+
+    return policy(alpha_star), meta
+
+def test_policy():
+    # Case when the root is at the lower bound
+    pi = torch.tensor([[.999, .001]])
+    q = torch.tensor([[0., 1.]])
+    lambda_n = torch.tensor([[.1]])
+    p, meta = regularized_policy(pi, q, lambda_n)
+    torch.testing.assert_allclose(meta.alpha_star, torch.tensor([[1.]]), rtol=.001, atol=.001)
+
+    # Case when the root is at the upper bound
+    pi = torch.tensor([[.5, .5]])
+    q = torch.tensor([[1., 1.]])
+    lambda_n = torch.tensor([[.1]])
+    p, meta = regularized_policy(pi, q, lambda_n)
+    torch.testing.assert_allclose(meta.alpha_star, torch.tensor([[1.1]]), rtol=.001, atol=.001)
+
+    # Case when the root is at the upper bound
+    pi = torch.tensor([[.25, .75]])
+    q = torch.tensor([[1., .25]])
+    lambda_n = torch.tensor([[.5]])
+    p, meta = regularized_policy(pi, q, lambda_n)
+    torch.testing.assert_allclose(meta.alpha_star, torch.tensor([[1.205]]), rtol=.001, atol=.001)
+    
 
 class MCTS:
 
@@ -86,6 +122,7 @@ class MCTS:
 
         # https://github.com/LeelaChessZero/lc0/issues/694
         self.c_puct = c_puct
+        assert self.c_puct > 0, 'Zero c_puct is not currently supported, as it\'d start the search at a singularity'
 
     def action_stats(self, envs, nodes):
         children = self.tree.children[envs, nodes]
