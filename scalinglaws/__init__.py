@@ -26,8 +26,10 @@ def chunk_stats(chunk):
         stats.cumsum('count/inputs', n_inputs)
         stats.cumsum('count/chunks', 1)
         stats.cumsum('count/samples', n_samples)
+        stats.cumsum('count/sims', chunk.decisions.n_sims.sum())
         stats.rate('step-rate/chunks', 1)
         stats.rate('step-rate/inputs', n_inputs)
+        stats.mean('mcts-branching', chunk.decisions.branching.mean())
 
         rewards = chunk.transition.rewards.sum(0).sum(0)
         for i, r in enumerate(rewards):
@@ -47,7 +49,7 @@ def optimize(network, opt, batch):
     target_value = learning.reward_to_go(t.rewards, d0.v, terminal, terminal, gamma=1)
     value_loss = (target_value - d.v).square().mean()
     
-    loss = policy_loss + value_loss
+    loss = policy_loss + value_loss 
     
     opt.zero_grad()
     loss.backward()
@@ -71,16 +73,16 @@ def optimize(network, opt, batch):
         # stats.rel_gradient_norm('rel-norm-grad', agent)
 
 def run():
-    buffer_length = 32
+    buffer_length = 8
     batch_size = 1024
     n_envs = 1024
     buffer_inc = batch_size//n_envs
 
     # world = hex.Hex.initial(n_envs=n_envs, boardsize=5, device='cuda')
-    world = validation.All.initial(n_envs=n_envs, n_seats=2, length=4, device='cuda')
+    world = hex.Hex.initial(n_envs=n_envs, boardsize=5, device='cuda')
     network = networks.Network(world.obs_space, world.action_space, width=128).to(world.device)
     agent = mcts.MCTSAgent(network, n_nodes=16)
-    opt = torch.optim.Adam(network.parameters(), lr=3e-4, amsgrad=True)
+    opt = torch.optim.Adam(network.parameters(), lr=1e-3, amsgrad=True)
 
     run_name = paths.timestamp('az-test')
     compositor = widgets.Compositor()

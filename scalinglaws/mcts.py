@@ -92,7 +92,7 @@ def benchmark_search():
 
 class MCTS:
 
-    def __init__(self, world, n_nodes, c_puct=2.5): 
+    def __init__(self, world, n_nodes, c_puct=.25): 
         self.device = world.device
         self.n_envs = world.n_envs
         self.n_nodes = n_nodes
@@ -119,7 +119,7 @@ class MCTS:
             n=torch.full((world.n_envs, self.n_nodes), 0, device=self.device, dtype=torch.int),
             w=torch.full((world.n_envs, self.n_nodes, self.n_seats), 0., device=self.device))
 
-        self.sim = 0
+        self.sim = torch.tensor(0, device=self.device, dtype=torch.long)
         self.worlds[:, 0] = world
 
         # https://github.com/LeelaChessZero/lc0/issues/694
@@ -245,6 +245,10 @@ class MCTS:
         return arrdict.arrdict(
             logits=torch.log(p),
             v=v)
+    
+    def branching(self):
+        counts = (self.tree.children != -1).sum(-1)
+        return counts.sum(-1)/(counts >= 1).sum(-1)
 
     def display(self, e=0):
         import networkx as nx
@@ -312,6 +316,8 @@ class MCTSAgent:
         r = m.root()
         return arrdict.arrdict(
             logits=r.logits,
+            n_sims=torch.full_like(m.envs, m.sim+1),
+            branching=m.branching(),
             v=r.v,
             actions=torch.distributions.Categorical(logits=r.logits).sample())
 
