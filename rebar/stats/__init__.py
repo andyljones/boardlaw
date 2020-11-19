@@ -51,6 +51,9 @@ def funcduty(name):
         return g
     return factory
 
+def dataframe(run=-1, prefix='', rule='60s'):
+    return Reader(run, prefix).resample(rule)
+
 def compare(run_names=[-1], prefix='', rule='60s'):
     return pd.concat({paths.resolve(run): Reader(run, prefix).resample(rule) for run in run_names}, 1)
 

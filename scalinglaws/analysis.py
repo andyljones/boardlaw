@@ -2,6 +2,9 @@ import time
 import numpy as np
 import torch
 from rebar import arrdict, stats
+from logging import getLogger
+
+log = getLogger(__name__)
 
 def apply(world, agents):
     indices, actions = [], []
@@ -42,9 +45,10 @@ class Evaluator:
         self.n_trajs = n_trajs
 
         self.throttle = throttle
-        self.last = time.time()
+        self.last = 0
 
     def rollout(self, agent):
+        log.info(f'Evaluating on {self.n_trajs} trajectories...')
         traces = {}
         for seat in range(self.world.n_seats):
             agents = self.opponents

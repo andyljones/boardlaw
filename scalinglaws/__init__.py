@@ -81,7 +81,7 @@ def run():
     opt = torch.optim.Adam(network.parameters(), lr=1e-3, amsgrad=True)
 
     idiot = validation.RandomRolloutAgent(1)
-    evaluator = analysis.Evaluator(world[:1], [idiot], n_trajs=32)
+    evaluator = analysis.Evaluator(world[:1], [idiot], n_trajs=32, throttle=60)
 
     run_name = paths.timestamp('az-test')
     compositor = widgets.Compositor()

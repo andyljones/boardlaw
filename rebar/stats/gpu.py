@@ -11,10 +11,8 @@ def memory(device=0):
         device = device.index
     total_mem = torch.cuda.get_device_properties(f'cuda:{device}').total_memory
     writing.max(f'gpu-memory/reserve/{device}', torch.cuda.max_memory_reserved(device)/total_mem)
-    torch.cuda.reset_max_memory_cached()
     writing.max(f'gpu-memory/alloc/{device}', torch.cuda.max_memory_allocated(device)/total_mem)
-    torch.cuda.reset_max_memory_allocated()
-    torch.cuda.reset_max_memory_cached()
+    torch.cuda.reset_peak_memory_stats()
 
 def dataframe():
     """Use `nvidia-smi --help-query-gpu` to get a list of query params"""
