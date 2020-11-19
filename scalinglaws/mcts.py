@@ -14,7 +14,7 @@ def safe_div(x, y):
 def newton_search(f, grad, x0, tol=1e-3):
     # Some guidance on what's going on here:
     # * While the Regularized MCTS paper recommends binary search, it turns out to be pretty slow and - thanks
-    #   to the numerical errors that show up when you run this whole thing in float32 - tricky to implemnt.
+    #   to the numerical errors that show up when you run this whole thing in float32 - tricky to implement.
     # * What works better is to exploit the geometry of the problem. The error function is convex and 
     #   descends from an asymptote somewhere to the left of x0. 
     # * By taking Newton steps from x0, we head right and so don't run into any more asymptotes.
@@ -39,7 +39,11 @@ def newton_search(f, grad, x0, tol=1e-3):
 
 def solve_policy(pi, q, lambda_n):
     assert (lambda_n > 0).all(), 'Don\'t currently support zero lambda_n'
-    alpha_min = (q + lambda_n[:, None]*pi).max(-1).values
+
+    # Need alpha_min to be at least 2eps greater than the asymptote, else we'll risk an infinite gradient
+    eps = torch.finfo(torch.float).eps
+    gap = (lambda_n[:, None]*pi).clamp(2*eps, None)
+    alpha_min = (q + gap).max(-1).values
 
     policy = lambda alpha: safe_div(lambda_n[:, None]*pi, alpha[:, None] - q)
     error = lambda alpha: policy(alpha).sum(-1) - 1
