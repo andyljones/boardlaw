@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from rebar import paths, widgets, logging, stats, arrdict, storing
-from . import hex, mcts, networks, learning, validation
+from . import hex, mcts, networks, learning, validation, analysis
 from torch.nn import functional as F
 from logging import getLogger
 from itertools import cycle
@@ -80,6 +80,9 @@ def run():
     agent = mcts.MCTSAgent(network, n_nodes=16)
     opt = torch.optim.Adam(network.parameters(), lr=1e-3, amsgrad=True)
 
+    idiot = validation.RandomRolloutAgent(1)
+    evaluator = analysis.Evaluator(world[:1], [idiot], n_trajs=32)
+
     run_name = paths.timestamp('az-test')
     compositor = widgets.Compositor()
     paths.clear(run_name)
@@ -104,6 +107,8 @@ def run():
             log.info('learner stepped')
             
             buffer = buffer[buffer_inc:]
+
+            evaluator(agent)
 
             storing.store_latest(run_name, {'network': network, 'opt': opt}, throttle=60)
             storing.store_periodic(run_name, {'network': network, 'opt': opt}, throttle=600)

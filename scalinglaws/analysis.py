@@ -1,5 +1,7 @@
+import time
+import numpy as np
 import torch
-from rebar import arrdict
+from rebar import arrdict, stats
 
 def apply(world, agents):
     indices, actions = [], []
@@ -11,16 +13,55 @@ def apply(world, agents):
     indices, actions = torch.cat(indices), arrdict.cat(actions)
     return actions[torch.argsort(indices)]
 
-def rollout(world, agents, n_steps):
+def rollout(world, agents, n_steps=None, n_trajs=None):
+    assert n_steps != n_trajs, 'Must specify exactly one of n_steps or n_trajs'
+
     trace = []
-    for _ in range(n_steps):
+    steps, trajs = 0, 0
+    while True:
         actions = apply(world, agents)
         world, trans = world.step(actions)
         trace.append(arrdict.arrdict(
             actions=actions,
             trans=trans,
             world=world))
+        steps += 1
+        trajs += trans.terminal.sum()
+        if (n_steps and (steps >= n_steps)) or (n_trajs and (trajs >= n_trajs)):
+            break
     return arrdict.stack(trace)
+
+class Evaluator:
+
+    def __init__(self, world, opponents, n_trajs, throttle=0):
+        assert world.n_envs == 1
+        assert world.n_seats == len(opponents) + 1
+        self.world = arrdict.cat([world for _ in range(n_trajs)])
+        self.opponents = opponents
+
+        self.n_trajs = n_trajs
+
+        self.throttle = throttle
+        self.last = time.time()
+
+    def rollout(self, agent):
+        traces = {}
+        for seat in range(self.world.n_seats):
+            agents = self.opponents
+            agents.insert(seat, agent)
+            traces[seat] = rollout(self.world, agents, n_trajs=self.n_trajs) 
+        return traces
+
+    def __call__(self, agent):
+        if time.time() - self.last < self.throttle:
+            return
+        self.last = time.time()
+
+        traces = self.rollout(agent)
+        for seat, trace in traces.items():
+            wins = (trace.trans.rewards[..., seat] == 1).sum()
+            trajs = trace.trans.terminal.sum()
+            stats.mean(f'eval/{seat}-wins', wins, trajs)
 
 def plot_all(f):
 
