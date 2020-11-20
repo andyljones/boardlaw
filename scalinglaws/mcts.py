@@ -370,7 +370,7 @@ def test_multienv():
 def full_game_mcts(s, n_nodes, n_rollouts, **kwargs):
     from . import hex
     world = hex.from_string(s, device='cpu')
-    agent = validation.RandomRolloutAgent(n_rollouts)
+    agent = validation.MonteCarloAgent(n_rollouts)
     return mcts(world, agent, n_nodes=n_nodes, **kwargs)
 
 def test_planted_game():

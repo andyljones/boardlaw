@@ -27,7 +27,7 @@ class RandomAgent:
             actions=torch.distributions.Categorical(probs=world.valid.float()).sample(),
             v=torch.zeros((B, world.n_seats), device=world.device))
 
-class RandomRolloutAgent:
+class MonteCarloAgent:
 
     def __init__(self, n_rollouts):
         self.n_rollouts = n_rollouts

@@ -65,7 +65,7 @@ class Evaluator:
         for seat, trace in traces.items():
             wins = (trace.trans.rewards[..., seat] == 1).sum()
             trajs = trace.trans.terminal.sum()
-            stats.mean(f'eval/{seat}-wins', wins, trajs)
+            stats.last(f'eval/{seat}-wins', wins, trajs)
 
 def plot_all(f):
 
