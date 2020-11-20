@@ -29,33 +29,45 @@ class RandomAgent:
 
 class MonteCarloAgent:
 
-    def __init__(self, n_rollouts):
+    def __init__(self, n_rollouts, temperature=1.):
         self.n_rollouts = n_rollouts
+        self.temperature = temperature
 
     def rollout(self, world):
         B, _ = world.valid.shape
 
         live = torch.ones((B,), dtype=torch.bool, device=world.device)
         reward = torch.zeros((B, world.n_seats), dtype=torch.float, device=world.device)
+        first_actions = None
         while True:
             if not live.any():
                 break
 
             actions = torch.distributions.Categorical(probs=world.valid.float()).sample()
+            if first_actions is None:
+                first_actions = actions
 
             world, responses = world.step(actions)
 
             reward += responses.rewards * live.unsqueeze(-1).float()
             live = live & ~responses.terminal
 
-        return reward
+        return reward, first_actions
 
     def __call__(self, world, value=True):
-        v = torch.stack([self.rollout(world) for _ in range(self.n_rollouts)]).mean(0)
+        totals = torch.zeros_like(world.logits)
+        counts = torch.zeros_like(world.logits)
+        for _ in range(self.n_rollouts):
+            r, a = self.rollout(world)
+            totals.scatter_add_(1, a[:, None], r[:, None])
+            totals.scatter_add_(1, a[:, None], torch.ones_like(r[:, None]))
+        means = totals.div(counts).where(counts > 0, torch.zeros_like(counts))
+        logits = torch.softmax(self.temperature*means, 1)
+
         return arrdict.arrdict(
-            logits=torch.log(world.valid.float()/world.valid.sum(-1, keepdims=True)),
+            logits=logits,
             actions=torch.distributions.Categorical(probs=world.valid.float()).sample(),
-            v=v)
+            v=means.mean(-1))
 
 
 def uniform_logits(valid):
