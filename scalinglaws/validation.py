@@ -55,19 +55,22 @@ class MonteCarloAgent:
         return reward, first_actions
 
     def __call__(self, world, value=True):
-        totals = torch.zeros_like(world.logits)
-        counts = torch.zeros_like(world.logits)
+        envs = torch.arange(world.n_envs, device=world.device)
+        totals = torch.stack([torch.zeros_like(world.valid, dtype=torch.float) for _ in range(world.n_seats)], -1)
+        counts = torch.zeros_like(totals)
         for _ in range(self.n_rollouts):
             r, a = self.rollout(world)
-            totals.scatter_add_(1, a[:, None], r[:, None])
-            totals.scatter_add_(1, a[:, None], torch.ones_like(r[:, None]))
+            totals[envs, a[:, None], :] += r[:, None]
+            counts[envs, a[:, None], :] += torch.ones_like(r[:, None])
         means = totals.div(counts).where(counts > 0, torch.zeros_like(counts))
-        logits = torch.softmax(self.temperature*means, 1)
+
+        seat_means = means[envs, :, world.seats.long()]
+        logits = torch.log_softmax(self.temperature*seat_means, -1)
 
         return arrdict.arrdict(
             logits=logits,
-            actions=torch.distributions.Categorical(probs=world.valid.float()).sample(),
-            v=means.mean(-1))
+            actions=torch.distributions.Categorical(logits=logits).sample(),
+            v=(logits.exp()[..., None]*means).sum(-2))
 
 
 def uniform_logits(valid):
