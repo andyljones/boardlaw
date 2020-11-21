@@ -37,7 +37,7 @@ def chunk_stats(chunk):
     return chunk
 
 def optimize(network, opt, batch):
-    w, d0, t = batch.world, batch.decisions, batch.transitions
+    w, d0, t = batch.worlds, batch.decisions, batch.transitions
     d = network(w, value=True)
 
     target_logits = d0.logits
@@ -61,7 +61,7 @@ def optimize(network, opt, batch):
     with stats.defer():
         stats.mean('loss/value', value_loss)
         stats.mean('loss/policy', policy_loss)
-        stats.mean('resid-var/v', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
+        stats.mean('progress/resid-var', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
         stats.mean('rel-entropy', -(d.logits.exp()*d.logits).sum(-1).mean()/np.log(d.logits.size(-1)))
 
         stats.mean('v-target/mean', target_value.mean())
@@ -79,13 +79,13 @@ def run():
     buffer_inc = batch_size//n_envs
 
     # world = hex.Hex.initial(n_envs=n_envs, boardsize=5, device='cuda')
-    world = hex.Hex.initial(n_envs=n_envs, boardsize=5, device='cuda')
-    network = networks.Network(world.obs_space, world.action_space, width=128).to(world.device)
+    worlds = hex.Hex.initial(n_envs=n_envs, boardsize=5, device='cuda')
+    network = networks.Network(worlds.obs_space, worlds.action_space, width=128).to(worlds.device)
     agent = mcts.MCTSAgent(network, n_nodes=16)
     opt = torch.optim.Adam(network.parameters(), lr=1e-3, amsgrad=True)
 
     idiot = validation.MonteCarloAgent(1)
-    evaluator = analysis.Evaluator(world[:1], [idiot], n_trajs=32, throttle=60)
+    evaluator = analysis.Evaluator(worlds[:1], [idiot], n_trajs=32, throttle=60)
 
     run_name = paths.timestamp('az-test')
     compositor = widgets.Compositor()
@@ -98,13 +98,13 @@ def run():
             evaluator(agent)
 
             while len(buffer) < buffer_length:
-                decisions = agent(world, value=True)
-                new_world, transition = world.step(decisions.actions)
+                decisions = agent(worlds, value=True)
+                new_worlds, transition = worlds.step(decisions.actions)
                 buffer.append(arrdict.arrdict(
-                    world=world,
+                    worlds=worlds,
                     decisions=decisions,
                     transitions=transition).detach())
-                world = new_world
+                worlds = new_worlds
                 log.info('actor stepped')
                 
             chunk = arrdict.stack(buffer)
@@ -117,5 +117,5 @@ def run():
 
             storing.store_latest(run_name, {'network': network, 'opt': opt}, throttle=60)
             storing.store_periodic(run_name, {'network': network, 'opt': opt}, throttle=600)
-            stats.gpu.memory(world.device)
-            stats.gpu.vitals(world.device, throttle=15)
+            stats.gpu.memory(worlds.device)
+            stats.gpu.vitals(worlds.device, throttle=15)
