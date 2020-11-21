@@ -95,10 +95,9 @@ def benchmark_search():
     solns = arrdict.cat(solns)
     ds = arrdict.cat(ds)
 
-def dirichlet_noise(logits, alpha=None, eps=.25):
-    valid = (logits != -np.inf)
+def dirichlet_noise(logits, valid, alpha=None, eps=.25):
     alpha = alpha or 10/logits.size(-1)
-    alpha = torch.full_like(valid, alpha, dtype=torch.float)
+    alpha = torch.full((valid.shape[-1],), alpha, dtype=torch.float, device=logits.device)
     dist = torch.distributions.Dirichlet(alpha)
     
     draw = dist.sample(logits.shape[:-1])
@@ -107,7 +106,7 @@ def dirichlet_noise(logits, alpha=None, eps=.25):
     draw[~valid] = 0.
     draw = draw/draw.sum(-1, keepdims=True)
 
-    return logits.exp()*(1 - eps) + draw*eps
+    return (logits.exp()*(1 - eps) + draw*eps).log()
 
 class MCTS:
 
@@ -185,7 +184,7 @@ class MCTS:
 
     def initialize(self, evaluator):
         decisions = evaluator(self.worlds[:, 0], value=True)
-        self.log_pi[:, self.sim] = dirichlet_noise(decisions.logits)
+        self.log_pi[:, self.sim] = dirichlet_noise(decisions.logits, self.worlds[:, 0].valid)
 
         self.sim += 1
 

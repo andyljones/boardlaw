@@ -10,6 +10,7 @@ What to test?
 import torch
 from rebar import arrdict, stats
 from . import heads
+import numpy as np
 
 class ProxyAgent:
 
@@ -66,6 +67,7 @@ class MonteCarloAgent:
 
         seat_means = means[envs, :, world.seats.long()]
         logits = torch.log_softmax(self.temperature*seat_means, -1)
+        logits[~world.valid] = -np.inf
 
         return arrdict.arrdict(
             logits=logits,
