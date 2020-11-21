@@ -110,7 +110,7 @@ def dirichlet_noise(logits, valid, alpha=None, eps=.25):
 
 class MCTS:
 
-    def __init__(self, world, n_nodes, c_puct=.25, noise_eps=.0): 
+    def __init__(self, world, n_nodes, c_puct=2.5, noise_eps=.0): 
         self.device = world.device
         self.n_envs = world.n_envs
         self.n_nodes = n_nodes
@@ -142,6 +142,7 @@ class MCTS:
         self.worlds[:, 0] = world
 
         # https://github.com/LeelaChessZero/lc0/issues/694
+        # Larger c_puct -> greater regularization
         self.c_puct = c_puct
 
     def action_stats(self, envs, nodes):
