@@ -90,6 +90,9 @@ def run():
         buffer = []
         idxs = cycle(learning.batch_indices(buffer_length, n_envs, batch_size))
         while True:
+
+            evaluator(agent)
+
             while len(buffer) < buffer_length:
                 decisions = agent(world, value=True)
                 new_world, transition = world.step(decisions.actions)
@@ -107,8 +110,6 @@ def run():
             log.info('learner stepped')
             
             buffer = buffer[buffer_inc:]
-
-            evaluator(agent)
 
             storing.store_latest(run_name, {'network': network, 'opt': opt}, throttle=60)
             storing.store_periodic(run_name, {'network': network, 'opt': opt}, throttle=600)
