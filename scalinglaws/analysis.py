@@ -62,10 +62,17 @@ class Evaluator:
         self.last = time.time()
 
         traces = self.rollout(agent)
+        results = arrdict.arrdict()
         for seat, trace in traces.items():
             wins = (trace.trans.rewards[..., seat] == 1).sum()
             trajs = trace.trans.terminal.sum()
-            stats.last(f'eval/{seat}-wins', wins/trajs)
+            results[f'eval/{seat}-wins'] = wins/trajs
+
+        with stats.defer():
+            for k, v in results.items():
+                stats.last(k, v)
+
+        return results
 
 def plot_all(f):
 
