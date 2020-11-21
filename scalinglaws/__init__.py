@@ -8,13 +8,14 @@ from itertools import cycle
 
 log = getLogger(__name__)
 
-def chunk_stats(chunk):
+def chunk_stats(chunk, n_new):
     with stats.defer():
-        d, t = chunk.decisions, chunk.transitions
+        tail = chunk[-n_new:]
+        d, t = tail.decisions, tail.transitions
         n_trajs = t.terminal.sum()
         n_inputs = t.terminal.size(0)
         n_samples = t.terminal.nelement()
-        n_sims = chunk.decisions.n_sims.sum()
+        n_sims = d.n_sims.sum()
         stats.rate('sample-rate/actor', n_samples)
         stats.mean('traj-length', n_samples, n_trajs)
         stats.cumsum('count/traj', n_trajs)
@@ -27,13 +28,19 @@ def chunk_stats(chunk):
         stats.rate('sim-rate', n_sims)
         stats.mean('mcts-n-leaves', d.n_leaves.float().mean())
 
-        stats.corr('progress/terminal-corr', d.v[t.terminal], t.rewards[t.terminal])
-        stats.corr('progress/penultimate-corr', d.v[:1][t.terminal[1:]], t.rewards[:1][t.terminal[1:]])
-
         rewards = t.rewards.sum(0).sum(0)
         for i, r in enumerate(rewards):
             stats.mean(f'reward/seat-{i}', r, n_trajs)
-    return chunk
+
+        d, t = chunk.decisions, chunk.transitions
+        v = d.v[t.terminal]
+        r = t.rewards[t.terminal]
+        stats.mean('progress/terminal-corr', ((v - v.mean())*(r - r.mean())).mean()/(v.var()*r.var())**.5)
+
+        v = d.v[:-1][t.terminal[1:]]
+        r = t.rewards[1:][t.terminal[1:]]
+        stats.mean('progress/terminal-1-corr', ((v - v.mean())*(r - r.mean())).mean()/(v.var()*r.var())**.5)
+
 
 def optimize(network, opt, batch):
     w, d0, t = batch.worlds, batch.decisions, batch.transitions
@@ -77,7 +84,7 @@ def run():
     n_envs = 1024
     buffer_inc = batch_size//n_envs
 
-    worlds = hex.LazyHex.initial(n_envs=n_envs, boardsize=3, device='cuda')
+    worlds = hex.Random.initial(n_envs=n_envs, boardsize=3, device='cuda', seat=0)
     network = networks.Network(worlds.obs_space, worlds.action_space, width=32).to(worlds.device)
     agent = mcts.MCTSAgent(network, n_nodes=16)
     opt = torch.optim.Adam(network.parameters(), lr=1e-3, amsgrad=True)
@@ -106,7 +113,7 @@ def run():
                 log.info('actor stepped')
                 
             chunk = arrdict.stack(buffer)
-            chunk_stats(chunk[-buffer_inc:])
+            chunk_stats(chunk, buffer_inc)
 
             optimize(network, opt, chunk[:, next(idxs)])
             log.info('learner stepped')
