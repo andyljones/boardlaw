@@ -95,6 +95,27 @@ def benchmark_search():
     solns = arrdict.cat(solns)
     ds = arrdict.cat(ds)
 
+class DirichletNoise:
+
+    def __init__(self, evaluator, alpha=None, eps=.0):
+        self.evaluator = evaluator
+        self._alpha = alpha
+        self._eps = eps
+        self._dist = None
+    
+    def __call__(self, world, **kwargs):
+        d = self.evaluator(world, **kwargs)
+
+        if self._dist is None:
+            alpha = self._alpha or 10/d.logits.size(-1)
+            alpha = torch.full((d.logits.size(-1),), alpha, device=d.logits.device)
+            self._dist = torch.distributions.Dirichlet(alpha)
+        
+        draw = self._dist.sample(d.logits.shape[:-1])
+        draw[~world.valid] = 0.
+        draw = draw/draw.sum(-1, keepdims=True)
+        logits = d.logits.exp()*(1 - self._eps) + draw*self._eps
+        return type(d)(**{**d, 'logits': logits.log()})
 
 class MCTS:
 
@@ -310,33 +331,10 @@ def mcts(world, agent, **kwargs):
 
     return mcts
 
-class DirichletNoise:
-
-    def __init__(self, evaluator, alpha=None, eps=.25):
-        self.evaluator = evaluator
-        self._alpha = alpha
-        self._eps = eps
-        self._dist = None
-    
-    def __call__(self, world, **kwargs):
-        d = self.evaluator(world, **kwargs)
-
-        if self._dist is None:
-            alpha = self._alpha or 10/d.logits.size(-1)
-            alpha = torch.full((d.logits.size(-1),), alpha, device=d.logits.device)
-            self._dist = torch.distributions.Dirichlet(alpha)
-        
-        draw = self._dist.sample(d.logits.shape[:-1])
-        draw[~world.valid] = 0.
-        draw = draw/draw.sum(-1, keepdims=True)
-        logits = d.logits.exp()*(1 - self._eps) + draw*self._eps
-        return type(d)(**{**d, 'logits': logits.log()})
-
-
 class MCTSAgent:
 
     def __init__(self, evaluator, noise=True, **kwargs):
-        self.evaluator = DirichletNoise(evaluator) if noise else evaluator
+        self.evaluator = evaluator
         self.kwargs = kwargs
 
     def __call__(self, world, value=True):
