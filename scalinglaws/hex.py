@@ -248,21 +248,15 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seat'))):
         plt.close(ax.figure)
         return ax
 
-class LazyHex(Hex):
-    """One-player Hex, where the other player just plays the first action available. Deterministic."""
-
-    @classmethod
-    def _play(cls, worlds):
-        n_actions = worlds.valid.size(1)
-        actions = torch.arange(n_actions, device=worlds.device)[None, :].expand_as(worlds.valid).clone()
-        actions[~worlds.valid] = n_actions
-        return Hex.step(worlds, actions.min(-1).values)
+class Solitaire(Hex):
+    """One-player Hex"""
 
     @classmethod
     def initial(cls, *args, seat=0, **kwargs):
         worlds = super().initial(*args, **kwargs)
         if seat == 1:
-            worlds = cls._play(worlds)
+            raise ValueError('Can\'t do seat #1 right now')
+            worlds, _ = cls._play(worlds)
         return worlds
 
     def __init__(self, *args, **kwargs):
@@ -285,6 +279,25 @@ class LazyHex(Hex):
         envs = torch.arange(self.n_envs, device=self.device)
         transitions['rewards'] = transitions.rewards[envs, self.seats.long()][:, None]
         return worlds, transitions
+
+class Lazy(Solitaire):
+    """Opponent plays the first action"""
+
+    @classmethod
+    def _play(cls, worlds):
+        n_actions = worlds.valid.size(1)
+        actions = torch.arange(n_actions, device=worlds.device)[None, :].expand_as(worlds.valid).clone()
+        actions[~worlds.valid] = n_actions
+        return Hex.step(worlds, actions.min(-1).values)
+
+class Random(Solitaire):
+    """Opponent plays a random action"""
+
+    @classmethod
+    def _play(cls, worlds):
+        actions = torch.distributions.Categorical(probs=worlds.valid.float()).sample()
+        return Hex.step(worlds, actions)
+
 
 ## TESTS ##
 
