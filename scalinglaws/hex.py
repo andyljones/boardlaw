@@ -181,7 +181,7 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seat'))):
 
         new_world = type(self)(board=helper.board, seat=new_seat)
 
-        rewards = torch.zeros((self.n_envs, self.n_seats), device=self.device)
+        rewards = torch.zeros((self.n_envs, 2), device=self.device)
         rewards.scatter_(1, self.seat[:, None].long(), terminal[:, None].float())
         rewards.scatter_(1, 1-self.seat[:, None].long(), -terminal[:, None].float())
 
@@ -247,6 +247,44 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seat'))):
         ax = self.plot_state(arrdict.numpyify(arrdict.arrdict(self)), e=e)
         plt.close(ax.figure)
         return ax
+
+class LazyHex(Hex):
+    """One-player Hex, where the other player just plays the first action available. Deterministic."""
+
+    @classmethod
+    def _play(cls, worlds):
+        n_actions = worlds.valid.size(1)
+        actions = torch.arange(n_actions, device=worlds.device)[None, :].expand_as(worlds.valid).clone()
+        actions[~worlds.valid] = n_actions
+        return Hex.step(worlds, actions.min(-1).values)
+
+    @classmethod
+    def initial(cls, *args, seat=0, **kwargs):
+        worlds = super().initial(*args, **kwargs)
+        if seat == 1:
+            worlds = cls._play(worlds)
+        return worlds
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.n_seats = 1
+
+    def step(self, actions):
+        worlds, transitions = super().step(actions)
+
+        # Might be that the move just made wins the game, in which case we need to 
+        # step the world until we get to the same seat again.
+        while True:
+            mask = (worlds.seats != self.seats)
+            if not mask.any():
+                break
+            worlds[mask], other = self._play(worlds[mask])
+            transitions.rewards[mask] += other.rewards
+            transitions.terminal[mask] |= other.terminal
+
+        envs = torch.arange(self.n_envs, device=self.device)
+        transitions['rewards'] = transitions.rewards[envs, self.seats.long()][:, None]
+        return worlds, transitions
 
 ## TESTS ##
 

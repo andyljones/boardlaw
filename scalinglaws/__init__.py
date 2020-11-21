@@ -78,24 +78,23 @@ def run():
     n_envs = 1024
     buffer_inc = batch_size//n_envs
 
-    # world = hex.Hex.initial(n_envs=n_envs, boardsize=5, device='cuda')
-    worlds = hex.Hex.initial(n_envs=n_envs, boardsize=5, device='cuda')
-    network = networks.Network(worlds.obs_space, worlds.action_space, width=128).to(worlds.device)
+    worlds = hex.LazyHex.initial(n_envs=n_envs, boardsize=3, device='cuda')
+    network = networks.Network(worlds.obs_space, worlds.action_space, width=32).to(worlds.device)
     agent = mcts.MCTSAgent(network, n_nodes=16)
     opt = torch.optim.Adam(network.parameters(), lr=1e-3, amsgrad=True)
 
     idiot = validation.MonteCarloAgent(1)
-    evaluator = analysis.Evaluator(worlds[:1], [idiot], n_trajs=32, throttle=60)
+    #evaluator = analysis.Evaluator(worlds[:1], [idiot], n_trajs=32, throttle=60)
 
     run_name = paths.timestamp('az-test')
     compositor = widgets.Compositor()
     paths.clear(run_name)
     with logging.via_dir(run_name, compositor), stats.via_dir(run_name, compositor):
         buffer = []
-        idxs = cycle(learning.batch_indices(buffer_length, n_envs, batch_size))
+        idxs = cycle(learning.batch_indices(buffer_length, n_envs, batch_size, worlds.device))
         while True:
 
-            evaluator(agent)
+            #evaluator(agent)
 
             while len(buffer) < buffer_length:
                 decisions = agent(worlds, value=True)
