@@ -27,9 +27,8 @@ def chunk_stats(chunk):
         stats.rate('sim-rate', n_sims)
         stats.mean('mcts-n-leaves', d.n_leaves.float().mean())
 
-        v = d.v[t.terminal]
-        r = t.rewards[t.terminal]
-        stats.corr('progress/terminal-corr', ((v - v.mean())*(r - r.mean())).mean(), v.var(), r.var())
+        stats.corr('progress/terminal-corr', d.v[t.terminal], t.rewards[t.terminal])
+        stats.corr('progress/penultimate-corr', d.v[:1][t.terminal[1:]], t.rewards[:1][t.terminal[1:]])
 
         rewards = t.rewards.sum(0).sum(0)
         for i, r in enumerate(rewards):

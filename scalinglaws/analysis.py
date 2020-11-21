@@ -92,9 +92,9 @@ def plot_all(f):
         return fig
     return proxy
 
-def record(world, agents, n_steps, N=0):
+def record(world, agents, N=0, **kwargs):
     from rebar.recording import ParallelEncoder
-    trace = rollout(world, agents, n_steps)
+    trace = rollout(world, agents, **kwargs)
 
     state = arrdict.numpyify(trace.world)
     with ParallelEncoder(plot_all(world.plot_state), N=N, fps=1) as encoder:

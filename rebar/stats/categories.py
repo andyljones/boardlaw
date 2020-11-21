@@ -31,9 +31,16 @@ def mean(total, count=1):
     return resample
 
 @category
-def corr(xy, xx, yy):
+def corr(x, y):
     def resample(**kwargs):
-        return xy.resample(**kwargs).mean()/(xx.resample(**kwargs).mean()*yy.resample(**kwargs).mean())**.5
+        df = pd.concat({'x': x, 'y': y}, 1)
+        means = df.resample(**kwargs).mean().reindex_like(df).ffill()
+        resid = df - means
+        moments = pd.DataFrame({
+            'xx': resid.x*resid.x,
+            'yy': resid.y*resid.y,
+            'xy': resid.x*resid.y}).resample(**kwargs).mean()
+        return moments.xy/(moments.xx*moments.yy)**.5
     return resample
 
 @category
