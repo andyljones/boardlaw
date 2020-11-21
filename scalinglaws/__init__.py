@@ -10,7 +10,7 @@ log = getLogger(__name__)
 
 def chunk_stats(chunk):
     with stats.defer():
-        t = chunk.transition
+        d, t = chunk.decisions, chunk.transitions
         n_trajs = t.terminal.sum()
         n_inputs = t.terminal.size(0)
         n_samples = t.terminal.nelement()
@@ -25,15 +25,19 @@ def chunk_stats(chunk):
         stats.rate('step-rate/chunks', 1)
         stats.rate('step-rate/inputs', n_inputs)
         stats.rate('sim-rate', n_sims)
-        stats.mean('mcts-n-leaves', chunk.decisions.n_leaves.float().mean())
+        stats.mean('mcts-n-leaves', d.n_leaves.float().mean())
 
-        rewards = chunk.transition.rewards.sum(0).sum(0)
+        v = d.v[t.terminal]
+        r = t.rewards[t.terminal]
+        stats.corr('progress/terminal-corr', ((v - v.mean())*(r - r.mean())).mean(), v.var(), r.var())
+
+        rewards = t.rewards.sum(0).sum(0)
         for i, r in enumerate(rewards):
             stats.mean(f'reward/seat-{i}', r, n_trajs)
     return chunk
 
 def optimize(network, opt, batch):
-    w, d0, t = batch.world, batch.decisions, batch.transition
+    w, d0, t = batch.world, batch.decisions, batch.transitions
     d = network(w, value=True)
 
     target_logits = d0.logits
@@ -99,7 +103,7 @@ def run():
                 buffer.append(arrdict.arrdict(
                     world=world,
                     decisions=decisions,
-                    transition=transition).detach())
+                    transitions=transition).detach())
                 world = new_world
                 log.info('actor stepped')
                 

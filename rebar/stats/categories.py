@@ -15,7 +15,7 @@ def category(M):
 @category
 def last(x):
     def resample(**kwargs):
-        return x.resample(**kwargs).last()
+        return x.resample(**kwargs).last().ffill()
     return resample
 
 @category
@@ -28,6 +28,12 @@ def max(x):
 def mean(total, count=1):
     def resample(**kwargs):
         return total.resample(**kwargs).mean()/count.resample(**kwargs).mean()
+    return resample
+
+@category
+def corr(xy, xx, yy):
+    def resample(**kwargs):
+        return xy.resample(**kwargs).mean()/(xx.resample(**kwargs).mean()*yy.resample(**kwargs).mean())**.5
     return resample
 
 @category
