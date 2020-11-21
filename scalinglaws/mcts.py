@@ -110,11 +110,12 @@ def dirichlet_noise(logits, valid, alpha=None, eps=.25):
 
 class MCTS:
 
-    def __init__(self, world, n_nodes, c_puct=.25): 
+    def __init__(self, world, n_nodes, c_puct=.25, noise_eps=.0): 
         self.device = world.device
         self.n_envs = world.n_envs
         self.n_nodes = n_nodes
         self.n_seats = world.n_seats
+        self.noise_eps = noise_eps
         assert n_nodes > 1, 'MCTS requires at least two nodes'
 
         self.envs = torch.arange(world.n_envs, device=self.device)
@@ -142,7 +143,6 @@ class MCTS:
 
         # https://github.com/LeelaChessZero/lc0/issues/694
         self.c_puct = c_puct
-        assert self.c_puct > 0, 'Zero c_puct is not currently supported, as it\'d start the search at a singularity'
 
     def action_stats(self, envs, nodes):
         children = self.tree.children[envs, nodes]
@@ -183,8 +183,10 @@ class MCTS:
         return torch.distributions.Categorical(probs=probs).sample()
 
     def initialize(self, evaluator):
-        decisions = evaluator(self.worlds[:, 0], value=True)
-        self.log_pi[:, self.sim] = dirichlet_noise(decisions.logits, self.worlds[:, 0].valid)
+        world = self.worlds[:, 0]
+        decisions = evaluator(world, value=True)
+        self.log_pi[:, self.sim] = dirichlet_noise(decisions.logits, world.valid, self.noise_eps)
+        # self.log_pi[:, self.sim] = decisions.logits
 
         self.sim += 1
 
