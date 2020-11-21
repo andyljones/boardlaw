@@ -132,7 +132,9 @@ class MCTS:
             rewards=torch.full((world.n_envs, self.n_nodes, self.n_seats), 0., device=self.device, dtype=torch.float),
             terminal=torch.full((world.n_envs, self.n_nodes), False, device=self.device, dtype=torch.bool))
 
-        self.log_pi = torch.full((world.n_envs, self.n_nodes, self.n_actions), np.nan, device=self.device)
+        self.decisions = arrdict.arrdict(
+            logits=torch.full((world.n_envs, self.n_nodes, self.n_actions), np.nan, device=self.device),
+            v=torch.full((world.n_envs, self.n_nodes, self.n_seats), np.nan, device=self.device))
 
         self.stats = arrdict.arrdict(
             n=torch.full((world.n_envs, self.n_nodes), 0, device=self.device, dtype=torch.int),
@@ -162,7 +164,7 @@ class MCTS:
         return q, n
 
     def policy(self, envs, nodes):
-        pi = self.log_pi[envs, nodes].exp()
+        pi = self.decisions.logits[envs, nodes].exp()
 
         # https://arxiv.org/pdf/2007.12509.pdf
         worlds = self.worlds[envs, nodes]
@@ -186,8 +188,8 @@ class MCTS:
     def initialize(self, evaluator):
         world = self.worlds[:, 0]
         decisions = evaluator(world, value=True)
-        self.log_pi[:, self.sim] = dirichlet_noise(decisions.logits, world.valid, self.noise_eps)
-        # self.log_pi[:, self.sim] = decisions.logits
+        self.decisions.logits[:, self.sim] = dirichlet_noise(decisions.logits, world.valid, self.noise_eps)
+        self.decisions.v[:, 0] = decisions.v
 
         self.sim += 1
 
@@ -197,7 +199,7 @@ class MCTS:
         parents = torch.full_like(self.envs, 0)
 
         while True:
-            interior = ~torch.isnan(self.log_pi[self.envs, current]).any(-1)
+            interior = ~torch.isnan(self.decisions.logits[self.envs, current]).any(-1)
             terminal = self.transitions.terminal[self.envs, current]
             active = interior & ~terminal
             if not active.any():
@@ -209,8 +211,9 @@ class MCTS:
 
         return parents, actions
 
-    def backup(self, leaves, v):
-        current, v = leaves.clone(), v.clone()
+    def backup(self, leaves):
+        current = leaves.clone()
+        v = self.decisions.v[self.envs, leaves]
         while True:
             active = (current != -1)
             if not active.any():
@@ -248,9 +251,10 @@ class MCTS:
 
         with torch.no_grad():
             decisions = evaluator(world, value=True)
-        self.log_pi[self.envs, leaves] = decisions.logits
+        self.decisions.logits[self.envs, leaves] = decisions.logits
+        self.decisions.v[self.envs, leaves] = decisions.v
 
-        self.backup(leaves, decisions.v)
+        self.backup(leaves)
 
         self.sim += 1
 
@@ -259,13 +263,9 @@ class MCTS:
         q, n = self.action_stats(self.envs, root)
         p = self.policy(self.envs, root)
 
-        #TODO: Is this how I should be evaluating root value?
-        # Not actually used in AlphaZero at all, but it's nice to have around for validation
-        v = (q*p[..., None]).sum(-2)
-
         return arrdict.arrdict(
             logits=torch.log(p),
-            v=v)
+            v=self.decisions.v[:, 0])
     
     def n_leaves(self):
         return ((self.tree.children == -1).all(-1) & (self.tree.parents != -1)).sum(-1)
@@ -343,6 +343,7 @@ class MCTSAgent:
 
 from . import validation, analysis
 
+#TODO: The 'v' all need to be rewritten to test something else.
 def test_trivial():
     world = validation.Win.initial(device='cpu')
     agent = validation.ProxyAgent()
