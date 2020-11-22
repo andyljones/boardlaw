@@ -6,23 +6,16 @@ from logging import getLogger
 
 log = getLogger(__name__)
 
-def apply(world, agents):
-    indices, actions = [], []
-    for i, agent in enumerate(agents):
-        m = world.seats == i
-        if m.any():
-            indices.append(m.nonzero(as_tuple=False).squeeze(1))
-            actions.append(agent(world[m]).actions)
-    indices, actions = torch.cat(indices), arrdict.cat(actions)
-    return actions[torch.argsort(indices)]
-
 def rollout(world, agents, n_steps=None, n_trajs=None):
     assert n_steps != n_trajs, 'Must specify exactly one of n_steps or n_trajs'
 
     trace = []
     steps, trajs = 0, 0
     while True:
-        actions = apply(world, agents)
+        actions = torch.full(world.n_envs, -1, device=world.device)
+        for i, agent in enumerate(agents):
+            mask = world.seats == i
+            actions[mask] = agent(world[mask]).actions
         world, trans = world.step(actions)
         trace.append(arrdict.arrdict(
             actions=actions,

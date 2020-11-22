@@ -46,10 +46,7 @@ def optimize(network, opt, batch):
     w, d0, t = batch.worlds, batch.decisions, batch.transitions
     d = network(w, value=True)
 
-    target_logits = d0.logits
-    target_logits[torch.isinf(target_logits)] = 0.
-    actual_probs = d.logits.exp()
-    policy_loss = -(actual_probs*target_logits).sum(axis=1).mean()
+    policy_loss = -(d0.logits.exp()*d.logits).sum(axis=1).mean()
 
     terminal = torch.stack([t.terminal for _ in range(w.n_seats)], -1)
     target_value = learning.reward_to_go(t.rewards, d0.v, terminal, terminal, gamma=1)
@@ -68,7 +65,7 @@ def optimize(network, opt, batch):
         stats.mean('loss/value', value_loss)
         stats.mean('loss/policy', policy_loss)
         stats.mean('progress/resid-var', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
-        stats.mean('rel-entropy', -(d.logits.exp()*d.logits).sum(-1).mean()/np.log(d.logits.size(-1)))
+        stats.mean('rel-entropy', -d0.logits.sum(-1).mean()/np.log(d0.logits.size(-1)))
 
         stats.mean('v-target/mean', target_value.mean())
         stats.mean('v-target/std', target_value.std())
