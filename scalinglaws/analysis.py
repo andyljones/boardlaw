@@ -1,28 +1,29 @@
 import time
 import numpy as np
 import torch
-from rebar import arrdict, stats
+from rebar import arrdict, stats, recording
 from logging import getLogger
 
 log = getLogger(__name__)
 
-def rollout(world, agents, n_steps=None, n_trajs=None):
+def rollout(worlds, agents, n_steps=None, n_trajs=None):
     assert n_steps != n_trajs, 'Must specify exactly one of n_steps or n_trajs'
 
     trace = []
     steps, trajs = 0, 0
     while True:
-        actions = torch.full(world.n_envs, -1, device=world.device)
+        actions = torch.full((worlds.n_envs,), -1, device=worlds.device)
         for i, agent in enumerate(agents):
-            mask = world.seats == i
-            actions[mask] = agent(world[mask]).actions
-        world, trans = world.step(actions)
+            mask = worlds.seats == i
+            if mask.any():
+                actions[mask] = agent(worlds[mask]).actions
+        worlds, transitions = worlds.step(actions)
         trace.append(arrdict.arrdict(
             actions=actions,
-            trans=trans,
-            world=world))
+            transitions=transitions,
+            worlds=worlds))
         steps += 1
-        trajs += trans.terminal.sum()
+        trajs += transitions.terminal.sum()
         if (n_steps and (steps >= n_steps)) or (n_trajs and (trajs >= n_trajs)):
             break
     return arrdict.stack(trace)
@@ -57,8 +58,8 @@ class Evaluator:
         traces = self.rollout(agent)
         results = arrdict.arrdict()
         for seat, trace in traces.items():
-            wins = (trace.trans.rewards[..., seat] == 1).sum()
-            trajs = trace.trans.terminal.sum()
+            wins = (trace.transitions.rewards[..., seat] == 1).sum()
+            trajs = trace.transitions.terminal.sum()
             results[f'eval/{seat}-wins'] = wins/trajs
 
         with stats.defer():
@@ -85,15 +86,16 @@ def plot_all(f):
         return fig
     return proxy
 
-def record(world, agents, N=0, **kwargs):
-    from rebar.recording import ParallelEncoder
-    trace = rollout(world, agents, **kwargs)
-
-    state = arrdict.numpyify(trace.world)
-    with ParallelEncoder(plot_all(world.plot_state), N=N, fps=1) as encoder:
+def record_worlds(worlds, N=0):
+    state = arrdict.numpyify(worlds)
+    with recording.ParallelEncoder(plot_all(worlds.plot_worlds), N=N, fps=1) as encoder:
         for i in range(state.board.shape[0]):
             encoder(state[i])
     return encoder
+    
+def record(world, agents, N=0, **kwargs):
+    trace = rollout(world, agents, **kwargs)
+    return record_worlds(trace.worlds, N=N)
 
 def test_record():
     from rebar import storing

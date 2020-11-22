@@ -191,9 +191,9 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seat'))):
         return new_world, transition
 
     @classmethod
-    def plot_state(cls, state, e=None, ax=None):
-        e = (0,)*(state.board.ndim-2) if e is None else e
-        board = state.board[e]
+    def plot_worlds(cls, worlds, e=None, ax=None):
+        e = (0,)*(worlds.board.ndim-2) if e is None else e
+        board = worlds.board[e]
         width = board.shape[1]
 
         ax = plt.subplots()[1] if ax is None else ax
@@ -244,7 +244,7 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seat'))):
         return ax.figure
 
     def display(self, e=None):
-        ax = self.plot_state(arrdict.numpyify(arrdict.arrdict(self)), e=e)
+        ax = self.plot_worlds(arrdict.numpyify(arrdict.arrdict(self)), e=e)
         plt.close(ax.figure)
         return ax
 

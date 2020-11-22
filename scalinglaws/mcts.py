@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from multiprocessing import Value
 import numpy as np
 import torch
@@ -110,7 +111,7 @@ def dirichlet_noise(logits, valid, alpha=None, eps=.25):
 
 class MCTS:
 
-    def __init__(self, world, n_nodes, c_puct=2.5, noise_eps=.0):
+    def __init__(self, world, n_nodes, c_puct=2.5, noise_eps=.25):
         self.device = world.device
         self.n_envs = world.n_envs
         self.n_nodes = n_nodes
@@ -316,23 +317,23 @@ class MCTS:
 
         return plt.gca()
 
-def mcts(world, agent, **kwargs):
-    mcts = MCTS(world, **kwargs)
+def mcts(worlds, evaluator, **kwargs):
+    mcts = MCTS(worlds, **kwargs)
 
-    mcts.initialize(agent)
+    mcts.initialize(evaluator)
     for _ in range(mcts.n_nodes-1):
-        mcts.simulate(agent)
+        mcts.simulate(evaluator)
 
     return mcts
 
 class MCTSAgent:
 
-    def __init__(self, evaluator, noise=True, **kwargs):
+    def __init__(self, evaluator, **kwargs):
         self.evaluator = evaluator
         self.kwargs = kwargs
 
-    def __call__(self, world, value=True):
-        m = mcts(world, self.evaluator, **self.kwargs)
+    def __call__(self, world, value=True, **kwargs):
+        m = mcts(world, self.evaluator, **self.kwargs, **kwargs)
         r = m.root()
         return arrdict.arrdict(
             logits=r.logits,
@@ -340,6 +341,14 @@ class MCTSAgent:
             n_leaves=m.n_leaves(),
             v=r.v,
             actions=torch.distributions.Categorical(logits=r.logits).sample())
+
+    @contextmanager
+    def no_noise(self):
+        kwargs = self.kwargs
+        self.kwargs = {**kwargs, 'noise_eps': 0.}
+        yield
+        self.kwargs = kwargs
+
 
 from . import validation, analysis
 
