@@ -101,7 +101,7 @@ class MaskedOutput(nn.Module):
     
     def forward(self, x, valid, **kwargs):
         y = self.core(x).reshape(*x.shape[:-1], *self.shape)
-        y = y.where(valid, torch.full_like(y, -1000))
+        y = y.where(valid, torch.full_like(y, -np.inf))
         return F.log_softmax(y, -1)
 
     def sample(self, logits, test=False):
