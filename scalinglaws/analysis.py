@@ -33,7 +33,7 @@ class Evaluator:
     def __init__(self, world, opponents, n_trajs, throttle=0):
         assert world.n_envs == 1
         assert world.n_seats == len(opponents) + 1
-        self.world = arrdict.cat([world for _ in range(n_trajs)])
+        self.worlds = arrdict.cat([world for _ in range(n_trajs)])
         self.opponents = opponents
 
         self.n_trajs = n_trajs
@@ -44,10 +44,9 @@ class Evaluator:
     def rollout(self, agent):
         log.info(f'Evaluating on {self.n_trajs} trajectories...')
         traces = {}
-        for seat in range(self.world.n_seats):
-            agents = self.opponents
-            agents.insert(seat, agent)
-            traces[seat] = rollout(self.world, agents, n_trajs=self.n_trajs) 
+        for seat in range(self.worlds.n_seats):
+            agents = self.opponents[:seat] + [agent] + self.opponents[seat:]
+            traces[seat] = rollout(self.worlds, agents, n_trajs=self.n_trajs) 
         return traces
 
     def __call__(self, agent):
