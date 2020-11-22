@@ -111,7 +111,7 @@ def dirichlet_noise(logits, valid, alpha=None, eps=.25):
 
 class MCTS:
 
-    def __init__(self, world, n_nodes, c_puct=2.5, noise_eps=.25):
+    def __init__(self, world, n_nodes, c_puct=2.5, noise_eps=.05):
         self.device = world.device
         self.n_envs = world.n_envs
         self.n_nodes = n_nodes
