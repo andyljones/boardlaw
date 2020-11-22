@@ -10,8 +10,8 @@ def memory(device=0):
     if isinstance(device, torch.device):
         device = device.index
     total_mem = torch.cuda.get_device_properties(f'cuda:{device}').total_memory
-    writing.max(f'gpu-memory/reserve/{device}', torch.cuda.max_memory_reserved(device)/total_mem)
-    writing.max(f'gpu-memory/alloc/{device}', torch.cuda.max_memory_allocated(device)/total_mem)
+    writing.max(f'gpu-memory/{device}/reserve', torch.cuda.max_memory_reserved(device)/total_mem)
+    writing.max(f'gpu-memory/{device}/alloc', torch.cuda.max_memory_allocated(device)/total_mem)
     torch.cuda.reset_peak_memory_stats()
 
 def dataframe():
@@ -48,7 +48,7 @@ def vitals(device=None, throttle=0):
 
     fields = ['compute', 'access', 'fan', 'power', 'temp']
     for (device, field), value in df[fields].stack().iteritems():
-        writing.mean(f'gpu/{field}/{device}', value)
+        writing.mean(f'gpu/{device}/{field}', value)
 
     for device in df.index:
-        writing.mean(f'gpu/memory/{device}', 100*df.loc[device, 'memused']/df.loc[device, 'memtotal'])
+        writing.mean(f'gpu-memory/{device}/gross', 100*df.loc[device, 'memused']/df.loc[device, 'memtotal'])
