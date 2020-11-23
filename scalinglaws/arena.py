@@ -63,7 +63,7 @@ def parallel_league(worldfunc, agents, n_copies=32):
             if mask.any():
                 decisions = agents[first](worlds[mask])
                 worlds[mask], transitions = worlds[mask].step(decisions.actions)
-                rewards[mask & (terminations < 1), 0] += (transitions.rewards[terminations[mask] < 1, 0] == 1)
+                rewards[mask & (terminations < 1)] += transitions.rewards[terminations[mask] < 1]
                 terminations[mask] += transitions.terminal
         
         for (j, second) in enumerate(agents):
@@ -71,12 +71,29 @@ def parallel_league(worldfunc, agents, n_copies=32):
             if mask.any():
                 decisions = agents[second](worlds[mask])
                 worlds[mask], transitions = worlds[mask].step(decisions.actions)
-                rewards[mask & (terminations < 1), 1] += (transitions.rewards[terminations[mask] < 1, 1] == 1)
+                rewards[mask & (terminations < 1)] += transitions.rewards[terminations[mask] < 1]
                 terminations[mask] += transitions.terminal
         
         if (terminations >= 1).all():
             break
 
+    totals = torch.zeros((n_agents*n_agents, 2), device=worlds.device)
+    totals[..., 0].scatter_add_(0, fstmask*n_agents + sndmask, rewards[..., 0])
+    totals[..., 1].scatter_add_(0, fstmask*n_agents + sndmask, rewards[..., 1])
+    totals = totals.reshape((n_agents, n_agents, 2))    
+
+    winrates = 1/2*(totals[..., 0]/n_copies) + .5
+
+    return pd.DataFrame(winrates.cpu().numpy(), agents.keys(), agents.keys())
+
+def plot_confusion(df):
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+
+    with plt.style.context('seaborn-poster'):
+        ax = sns.heatmap(df, cmap='RdBu', annot=True, vmin=0, vmax=1, annot_kws={'fontsize': 'large'})
+        ax.set_xlabel('white')
+        ax.set_ylabel('black')
 
 def run(worldfunc, agentfunc, run_name):
     agents = periodic_agents(agentfunc, run_name)
