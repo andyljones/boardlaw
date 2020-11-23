@@ -126,13 +126,16 @@ class MoHexAgent:
         self._proxies = []
         self._kwargs = kwargs
 
-    def __call__(self, worlds):
+    def _load(self, worlds):
         if len(self._proxies) < worlds.n_envs:
             self._proxies = self._proxies + [MoHex(**self._kwargs) for _ in range(worlds.n_envs - len(self._proxies))]
 
         obs, seats  = worlds.obs, worlds.seats
         for e, proxy in enumerate(self._proxies):
             proxy.load(obs[e], seats[e])
+
+    def __call__(self, worlds):
+        self._load(worlds)
 
         futures = []
         for proxy, seat in zip(self._proxies, worlds.seats):
@@ -167,24 +170,31 @@ def test():
         worlds, transitions = worlds.step(decisions.actions)
 
 def benchmark():
+    # Bests: 
+    # False/1: 8 envs @ 12 samples/sec
+    # True/1000: 8 envs @ 5 samples/sec
     import aljpy 
     import pandas as pd
 
     results = []
     for n in [1, 2, 4, 8, 16]:
         worlds = hex.Hex.initial(n_envs=n, boardsize=11)
-        black = MoHexAgent()
-        white = MoHexAgent()
+        black = MoHexAgent(pre_search=True, max_games=1000)
+        white = MoHexAgent(pre_search=True, max_games=1000)
+
+        # Prime it
+        black(worlds)
+        white(worlds)
 
         with aljpy.timer() as timer:
             moves = 0
             for _ in range(5):
-                actions = black(worlds)
-                worlds, transitions = worlds.step(actions)
-                actions = white(worlds)
-                worlds, transitions = worlds.step(actions)
-                moves += 2*worlds.n_env
+                decisions = black(worlds)
+                worlds, transitions = worlds.step(decisions.actions)
+                decisions = white(worlds)
+                worlds, transitions = worlds.step(decisions.actions)
+                moves += 2*worlds.n_envs
             results.append({'n_envs': n, 'runtime': timer.time(), 'samples': moves}) 
             print(results[-1])
 
-    results = pd.DataFrame(results)
+    return pd.DataFrame(results)
