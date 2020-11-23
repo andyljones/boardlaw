@@ -84,19 +84,23 @@ def optimize(network, opt, batch):
         stats.cumsum('count/learner-steps', 1)
         # stats.rel_gradient_norm('rel-norm-grad', agent)
 
+def worldfunc(n_envs, device='cuda'):
+    return hex.Hex.initial(n_envs=n_envs, boardsize=5, device=device)
+
+def agentfunc():
+    worlds = worldfunc(n_envs=1)
+    network = networks.Network(worlds.obs_space, worlds.action_space, width=32).to(worlds.device)
+    return mcts.MCTSAgent(network, n_nodes=16)
+
 def run():
     buffer_length = 8
     batch_size = 1024
     n_envs = 1024
     buffer_inc = batch_size//n_envs
 
-    worlds = hex.Hex.initial(n_envs=n_envs, boardsize=5, device='cuda')
-    network = networks.Network(worlds.obs_space, worlds.action_space, width=32).to(worlds.device)
-    agent = mcts.MCTSAgent(network, n_nodes=32)
-    opt = torch.optim.Adam(network.parameters(), lr=1e-3, amsgrad=True)
-
-    idiot = validation.MonteCarloAgent(1)
-    evaluator = analysis.Evaluator(worlds[:1], [idiot], n_trajs=32, throttle=300)
+    worlds = worldfunc(n_envs)
+    agent = agentfunc()
+    opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-3, amsgrad=True)
 
     run_name = paths.timestamp('az-test')
     compositor = widgets.Compositor()
@@ -105,9 +109,6 @@ def run():
         buffer = []
         idxs = cycle(learning.batch_indices(buffer_length, n_envs, batch_size, worlds.device))
         while True:
-
-            with agent.no_noise():
-                evaluator(agent)
 
             while len(buffer) < buffer_length:
                 decisions = agent(worlds, value=True)

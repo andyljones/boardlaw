@@ -1,10 +1,12 @@
 from time import strptime
 import pandas as pd
 import pickle
-
+from logging import getLogger
 from pandas._libs.tslibs import Timestamp
 from . import paths
 import time
+
+log = getLogger(__name__)
 
 def _store(path, objs):
     state_dicts = {k: v.state_dict() for k, v in objs.items()}
@@ -20,6 +22,7 @@ def store_latest(run_name, objs, throttle=0):
             return False
 
     _store(path, objs)
+    log.info(f'Stored latest at "{path}"')
     return True
 
 def load_latest(run_name=-1, proc_name='MainProcess'):
@@ -38,6 +41,7 @@ def store_periodic(run_name, objs, throttle=0):
         return False
 
     _store(path, objs)
+    log.info(f'Stored periodic at "{path}"')
     return True
 
 def runs():

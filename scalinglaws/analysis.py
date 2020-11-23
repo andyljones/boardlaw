@@ -6,11 +6,12 @@ from logging import getLogger
 
 log = getLogger(__name__)
 
-def rollout(worlds, agents, n_steps=None, n_trajs=None):
-    assert n_steps != n_trajs, 'Must specify exactly one of n_steps or n_trajs'
+def rollout(worlds, agents, n_steps=0, n_trajs=0, n_reps=0):
+    assert int(n_steps) + int(n_trajs) + int(n_reps) == 1, 'Must specify exactly one of n_steps or n_trajs or n_reps'
 
     trace = []
     steps, trajs = 0, 0
+    reps = torch.zeros(worlds.n_envs, device=worlds.device)
     while True:
         actions = torch.full((worlds.n_envs,), -1, device=worlds.device)
         for i, agent in enumerate(agents):
@@ -23,49 +24,15 @@ def rollout(worlds, agents, n_steps=None, n_trajs=None):
             transitions=transitions,
             worlds=worlds))
         steps += 1
+        if n_steps and (steps >= n_steps):
+            break
         trajs += transitions.terminal.sum()
-        if (n_steps and (steps >= n_steps)) or (n_trajs and (trajs >= n_trajs)):
+        if n_steps and (steps >= n_steps):
+            break
+        reps += transitions.terminal
+        if (reps >= n_reps).all():
             break
     return arrdict.stack(trace)
-
-class Evaluator:
-
-    def __init__(self, world, opponents, n_trajs, throttle=0):
-        assert world.n_envs == 1
-        assert world.n_seats == len(opponents) + 1
-        self.worlds = arrdict.cat([world for _ in range(n_trajs)])
-        self.opponents = opponents
-
-        self.n_trajs = n_trajs
-
-        self.throttle = throttle
-        self.last = 0
-
-    def rollout(self, agent):
-        log.info(f'Evaluating on {self.n_trajs} trajectories...')
-        traces = {}
-        for seat in range(self.worlds.n_seats):
-            agents = self.opponents[:seat] + [agent] + self.opponents[seat:]
-            traces[seat] = rollout(self.worlds, agents, n_trajs=self.n_trajs) 
-        return traces
-
-    def __call__(self, agent):
-        if time.time() - self.last < self.throttle:
-            return
-        self.last = time.time()
-
-        traces = self.rollout(agent)
-        results = arrdict.arrdict()
-        for seat, trace in traces.items():
-            wins = (trace.transitions.rewards[..., seat] == 1).sum()
-            trajs = trace.transitions.terminal.sum()
-            results[f'eval/{seat}-wins'] = wins/trajs
-
-        with stats.defer():
-            for k, v in results.items():
-                stats.last(k, v)
-
-        return results
 
 def plot_all(f):
 
