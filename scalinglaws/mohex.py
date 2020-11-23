@@ -6,6 +6,7 @@ from logging import getLogger
 import shlex
 from . import hex
 from rebar import arrdict
+from tempfile import NamedTemporaryFile
 
 log = getLogger(__name__)
 
@@ -14,23 +15,24 @@ def to_notation(subscript):
     col = chr(ord('a') + col)
     return f'{col}{row+1}'
 
-def as_sgf(obs):
+def as_sgf(obs, seat):
     """Example: https://github.com/cgao3/benzene-vanilla-cmake/blob/master/regression/sgf/opening/5x5a3.sgf
     Wiki: https://en.wikipedia.org/wiki/Smart_Game_Format
     """
-    assert obs.ndim == 2
+    assert obs.ndim == 3, 'Observations must be a (S, S, 2) stack of piece indicators'
     size = obs.size(0)
-    positions = {'B': obs[..., 0].nonzero(), 'W': obs[..., 1].nonzero()}
+    obs = obs.transpose(0, 1).flip(2) if seat == 1 else obs
+
+    positions = {'B': obs[..., 0].nonzero(as_tuple=False), 'W': obs[..., 1].nonzero(as_tuple=False)}
     moves = []
     for colour, posns in positions.items():
         for pos in posns:
             moves.append(f'{colour}[{to_notation(pos)}]')
-    return f"(;AP[HexGui:0.2]FF[4]GM[11]SZ[{size}{''.join(moves)})"
-
+    return f"(;AP[HexGui:0.2]FF[4]GM[11]SZ[{size}];{';'.join(moves)})"
 
 class MoHex:
 
-    def __init__(self, boardsize=5, max_games=1000, pre_search=True):
+    def __init__(self, max_games=1000, pre_search=True):
         command = 'mohex --use-logfile=0'
         self._p = subprocess.Popen(shlex.split(command),
                              stdin=subprocess.PIPE, 
@@ -39,9 +41,17 @@ class MoHex:
                              text=True)
         self._logs = []
         self._log(f"# {command}\n")
-        self.query(f'boardsize {boardsize}')
         self.query(f'param_mohex max_games {max_games}')
         self.query(f'param_mohex perform_pre_search {int(pre_search)}')
+
+    def _log(self, message):
+        self._logs.append(message)
+        log.debug(f'MoHex: {message}')
+
+    def _log_std_err(self):
+        list = select([self._p.stderr], [], [], 0)[0]
+        for s in list:
+            self._log(os.read(s.fileno(), 8192))
 
     def answer(self):
         self._log_std_err()
@@ -67,7 +77,7 @@ class MoHex:
         return answer[2:]
 
     def send(self, cmd):
-        self._log(">{cmd}\n")
+        self._log(f">{cmd}\n")
         self._p.stdin.write(f'{cmd}\n')
         self._p.stdin.flush()
 
@@ -76,14 +86,15 @@ class MoHex:
     def query(self, cmd):
         return self.send(cmd)()
 
-    def _log(self, message):
-        self._logs.append(message)
-        log.debug(f'MoHex: {message}')
+    def load(self, obs, seat):
+        sgf = as_sgf(obs, seat)
+        with NamedTemporaryFile('w') as f:
+            f.write(sgf)
+            f.flush()
+            self.query(f'loadsgf {f.name}')
 
-    def _log_std_err(self):
-        list = select([self._p.stderr], [], [], 0)[0]
-        for s in list:
-            self._log(os.read(s.fileno(), 8192))
+    def boardsize(self, size):
+        self.query(f'boardsize {size}')
 
     def play(self, color, pos):
         self.query(f'play {color} {to_notation(pos)}')
@@ -112,46 +123,31 @@ class MoHex:
 class MoHexAgent:
 
     def __init__(self, **kwargs):
-        self._proxies = None
-        self._prev_obs = None
+        self._proxies = []
         self._kwargs = kwargs
 
-    def __call__(self, world):
-        if self._proxies is None:
-            self._proxies = [MoHex(world.boardsize, **self._kwargs) for _ in range(world.n_envs)]
-            self._prev_obs = torch.zeros((world.n_envs, world.boardsize, world.boardsize, 2), device=world.device)
+    def __call__(self, worlds):
+        if len(self._proxies) < worlds.n_envs:
+            self._proxies = self._proxies + [MoHex(**self._kwargs) for _ in range(worlds.n_envs - len(self._proxies))]
 
-        seated_obs = world.obs
-        oppo_obs = world.obs.transpose(1, 2).flip(3)
-        obs = seated_obs.where(world.seats[:, None, None, None] == 0, oppo_obs)
-
-        reset = ((obs == 0) & (self._prev_obs != 0)).any(-1).any(-1).any(-1)
-        for env in reset.nonzero(as_tuple=False):
-            self._proxies[env].clear()
-        self._prev_obs[reset] = 0.
-
-        new_moves = (obs != self._prev_obs).nonzero(as_tuple=False)
-        for (env, row, col, seat) in new_moves:
-            color = 'bw'[seat]
-            self._proxies[env].play(color, (row, col))
-
-        self._prev_obs = obs
+        obs, seats  = worlds.obs, worlds.seats
+        for e, proxy in enumerate(self._proxies):
+            proxy.load(obs[e], seats[e])
 
         futures = []
-        for proxy, seat in zip(self._proxies, world.seats):
+        for proxy, seat in zip(self._proxies, worlds.seats):
             color = 'bw'[seat]
             futures.append(proxy.solve_async(color))
         
         actions = []
-        for future, seat in zip(futures, world.seats):
+        for future, seat in zip(futures, worlds.seats):
             row, col = future()
             actions.append((row, col) if seat == 0 else (col, row))
 
-        actions = torch.tensor(actions, dtype=torch.long, device=world.device)
+        actions = torch.tensor(actions, dtype=torch.long, device=worlds.device)
 
         # To linear indices
-        boardsize = self._prev_obs.size(1)
-        actions = actions[:, 0]*boardsize + actions[:, 1]
+        actions = actions[:, 0]*worlds.boardsize + actions[:, 1]
         
         return arrdict.arrdict(
             actions=actions)
@@ -160,16 +156,15 @@ class MoHexAgent:
         return self._proxies[e].display()
 
 def test():
-    env = hex.Hex.initial(boardsize=3)
-    black = MoHexAgent(env)
-    white = MoHexAgent(env)
+    worlds = hex.Hex.initial(1, boardsize=5)
+    black = MoHexAgent()
+    white = MoHexAgent()
 
-    inputs = env.reset()
     for _ in range(5):
-        actions = black(inputs)
-        responses, inputs = env.step(actions)
-        actions = white(inputs)
-        responses, inputs = env.step(actions)
+        decisions = black(worlds)
+        worlds, transitions = worlds.step(decisions.actions)
+        decisions = white(worlds)
+        worlds, transitions = worlds.step(decisions.actions)
 
 def benchmark():
     import aljpy 
@@ -177,19 +172,18 @@ def benchmark():
 
     results = []
     for n in [1, 2, 4, 8, 16]:
-        env = hex.Hex.initial(n_envs=n, boardsize=11)
-        black = MoHexAgent(env)
-        white = MoHexAgent(env)
+        worlds = hex.Hex.initial(n_envs=n, boardsize=11)
+        black = MoHexAgent()
+        white = MoHexAgent()
 
         with aljpy.timer() as timer:
-            inputs = env.reset()
             moves = 0
             for _ in range(5):
-                actions = black(inputs)
-                responses, inputs = env.step(actions)
-                actions = white(inputs)
-                responses, inputs = env.step(actions)
-                moves += 2*inputs.valid.size(0)
+                actions = black(worlds)
+                worlds, transitions = worlds.step(actions)
+                actions = white(worlds)
+                worlds, transitions = worlds.step(actions)
+                moves += 2*worlds.n_env
             results.append({'n_envs': n, 'runtime': timer.time(), 'samples': moves}) 
             print(results[-1])
 
