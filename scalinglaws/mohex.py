@@ -9,6 +9,25 @@ from rebar import arrdict
 
 log = getLogger(__name__)
 
+def to_notation(subscript):
+    row, col = subscript
+    col = chr(ord('a') + col)
+    return f'{col}{row+1}'
+
+def as_sgf(obs):
+    """Example: https://github.com/cgao3/benzene-vanilla-cmake/blob/master/regression/sgf/opening/5x5a3.sgf
+    Wiki: https://en.wikipedia.org/wiki/Smart_Game_Format
+    """
+    assert obs.ndim == 2
+    size = obs.size(0)
+    positions = {'B': obs[..., 0].nonzero(), 'W': obs[..., 1].nonzero()}
+    moves = []
+    for colour, posns in positions.items():
+        for pos in posns:
+            moves.append(f'{colour}[{to_notation(pos)}]')
+    return f"(;AP[HexGui:0.2]FF[4]GM[11]SZ[{size}{''.join(moves)})"
+
+
 class MoHex:
 
     def __init__(self, boardsize=5, max_games=1000, pre_search=True):
@@ -67,9 +86,7 @@ class MoHex:
             self._log(os.read(s.fileno(), 8192))
 
     def play(self, color, pos):
-        row, col = pos
-        col = chr(ord('a') + col)
-        self.query(f'play {color} {col}{row+1}')
+        self.query(f'play {color} {to_notation(pos)}')
 
     def solve_async(self, color):
         f = self.send(f'reg_genmove {color}')
@@ -92,16 +109,16 @@ class MoHex:
         s = self.query('showboard')
         print('\n'.join(s.splitlines()[3:-1]))
 
-
 class MoHexAgent:
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         self._proxies = None
         self._prev_obs = None
+        self._kwargs = kwargs
 
     def __call__(self, world):
         if self._proxies is None:
-            self._proxies = [MoHex(world.boardsize) for _ in range(world.n_envs)]
+            self._proxies = [MoHex(world.boardsize, **self._kwargs) for _ in range(world.n_envs)]
             self._prev_obs = torch.zeros((world.n_envs, world.boardsize, world.boardsize, 2), device=world.device)
 
         seated_obs = world.obs
