@@ -92,7 +92,7 @@ def run():
 
     worlds = hex.Hex.initial(n_envs=n_envs, boardsize=5, device='cuda')
     network = networks.Network(worlds.obs_space, worlds.action_space, width=32).to(worlds.device)
-    agent = mcts.MCTSAgent(network, n_nodes=16)
+    agent = mcts.MCTSAgent(network, n_nodes=32)
     opt = torch.optim.Adam(network.parameters(), lr=1e-3, amsgrad=True)
 
     idiot = validation.MonteCarloAgent(1)
@@ -127,7 +127,7 @@ def run():
             
             buffer = buffer[buffer_inc:]
 
-            storing.store_latest(run_name, {'network': network, 'opt': opt}, throttle=60)
-            storing.store_periodic(run_name, {'network': network, 'opt': opt}, throttle=600)
+            storing.store_latest(run_name, {'agent': agent, 'opt': opt}, throttle=60)
+            storing.store_periodic(run_name, {'agent': agent, 'opt': opt}, throttle=600)
             stats.gpu.memory(worlds.device)
             stats.gpu.vitals(worlds.device, throttle=15)

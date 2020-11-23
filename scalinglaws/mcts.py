@@ -349,6 +349,18 @@ class MCTSAgent:
         yield
         self.kwargs = kwargs
 
+    def load_state_dict(self, sd):
+        #TODO: Systematize this
+        evaluator = {k[10:]: v for k, v in sd.items() if k.startswith('evaluator.')}
+        kwargs = {k[7:]: v for k, v in sd.items() if k.startswith('kwargs.')}
+        self.evaluator.load_state_dict(evaluator)
+        self.kwargs.update(kwargs)
+
+    def state_dict(self):
+        evaluator = {f'evaluator.{k}': v for k, v in self.evaluator.state_dict().items()}
+        kwargs = {f'kwargs.{k}': v for k, v in self.kwargs.items()}
+        return {**evaluator, **kwargs}
+
 
 from . import validation, analysis
 
