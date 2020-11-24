@@ -147,8 +147,8 @@ class MoHexAgent:
             self._proxies = self._proxies + [MoHex(**self._kwargs) for _ in range(worlds.n_envs - len(self._proxies))]
 
         obs, seats  = worlds.obs, worlds.seats
-        for e, proxy in enumerate(self._proxies):
-            proxy.load(obs[e], seats[e])
+        for e in range(len(seats)):
+            self._proxies[e].load(obs[e], seats[e])
 
     def __call__(self, worlds):
         self._load(worlds)
