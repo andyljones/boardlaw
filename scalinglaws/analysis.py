@@ -27,10 +27,10 @@ def rollout(worlds, agents, n_steps=0, n_trajs=0, n_reps=0):
         if n_steps and (steps >= n_steps):
             break
         trajs += transitions.terminal.sum()
-        if n_steps and (steps >= n_steps):
+        if n_trajs and (trajs >= n_trajs):
             break
         reps += transitions.terminal
-        if (reps >= n_reps).all():
+        if n_reps and (reps >= n_reps).all():
             break
     return arrdict.stack(trace)
 

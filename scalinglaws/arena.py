@@ -48,11 +48,11 @@ def parallel_league(worldfunc, agents, n_copies=1, n_reps=1):
     n_agents = len(agents)
 
     idxs = np.arange(n_copies*n_agents*n_agents)
-    fstmask, sndmask, _ = np.unravel_index(idxs, (n_agents, n_agents, n_copies))
+    fstidxs, sndidxs, _ = np.unravel_index(idxs, (n_agents, n_agents, n_copies))
 
     worlds = worldfunc(len(idxs))
-    fstmask = torch.as_tensor(fstmask, device=worlds.device) 
-    sndmask = torch.as_tensor(sndmask, device=worlds.device)
+    fstidxs = torch.as_tensor(fstidxs, device=worlds.device) 
+    sndidxs = torch.as_tensor(sndidxs, device=worlds.device)
 
     step = 0
     terminations = torch.zeros((worlds.n_envs), device=worlds.device)
@@ -60,7 +60,7 @@ def parallel_league(worldfunc, agents, n_copies=1, n_reps=1):
     while True:
         log.info(f'Step #{step}. {terminations.mean():.1f} average terminations; {(terminations >= n_reps).float().mean():.0%} worlds have hit {n_reps} terminations.')
         for (i, first) in enumerate(agents):
-            mask = (fstmask == i) & (terminations < n_reps)
+            mask = (fstidxs == i) & (worlds.seats == 0) & (terminations < n_reps)
             if mask.any():
                 decisions = agents[first](worlds[mask])
                 worlds[mask], transitions = worlds[mask].step(decisions.actions)
@@ -68,7 +68,7 @@ def parallel_league(worldfunc, agents, n_copies=1, n_reps=1):
                 terminations[mask] += transitions.terminal
         
         for (j, second) in enumerate(agents):
-            mask = (sndmask == j) & (terminations < n_reps)
+            mask = (sndidxs == j) & (worlds.seats == 1) & (terminations < n_reps)
             if mask.any():
                 decisions = agents[second](worlds[mask])
                 worlds[mask], transitions = worlds[mask].step(decisions.actions)
@@ -81,8 +81,8 @@ def parallel_league(worldfunc, agents, n_copies=1, n_reps=1):
         step += 1
 
     totals = torch.zeros((n_agents*n_agents, 2), device=worlds.device)
-    totals[..., 0].scatter_add_(0, fstmask*n_agents + sndmask, rewards[..., 0])
-    totals[..., 1].scatter_add_(0, fstmask*n_agents + sndmask, rewards[..., 1])
+    totals[..., 0].scatter_add_(0, fstidxs*n_agents + sndidxs, rewards[..., 0])
+    totals[..., 1].scatter_add_(0, fstidxs*n_agents + sndidxs, rewards[..., 1])
     totals = totals.reshape((n_agents, n_agents, 2))    
 
     winrates = 1/2*(totals[..., 0]/(n_copies*n_reps)) + .5
