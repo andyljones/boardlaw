@@ -10,17 +10,19 @@ from tempfile import NamedTemporaryFile
 
 log = getLogger(__name__)
 
-def configfile(max_games=None, max_memory=None, pre_search=None, max_time=None):
+def configfile(max_games=None, max_memory=None, presearch=None, max_time=None, max_nodes=None):
     contents = []
     if max_games is not None:
         contents.append(f'param_mohex max_games {max_games}')
-    if pre_search is not None:
-        contents.append(f'param_mohex perform_pre_search {int(pre_search)}')
+    if presearch is not None:
+        contents.append(f'param_mohex perform_pre_search {int(presearch)}')
     if max_memory is not None:
-        contents.append(f'param_mohex max_memory {int(max_memory)}')
+        contents.append(f'param_mohex max_memory {int(max_memory*1e6)}')
+    if max_nodes is not None:
+        contents.append(f'param_mohex max_nodes {int(max_nodes)}')
     if max_time is not None:
         contents.append(f'param_mohex use_time_management 1')
-        contents.append(f'param_mohex max_time {max_time}')
+        contents.append(f'param_game game_time {max_time/2}')
 
     with NamedTemporaryFile('w', delete=False, prefix='mohex-config-') as f:
         f.write('\n'.join(contents))
@@ -58,12 +60,14 @@ class MoHex:
                             stderr=subprocess.PIPE,
                             text=True)
 
-        log.debug(f"# {command}\n")
+        log.debug(f"# {command}")
 
     def _log_std_err(self):
         list = select([self._p.stderr], [], [], 0)[0]
         for s in list:
-            log.debug(os.read(s.fileno(), 8192))
+            s = os.read(s.fileno(), 8192).decode()
+            for l in s.splitlines():
+                log.debug(l)
 
     def answer(self):
         self._log_std_err()
@@ -74,7 +78,7 @@ class MoHex:
                 # Program died
                 self._log_std_err()
                 raise IOError('MoHex returned an empty line')
-            log.debug(f'<{line}')
+            log.debug(f'<{line.strip()}')
             done = (line == "\n")
             if done:
                 break
@@ -89,7 +93,7 @@ class MoHex:
         return answer[2:]
 
     def send(self, cmd):
-        log.debug(f">{cmd}\n")
+        log.debug(f">{cmd}")
         self._p.stdin.write(f'{cmd}\n')
         self._p.stdin.flush()
 
@@ -172,41 +176,35 @@ class MoHexAgent:
 
 def test():
     worlds = hex.Hex.initial(1, boardsize=5)
-    black = MoHexAgent()
-    white = MoHexAgent()
+    agents = MoHexAgent()
 
-    for _ in range(5):
-        decisions = black(worlds)
-        worlds, transitions = worlds.step(decisions.actions)
-        decisions = white(worlds)
+    for _ in range(10):
+        decisions = agents(worlds)
         worlds, transitions = worlds.step(decisions.actions)
 
-def benchmark():
-    # Bests: 
-    # False/1: 8 envs @ 12 samples/sec
-    # True/1000: 8 envs @ 5 samples/sec
+def benchmark(n=16, T=10, **kwargs):
+    # kwargs/rate
+    # 16, Defaults: 1.4
+    # 16, presearch=False, max_games=1: 13.2
+    # 16, presearch=False, max_games=1, max_memory=1: 12
+    # 16, presearch=False, max_time=1: 6
+    # 16, presearch=True, max_time=1: 6
+
     import aljpy 
     import pandas as pd
 
-    results = []
-    for n in [1, 2, 4, 8, 16]:
-        worlds = hex.Hex.initial(n_envs=n, boardsize=11)
-        black = MoHexAgent(pre_search=True, max_games=1000)
-        white = MoHexAgent(pre_search=True, max_games=1000)
+    worlds = hex.Hex.initial(n_envs=n, boardsize=11)
+    agents = MoHexAgent(**kwargs)
 
-        # Prime it
-        black(worlds)
-        white(worlds)
+    # Prime it
+    agents(worlds)
 
-        with aljpy.timer() as timer:
-            moves = 0
-            for _ in range(5):
-                decisions = black(worlds)
-                worlds, transitions = worlds.step(decisions.actions)
-                decisions = white(worlds)
-                worlds, transitions = worlds.step(decisions.actions)
-                moves += 2*worlds.n_envs
-            results.append({'n_envs': n, 'runtime': timer.time(), 'samples': moves}) 
-            print(results[-1])
-
-    return pd.DataFrame(results)
+    with aljpy.timer() as timer:
+        moves = 0
+        for _ in range(T):
+            decisions = agents(worlds)
+            worlds, transitions = worlds.step(decisions.actions)
+            moves += worlds.n_envs
+    s = pd.Series({'n_envs': n, 'runtime': timer.time(), 'samples': moves})
+    s['rate'] = s.samples/s.runtime
+    return s
