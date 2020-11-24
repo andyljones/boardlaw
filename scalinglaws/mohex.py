@@ -176,7 +176,7 @@ class MoHexAgent:
 
 def test():
     worlds = hex.Hex.initial(1, boardsize=5)
-    agents = MoHexAgent()
+    agents = MoHexAgent(max_games=1000)
 
     for _ in range(10):
         decisions = agents(worlds)
@@ -188,7 +188,12 @@ def benchmark(n=16, T=10, **kwargs):
     # 16, presearch=False, max_games=1: 13.2
     # 16, presearch=False, max_games=1, max_memory=1: 12
     # 16, presearch=False, max_time=1: 6
-    # 16, presearch=True, max_time=1: 6
+    # 16, max_time=1: 6
+    # 16, max_games=1, 7.6
+    # 16, max_games=10, 7.2
+    # 16, max_games=100, 6.6
+    # 16, max_games=1000, 6.0
+    # 16, max_games=10000, 3.9
 
     import aljpy 
     import pandas as pd
