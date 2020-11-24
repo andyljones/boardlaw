@@ -44,7 +44,7 @@ def league(worldfunc, agents, n_copies=32):
 
     return pd.Series(scores).apply(float).unstack()
 
-def parallel_league(worldfunc, agents, n_copies=32):
+def parallel_league(worldfunc, agents, n_copies=1, n_reps=1):
     n_agents = len(agents)
 
     idxs = np.arange(n_copies*n_agents*n_agents)
@@ -57,24 +57,24 @@ def parallel_league(worldfunc, agents, n_copies=32):
     terminations = torch.zeros((worlds.n_envs), device=worlds.device)
     rewards = torch.zeros((worlds.n_envs, 2), device=worlds.device)
     while True:
-        log.info(f'Stepped; {(terminations >= 1).float().mean():.0%} have terminated')
+        log.info(f'Stepped; {(terminations >= n_reps).float().mean():.0%} have terminated')
         for (i, first) in enumerate(agents):
-            mask = (fstmask == i) & (terminations < 1)
+            mask = (fstmask == i) & (terminations < n_reps)
             if mask.any():
                 decisions = agents[first](worlds[mask])
                 worlds[mask], transitions = worlds[mask].step(decisions.actions)
-                rewards[mask & (terminations < 1)] += transitions.rewards[terminations[mask] < 1]
+                rewards[mask & (terminations < n_reps)] += transitions.rewards[terminations[mask] < n_reps]
                 terminations[mask] += transitions.terminal
         
         for (j, second) in enumerate(agents):
-            mask = (sndmask == j) & (terminations < 1)
+            mask = (sndmask == j) & (terminations < n_reps)
             if mask.any():
                 decisions = agents[second](worlds[mask])
                 worlds[mask], transitions = worlds[mask].step(decisions.actions)
-                rewards[mask & (terminations < 1)] += transitions.rewards[terminations[mask] < 1]
+                rewards[mask & (terminations < n_reps)] += transitions.rewards[terminations[mask] < n_reps]
                 terminations[mask] += transitions.terminal
         
-        if (terminations >= 1).all():
+        if (terminations >= n_reps).all():
             break
 
     totals = torch.zeros((n_agents*n_agents, 2), device=worlds.device)
@@ -82,7 +82,7 @@ def parallel_league(worldfunc, agents, n_copies=32):
     totals[..., 1].scatter_add_(0, fstmask*n_agents + sndmask, rewards[..., 1])
     totals = totals.reshape((n_agents, n_agents, 2))    
 
-    winrates = 1/2*(totals[..., 0]/n_copies) + .5
+    winrates = 1/2*(totals[..., 0]/(n_copies*n_reps)) + .5
 
     return pd.DataFrame(winrates.cpu().numpy(), agents.keys(), agents.keys())
 
