@@ -10,6 +10,23 @@ from tempfile import NamedTemporaryFile
 
 log = getLogger(__name__)
 
+def configfile(max_games=None, max_memory=None, pre_search=None, max_time=None):
+    contents = []
+    if max_games is not None:
+        contents.append(f'param_mohex max_games {max_games}')
+    if pre_search is not None:
+        contents.append(f'param_mohex perform_pre_search {int(pre_search)}')
+    if max_memory is not None:
+        contents.append(f'param_mohex max_memory {int(max_memory)}')
+    if max_time is not None:
+        contents.append(f'param_mohex use_time_management 1')
+        contents.append(f'param_mohex max_time {max_time}')
+
+    with NamedTemporaryFile('w', delete=False, prefix='mohex-config-') as f:
+        f.write('\n'.join(contents))
+
+    return f.name
+
 def to_notation(subscript):
     row, col = subscript
     col = chr(ord('a') + col)
@@ -32,26 +49,21 @@ def as_sgf(obs, seat):
 
 class MoHex:
 
-    def __init__(self, max_games=1000, pre_search=True):
-        command = 'mohex --use-logfile=0'
+    def __init__(self, *args, **kwargs):
+        filename = configfile(*args, **kwargs) 
+        command = f'mohex --use-logfile=0 --config={filename}'
         self._p = subprocess.Popen(shlex.split(command),
-                             stdin=subprocess.PIPE, 
-                             stdout=subprocess.PIPE, 
-                             stderr=subprocess.PIPE,
-                             text=True)
-        self._logs = []
-        self._log(f"# {command}\n")
-        self.query(f'param_mohex max_games {max_games}')
-        self.query(f'param_mohex perform_pre_search {int(pre_search)}')
+                            stdin=subprocess.PIPE, 
+                            stdout=subprocess.PIPE, 
+                            stderr=subprocess.PIPE,
+                            text=True)
 
-    def _log(self, message):
-        self._logs.append(message)
-        log.debug(f'MoHex: {message}')
+        log.debug(f"# {command}\n")
 
     def _log_std_err(self):
         list = select([self._p.stderr], [], [], 0)[0]
         for s in list:
-            self._log(os.read(s.fileno(), 8192))
+            log.debug(os.read(s.fileno(), 8192))
 
     def answer(self):
         self._log_std_err()
@@ -62,7 +74,7 @@ class MoHex:
                 # Program died
                 self._log_std_err()
                 raise IOError('MoHex returned an empty line')
-            self._log(f'<{line}')
+            log.debug(f'<{line}')
             done = (line == "\n")
             if done:
                 break
@@ -77,7 +89,7 @@ class MoHex:
         return answer[2:]
 
     def send(self, cmd):
-        self._log(f">{cmd}\n")
+        log.debug(f">{cmd}\n")
         self._p.stdin.write(f'{cmd}\n')
         self._p.stdin.flush()
 
