@@ -6,8 +6,8 @@ from logging import getLogger
 
 log = getLogger(__name__)
 
-def rollout(worlds, agents, n_steps=0, n_trajs=0, n_reps=0):
-    assert int(n_steps) + int(n_trajs) + int(n_reps) == 1, 'Must specify exactly one of n_steps or n_trajs or n_reps'
+def rollout(worlds, agents, n_steps=None, n_trajs=None, n_reps=None):
+    assert sum(x is not None for x in (n_steps, n_trajs, n_reps)) == 1, 'Must specify exactly one of n_steps or n_trajs or n_reps'
 
     trace = []
     steps, trajs = 0, 0

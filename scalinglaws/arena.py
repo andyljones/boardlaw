@@ -98,6 +98,11 @@ def plot_confusion(df):
         ax.set_xlabel('white')
         ax.set_ylabel('black')
 
+def stddev(df, n_trajs):
+    alpha = df*n_trajs + 1
+    beta = n_trajs + 1 - df*n_trajs
+    return (alpha*beta/((alpha + beta)**2 * (alpha + beta + 1)))**.5 
+
 def run(worldfunc, agentfunc, run_name):
     agents = periodic_agents(agentfunc, run_name)
     agents['latest'] = latest_agent(agentfunc, run_name)

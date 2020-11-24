@@ -14,6 +14,10 @@ def configfile(max_games=None, max_memory=None, presearch=None, max_time=None, m
     contents = []
     if max_games is not None:
         contents.append(f'param_mohex max_games {max_games}')
+        if max_games < 11:
+            # Gotta reduce the expand threshold when max_games is very low, else 
+            # the search will never be used to update the table, and a random move'll be returned.
+            contents.append(f'param_mohex expand_threshold {max_games-1}')
     if presearch is not None:
         contents.append(f'param_mohex perform_pre_search {int(presearch)}')
     if max_memory is not None:
