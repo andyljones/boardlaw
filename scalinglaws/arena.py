@@ -54,10 +54,11 @@ def parallel_league(worldfunc, agents, n_copies=1, n_reps=1):
     fstmask = torch.as_tensor(fstmask, device=worlds.device) 
     sndmask = torch.as_tensor(sndmask, device=worlds.device)
 
+    step = 0
     terminations = torch.zeros((worlds.n_envs), device=worlds.device)
     rewards = torch.zeros((worlds.n_envs, 2), device=worlds.device)
     while True:
-        log.info(f'Stepped; {(terminations >= n_reps).float().mean():.0%} have terminated')
+        log.info(f'Step #{step}. {terminations.mean():.1f} average terminations; {(terminations >= n_reps).float().mean():.0%} worlds have hit {n_reps} terminations.')
         for (i, first) in enumerate(agents):
             mask = (fstmask == i) & (terminations < n_reps)
             if mask.any():
@@ -76,6 +77,8 @@ def parallel_league(worldfunc, agents, n_copies=1, n_reps=1):
         
         if (terminations >= n_reps).all():
             break
+
+        step += 1
 
     totals = torch.zeros((n_agents*n_agents, 2), device=worlds.device)
     totals[..., 0].scatter_add_(0, fstmask*n_agents + sndmask, rewards[..., 0])
@@ -100,3 +103,12 @@ def run(worldfunc, agentfunc, run_name):
     agents['latest'] = latest_agent(agentfunc, run_name)
 
 
+def mohex_calibration():
+    from . import mohex
+
+    agents = {str(i): mohex.MoHexAgent(max_games=i) for i in [1, 10, 100, 1000]}
+
+    def worldfunc(n_envs, device='cuda'):
+        return hex.Hex.initial(n_envs=n_envs, boardsize=11, device=device)
+
+    df = parallel_league(worldfunc, agents, n_reps=10)
