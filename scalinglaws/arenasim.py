@@ -9,13 +9,33 @@ import numpy as np
 import scipy as sp
 import scipy.stats
 import networkx as nx
+from rebar import arrdict
 
-def generate_problem(mean=1000, std=400, n_agents=5, n_games=20):
+def generate_problem(mean=1000, std=400, n_agents=5, n_games=20, concentration=.7):
     ranks = np.random.normal(mean, std, (n_agents,))
-    
-    #TODO: This won't reliably be connected :/
-    alpha = np.full(n_agents*(n_agents-1), .1)
-    sp.stats.dirichlet(alpha).rvs().round(3)
 
-    return ranks
+    concentration = .7
+    alpha = np.full(n_agents*(n_agents-1)//2, concentration)
+    ps = sp.stats.dirichlet(alpha).rvs(())
+
+    games = sp.random.binomial(n_games, ps)
+
+    k = 0
+    wins = np.zeros_like(games)
+    edges = np.zeros((len(games), 2), dtype=int)
+    for i in range(n_agents):
+        for j in range(i+1, n_agents):
+            winrate = sp.special.expit((ranks[i] - ranks[j])/std)
+            
+            wins[k] = sp.random.binomial(games[k], winrate)
+            edges[k] = (i, j)
+            
+            k += 1
+            
+    return arrdict.arrdict(
+            ranks=ranks,
+            wins=wins,
+            games=games,
+            edges=edges)
+
 
