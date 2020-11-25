@@ -4,6 +4,7 @@ from . import paths
 from io import BytesIO
 from datetime import datetime
 from collections import defaultdict
+from pathlib import Path
 import time
 
 def infer_dtype(exemplar):
@@ -27,10 +28,10 @@ def make_header(dtype):
 
 class FileWriter:
 
-    def __init__(self, path, period=1):
-        self._path = path
+    def __init__(self, path, period=5):
+        self._path = Path(path) if isinstance(path, str) else Path
         self._file = None
-        self._period = 5
+        self._period = period 
         self._next = time.time()
         
     def _init(self, exemplar):
@@ -79,7 +80,7 @@ class Writer:
 class FileReader:
 
     def __init__(self, path):
-        self._path = path
+        self._path = Path(path) if isinstance(path, str) else Path
         self._file = None
 
     def _init(self):

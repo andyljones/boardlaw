@@ -2,10 +2,9 @@ import numpy as np
 import pandas as pd
 import pickle
 import torch
-from rebar import paths, storing, arrdict
+from rebar import paths, storing, arrdict, numpy
 from logging import getLogger
-from . import analysis
-from itertools import combinations, permutations
+from IPython.display import clear_output
 
 log = getLogger(__name__)
 
@@ -27,53 +26,62 @@ def latest_agent(agentfunc, run_name):
     sd = storing.load_latest(run_name)
     return assemble_agent(agentfunc, sd)
 
-def league_stats(worldfunc, agents, n_copies=1, n_reps=1):
+def summarize(vals, idxs, n_agents):
+    if vals.ndim == 1:
+        return summarize(vals[:, None], idxs, n_agents)[..., 0]
+
+    D = vals.size(-1)
+    totals = torch.zeros((n_agents*n_agents, D), device=vals.device)
+    for d in range(D):
+        totals[..., d].scatter_add_(0, idxs[:, 0]*n_agents + idxs[:, 1], vals[..., d].float())
+    totals = totals.reshape((n_agents, n_agents, D))    
+    return totals
+
+def playoff(worldfunc, agents, n_copies=1):
     n_agents = len(agents)
 
     idxs = np.arange(n_copies*n_agents*n_agents)
     fstidxs, sndidxs, _ = np.unravel_index(idxs, (n_agents, n_agents, n_copies))
 
     worlds = worldfunc(len(idxs))
-    fstidxs = torch.as_tensor(fstidxs, device=worlds.device) 
-    sndidxs = torch.as_tensor(sndidxs, device=worlds.device)
+    idxs = torch.as_tensor(np.stack([fstidxs, sndidxs], -1), device=worlds.device) 
 
-    step = 0
-    terminations = torch.zeros((worlds.n_envs), device=worlds.device)
-    rewards = torch.zeros((worlds.n_envs, 2), device=worlds.device)
     while True:
-        log.info(f'Step #{step}. {terminations.mean():.1f} average terminations; {(terminations >= n_reps).float().mean():.0%} worlds have hit {n_reps} terminations.')
-        for (i, first) in enumerate(agents):
-            mask = (fstidxs == i) & (worlds.seats == 0) & (terminations < n_reps)
-            if mask.any():
-                decisions = agents[first](worlds[mask])
-                worlds[mask], transitions = worlds[mask].step(decisions.actions)
-                rewards[mask & (terminations < n_reps)] += transitions.rewards[terminations[mask] < n_reps]
-                terminations[mask] += transitions.terminal
-        
-        for (j, second) in enumerate(agents):
-            mask = (sndidxs == j) & (worlds.seats == 1) & (terminations < n_reps)
-            if mask.any():
-                decisions = agents[second](worlds[mask])
-                worlds[mask], transitions = worlds[mask].step(decisions.actions)
-                rewards[mask & (terminations < n_reps)] += transitions.rewards[terminations[mask] < n_reps]
-                terminations[mask] += transitions.terminal
-        
-        if (terminations >= n_reps).all():
-            break
+        for seat in range(2):
+            transitions = arrdict.arrdict(
+                terminal=torch.zeros((worlds.n_envs), dtype=torch.bool, device=worlds.device),
+                rewards=torch.zeros((worlds.n_envs, 2), device=worlds.device))
+            for (i, first) in enumerate(agents):
+                mask = (idxs[:, seat] == i) & (worlds.seats == seat)
+                if mask.any():
+                    decisions = agents[first](worlds[mask])
+                    worlds[mask], masked_transitions = worlds[mask].step(decisions.actions)
+                    transitions[mask] = masked_transitions
 
-        step += 1
+            yield transitions.map(summarize, idxs=idxs, n_agents=n_agents)
 
-    totals = torch.zeros((n_agents*n_agents, 2), device=worlds.device)
-    totals[..., 0].scatter_add_(0, fstidxs*n_agents + sndidxs, rewards[..., 0])
-    totals[..., 1].scatter_add_(0, fstidxs*n_agents + sndidxs, rewards[..., 1])
-    totals = totals.reshape((n_agents, n_agents, 2))    
+def accumulate(run_name, worldfunc, agents, **kwargs):
+    writer = numpy.FileWriter(run_name)
 
-    winrates = 1/2*(totals[..., 0]/(n_copies*n_reps)) + .5
+    n_agents = len(agents)
+    totals = arrdict.arrdict(
+        terminal=np.zeros((n_agents, n_agents)),
+        rewards=np.zeros((n_agents, n_agents, 2)))
+    for step, summary in enumerate(playoff(worldfunc, agents, **kwargs)):
+        summary = summary.cpu().numpy()
+        totals += summary
+        winrates = (2*totals.rewards[..., 0] - totals.terminal)/totals.terminal
 
-    return pd.DataFrame(winrates.cpu().numpy(), agents.keys(), agents.keys())
+        clear_output(wait=True)
+        print(f'Step #{step}')
+        print(f'Winrates:\n\n{winrates}')
 
-def league(worldfunc, agents):
-    pass
+        if any((summary > 0).any().values()):
+            df = pd.concat({
+                'rewards': pd.DataFrame(summary.rewards, agents.keys(), agents.keys()),
+                'terminal': pd.DataFrame(summary.terminal, agents.keys(), agents.keys()),}, 1)
+            record = {'-'.join(k): v for k, v in df.unstack().to_dict().items()}
+            writer.write(record)
 
 def plot_confusion(df):
     import seaborn as sns

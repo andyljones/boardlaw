@@ -11,7 +11,7 @@ import scipy.stats
 import networkx as nx
 from rebar import arrdict
 
-def generate_problem(mean=1000, std=400, n_agents=5, n_games=20, concentration=.7):
+def random_problem(mean=1000, std=400, n_agents=5, n_games=20, concentration=.7):
     ranks = np.random.normal(mean, std, (n_agents,))
 
     concentration = .7
@@ -38,4 +38,5 @@ def generate_problem(mean=1000, std=400, n_agents=5, n_games=20, concentration=.
             games=games,
             edges=edges)
 
-
+def solve(prob):
+    pass

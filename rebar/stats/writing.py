@@ -48,6 +48,7 @@ QUEUE = None
 
 def record(*args, **kwargs):
     return _record(*args, **kwargs)
+
 def deferred_record(category, field, *args, **kwargs):
     if not isinstance(field, str):
         raise ValueError(f'Field should be a string, is actually {field}')
