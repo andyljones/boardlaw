@@ -70,15 +70,16 @@ def accumulate(run_name, worldfunc, agents, **kwargs):
     for step, summary in enumerate(playoff(worldfunc, agents, **kwargs)):
         summary = summary.cpu().numpy()
         totals += summary
-        winrates = (2*totals.rewards[..., 0] - totals.terminal)/totals.terminal
+        winrates = (totals.rewards[..., 0] + totals.terminal)/(2*totals.terminal)
 
         clear_output(wait=True)
         print(f'Step #{step}')
-        print(f'Winrates:\n\n{winrates}')
+        print(f'Winrates:\n\n{winrates}\n')
+        print(f'Terminals:\n\n{totals.terminal}')
 
         if any((summary > 0).any().values()):
             df = pd.concat({
-                'rewards': pd.DataFrame(summary.rewards, agents.keys(), agents.keys()),
+                'rewards': pd.DataFrame(summary.rewards[..., 0], agents.keys(), agents.keys()),
                 'terminal': pd.DataFrame(summary.terminal, agents.keys(), agents.keys()),}, 1)
             record = {'-'.join(k): v for k, v in df.unstack().to_dict().items()}
             writer.write(record)
