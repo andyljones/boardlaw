@@ -27,24 +27,7 @@ def latest_agent(agentfunc, run_name):
     sd = storing.load_latest(run_name)
     return assemble_agent(agentfunc, sd)
 
-def league(worldfunc, agents, n_copies=32):
-    worlds = worldfunc(n_envs=n_copies)
-    scores = arrdict.arrdict()
-    for first, second in permutations(agents, 2):
-        log.info(f'Evaluating {first} v {second}')
-        trace = analysis.rollout(worlds, [agents[first], agents[second]], n_reps=1)
-
-        # Mask out the first run from each environment. 
-        # We're doing this to avoid biasing towards short runs.
-        t = trace.transitions
-        mask = (t.terminal.cumsum(0) <= 1).float()
-        rewards = (t.rewards[..., 0] == 1)[mask].sum()
-        terminals = t.terminal[mask].sum()
-        scores[first, second] = (rewards/terminals)[0]
-
-    return pd.Series(scores).apply(float).unstack()
-
-def parallel_league(worldfunc, agents, n_copies=1, n_reps=1):
+def league_stats(worldfunc, agents, n_copies=1, n_reps=1):
     n_agents = len(agents)
 
     idxs = np.arange(n_copies*n_agents*n_agents)
@@ -88,6 +71,9 @@ def parallel_league(worldfunc, agents, n_copies=1, n_reps=1):
     winrates = 1/2*(totals[..., 0]/(n_copies*n_reps)) + .5
 
     return pd.DataFrame(winrates.cpu().numpy(), agents.keys(), agents.keys())
+
+def league(worldfunc, agents):
+    pass
 
 def plot_confusion(df):
     import seaborn as sns
