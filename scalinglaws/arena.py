@@ -169,3 +169,20 @@ def mohex_calibration():
         return hex.Hex.initial(n_envs=n_envs, boardsize=11, device=device)
 
     accumulate('output/mohex-tmp.npr', worldfunc, agents)
+
+def transfer_npr():
+    contents = numpy.FileReader('output/mohex.npr').read()
+    names = np.asarray([f.split('-')[1:][::-1] for f in contents.dtype.fields])[:25]
+
+    raw = contents.view('<f8').reshape(contents.shape[0], len(contents.dtype))
+    rewards = raw[:, :25]
+    terminal = raw[:, 25:]
+
+    from tqdm.auto import tqdm
+
+    for (r, t) in tqdm(zip(rewards, terminal), total=len(rewards)):
+        (idxs,) = t.nonzero()
+        for idx in idxs:
+            ns = [f'mohex-{n}-sim' for n in names[idx]]
+            result = (tuple(ns), (r[idx], -r[idx]))
+            store('manual-mohex', [result])
