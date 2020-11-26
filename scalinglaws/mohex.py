@@ -177,6 +177,10 @@ class MoHexAgent:
 
     def display(self, e=0):
         return self._proxies[e].display()
+    
+    def to(self, device):
+        assert device == 'cpu'
+        return self
 
 def test():
     worlds = hex.Hex.initial(1, boardsize=5)
