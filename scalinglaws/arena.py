@@ -100,53 +100,16 @@ def read():
     with database() as c:
         return pd.read_sql_query('select * from results', c)
 
-def summarize(vals, idxs, n_agents):
-    if vals.ndim == 1:
-        return summarize(vals[:, None], idxs, n_agents)[..., 0]
-
-    D = vals.size(-1)
-    totals = torch.zeros((n_agents*n_agents, D), device=vals.device)
-    for d in range(D):
-        totals[..., d].scatter_add_(0, idxs[:, 0]*n_agents + idxs[:, 1], vals[..., d].float())
-    totals = totals.reshape((n_agents, n_agents, D))    
-    return totals
-
-def accumulate(run_name, worldfunc, agents, **kwargs):
-    conductor = Conductor(worldfunc, agents, **kwargs)
-    writer = numpy.FileWriter(run_name)
-
-    count = 0
-    n_agents = len(agents)
-    totals = arrdict.arrdict(
-        terminal=np.zeros((n_agents, n_agents)),
-        rewards=np.zeros((n_agents, n_agents, 2)))
-    while True:
-        transitions, idxs = conductor.step()
-        summary = transitions.map(summarize, idxs=idxs, n_agents=n_agents)
-
-        totals += summary
-        winrates = (totals.rewards[..., 0] + totals.terminal)/(2*totals.terminal)
-
-        clear_output(wait=True)
-        print(f'Step #{count}')
-        print(f'Winrates:\n\n{winrates}\n')
-        print(f'Terminals:\n\n{totals.terminal}')
-
-        if any((summary > 0).any().values()):
-            df = pd.concat({
-                'rewards': pd.DataFrame(summary.rewards[..., 0], agents.keys(), agents.keys()),
-                'terminal': pd.DataFrame(summary.terminal, agents.keys(), agents.keys()),}, 1)
-            record = {'-'.join(k): v for k, v in df.unstack().to_dict().items()}
-            writer.write(record)
-        
-        count += 1
-
-def plot_confusion(df):
+def plot_payoffs():
     import seaborn as sns
     import matplotlib.pyplot as plt
+    df = (read()
+            .assign(black_win=lambda df: df.black_reward == 1)
+            .groupby(['black_name', 'white_name']).black_win.mean()
+            .unstack())
 
     with plt.style.context('seaborn-poster'):
-        ax = sns.heatmap(df, cmap='RdBu', annot=True, vmin=0, vmax=1, annot_kws={'fontsize': 'large'})
+        ax = sns.heatmap(df, cmap='RdBu', annot=True, vmin=0, vmax=1, annot_kws={'fontsize': 'large'}, cbar=False, square=True)
         ax.set_xlabel('white')
         ax.set_ylabel('black')
 
@@ -154,11 +117,6 @@ def stddev(df, n_trajs):
     alpha = df*n_trajs + 1
     beta = n_trajs + 1 - df*n_trajs
     return (alpha*beta/((alpha + beta)**2 * (alpha + beta + 1)))**.5 
-
-def run(worldfunc, agentfunc, run_name):
-    agents = periodic_agents(agentfunc, run_name)
-    agents['latest'] = latest_agent(agentfunc, run_name)
-
 
 def mohex_calibration():
     from . import mohex
@@ -168,21 +126,13 @@ def mohex_calibration():
     def worldfunc(n_envs, device='cpu'):
         return hex.Hex.initial(n_envs=n_envs, boardsize=11, device=device)
 
-    accumulate('output/mohex-tmp.npr', worldfunc, agents)
+    conductor = Conductor(worldfunc, agents)
 
-def transfer_npr():
-    contents = numpy.FileReader('output/mohex.npr').read()
-    names = np.asarray([f.split('-')[1:][::-1] for f in contents.dtype.fields])[:25]
+    step = 0
+    while True:
+        clear_output(wait=True)
+        print('Step #{step}')
+        step += 1
 
-    raw = contents.view('<f8').reshape(contents.shape[0], len(contents.dtype))
-    rewards = raw[:, :25]
-    terminal = raw[:, 25:]
-
-    from tqdm.auto import tqdm
-
-    for (r, t) in tqdm(zip(rewards, terminal), total=len(rewards)):
-        (idxs,) = t.nonzero()
-        for idx in idxs:
-            ns = [f'mohex-{n}-sim' for n in names[idx]]
-            result = (tuple(ns), (r[idx], -r[idx]))
-            store('manual-mohex', [result])
+        results = conductor.step()
+        store('mohex-manual', results)
