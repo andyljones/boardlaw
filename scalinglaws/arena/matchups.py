@@ -63,14 +63,15 @@ class AdaptiveMatcher:
 
     def __init__(self, worldfunc, n_envs=1, device='cpu'):
         self.worldfunc = worldfunc
-        self.worlds = worldfunc(n_envs)
+        self.worlds = worldfunc(n_envs, device=device)
         self.device = device
+        self.seat = 0
 
         self.next_id = 0
         self.agents = {}
         self.names = {}
         self.matchups = torch.empty((0, self.worlds.n_seats), dtype=torch.long, device=device)
-        self.rewards = torch.zeros((), device=device)
+        self.rewards = torch.zeros((n_envs,), device=device)
 
         self.counts = torch.empty((0, 0))
 
@@ -91,7 +92,7 @@ class AdaptiveMatcher:
         del self.names[id]
         self._refresh(terminal)
 
-    def _refresh(self, terminal):
+    def _refresh(self, terminal, clear=False):
         # Update the matchup distribution to better match the priorities
         if terminal.any():
             scatter_add(self.counts, self.matchups[terminal])
@@ -111,7 +112,11 @@ class AdaptiveMatcher:
             self.matchups[terminal] = sample 
 
     def step(self):
-        terminal=torch.zeros((len(self.matchups)), dtype=torch.bool, device=self.device)
+        if len(self.matchups) == 0:
+            terminal = torch.ones((self.worlds.n_envs,), dtype=torch.bool, device=self.device)
+            self._refresh(terminal)
+
+        terminal = torch.zeros((len(self.matchups)), dtype=torch.bool, device=self.device)
         for (i, id) in enumerate(self.agents):
             mask = (self.matchups[:, self.seat] == i) & (self.worlds.seats == self.seat)
             if mask.any():
@@ -129,3 +134,11 @@ class AdaptiveMatcher:
         self._refresh(terminal)
 
         return [(tuple(n), tuple(r)) for n, r in zip(names, rewards)]
+
+def test():
+    from ..validation import All, RandomAgent
+
+    matcher = AdaptiveMatcher(All.initial, n_envs=4)
+
+    matcher.add_agent('one', RandomAgent())
+    matcher.add_agent('two', RandomAgent())
