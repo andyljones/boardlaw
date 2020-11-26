@@ -26,6 +26,45 @@ def latest_agent(agentfunc, run_name):
     sd = storing.load_latest(run_name)
     return assemble_agent(agentfunc, sd)
 
+class Conductor:
+
+    def __init__(self, worldfunc, agents, device='cpu', n_copies=1):
+        self.worldfunc = worldfunc
+        self.device = device
+        self.agents = {k: agents.to(device) for k, agent in agents.items()}
+
+        self.n_agents = len(self.agents)
+        self.n_envs = n_copies*self.n_agents**2
+        self.n_copies = n_copies
+
+        self.worlds = None
+        self.idxs = None
+        self.seat = 0
+
+    def initialize(self):
+        idxs = np.arange(self.n_envs)
+        fstidxs, sndidxs, _ = np.unravel_index(idxs, (self.n_agents, self.n_agents, self.n_copies))
+
+        self.worlds = self.worldfunc(len(idxs))
+        self.idxs = torch.as_tensor(np.stack([fstidxs, sndidxs], -1), device=self.device) 
+
+    def step(self):
+        valid = torch.zeros((self.n_envs,), dtype=torch.bool, device=self.device)
+        transitions = arrdict.arrdict(
+            terminal=torch.zeros((self.n_envs), dtype=torch.bool, device=self.device),
+            rewards=torch.zeros((self.n_envs, 2), device=self.device))
+        for (i, name) in enumerate(self.agents):
+            mask = (self.idxs[:, self.seat] == i) & (self.worlds.seats == self.seat)
+            if mask.any():
+                decisions = self.agents[name](self.worlds[mask])
+                self.worlds[mask], masked_transitions = self.worlds[mask].step(decisions.actions)
+                transitions[mask] = masked_transitions
+                valid[mask] = True
+
+        self.seat = (self.seat + 1) % self.worlds.n_seats
+
+        return transitions[valid], self.idxs[valid]
+
 def summarize(vals, idxs, n_agents):
     if vals.ndim == 1:
         return summarize(vals[:, None], idxs, n_agents)[..., 0]
@@ -37,43 +76,24 @@ def summarize(vals, idxs, n_agents):
     totals = totals.reshape((n_agents, n_agents, D))    
     return totals
 
-def playoff(worldfunc, agents, n_copies=1):
-    n_agents = len(agents)
-
-    idxs = np.arange(n_copies*n_agents*n_agents)
-    fstidxs, sndidxs, _ = np.unravel_index(idxs, (n_agents, n_agents, n_copies))
-
-    worlds = worldfunc(len(idxs))
-    idxs = torch.as_tensor(np.stack([fstidxs, sndidxs], -1), device=worlds.device) 
-
-    while True:
-        for seat in range(2):
-            transitions = arrdict.arrdict(
-                terminal=torch.zeros((worlds.n_envs), dtype=torch.bool, device=worlds.device),
-                rewards=torch.zeros((worlds.n_envs, 2), device=worlds.device))
-            for (i, first) in enumerate(agents):
-                mask = (idxs[:, seat] == i) & (worlds.seats == seat)
-                if mask.any():
-                    decisions = agents[first](worlds[mask])
-                    worlds[mask], masked_transitions = worlds[mask].step(decisions.actions)
-                    transitions[mask] = masked_transitions
-
-            yield transitions.map(summarize, idxs=idxs, n_agents=n_agents)
-
 def accumulate(run_name, worldfunc, agents, **kwargs):
+    conductor = Conductor(worldfunc, agents, **kwargs)
     writer = numpy.FileWriter(run_name)
 
+    count = 0
     n_agents = len(agents)
     totals = arrdict.arrdict(
         terminal=np.zeros((n_agents, n_agents)),
         rewards=np.zeros((n_agents, n_agents, 2)))
-    for step, summary in enumerate(playoff(worldfunc, agents, **kwargs)):
-        summary = summary.cpu().numpy()
+    while True:
+        transitions, idxs = conductor.step()
+        summary = transitions.map(summarize, idxs=idxs, n_agents=n_agents)
+
         totals += summary
         winrates = (totals.rewards[..., 0] + totals.terminal)/(2*totals.terminal)
 
         clear_output(wait=True)
-        print(f'Step #{step}')
+        print(f'Step #{count}')
         print(f'Winrates:\n\n{winrates}\n')
         print(f'Terminals:\n\n{totals.terminal}')
 
@@ -83,6 +103,8 @@ def accumulate(run_name, worldfunc, agents, **kwargs):
                 'terminal': pd.DataFrame(summary.terminal, agents.keys(), agents.keys()),}, 1)
             record = {'-'.join(k): v for k, v in df.unstack().to_dict().items()}
             writer.write(record)
+        
+        count += 1
 
 def plot_confusion(df):
     import seaborn as sns
@@ -106,9 +128,9 @@ def run(worldfunc, agentfunc, run_name):
 def mohex_calibration():
     from . import mohex
 
-    agents = {str(i): mohex.MoHexAgent(max_games=i) for i in [1, 10, 100, 1000]}
+    agents = {str(i): mohex.MoHexAgent(max_games=i) for i in [1, 10, 100, 1000, 10000]}
 
-    def worldfunc(n_envs, device='cuda'):
+    def worldfunc(n_envs, device='cpu'):
         return hex.Hex.initial(n_envs=n_envs, boardsize=11, device=device)
 
-    df = parallel_league(worldfunc, agents, n_reps=10)
+    accumulate('output/mohex-tmp.npr', worldfunc, agents)
