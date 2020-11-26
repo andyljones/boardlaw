@@ -107,6 +107,10 @@ def plot(df):
         ax = sns.heatmap(df, cmap='RdBu', annot=True, vmin=0, vmax=1, annot_kws={'fontsize': 'large'}, cbar=False, square=True)
         return ax
 
+def relative_elos(expected):
+    # https://www.remi-coulom.fr/Bayesian-Elo/#theory
+    return (400*(np.log10(expected) - np.log10(1 - expected))).round(0).astype(int)
+
 def plot_black():
     df = (stored()
             .assign(black_win=lambda df: df.black_reward == 1)
@@ -126,7 +130,9 @@ def plot_symmetric():
                 .unstack())
 
     average = (stats.wins + (stats.games - stats.wins).T)/(stats.games + stats.games.T)
-    plot(average)
+    ax = plot(average)
+    ax.set_xlabel('')
+    ax.set_ylabel('')
 
 def stddev(df, n_trajs):
     alpha = df*n_trajs + 1
