@@ -96,22 +96,37 @@ def store(run_name, results):
         results = [(run_name, timestamp, *names, *map(float, rewards)) for names, rewards in results]
         conn.executemany('insert into results values (null,?,?,?,?,?,?)', results)
 
-def read():
+def stored():
     with database() as c:
         return pd.read_sql_query('select * from results', c)
 
-def plot_payoffs():
+def plot(df):
     import seaborn as sns
     import matplotlib.pyplot as plt
-    df = (read()
+    with plt.style.context('seaborn-poster'):
+        ax = sns.heatmap(df, cmap='RdBu', annot=True, vmin=0, vmax=1, annot_kws={'fontsize': 'large'}, cbar=False, square=True)
+        return ax
+
+def plot_black():
+    df = (stored()
             .assign(black_win=lambda df: df.black_reward == 1)
             .groupby(['black_name', 'white_name']).black_win.mean()
             .unstack())
+    ax = plot(df)
+    ax.set_xlabel('white')
+    ax.set_ylabel('black')
 
-    with plt.style.context('seaborn-poster'):
-        ax = sns.heatmap(df, cmap='RdBu', annot=True, vmin=0, vmax=1, annot_kws={'fontsize': 'large'}, cbar=False, square=True)
-        ax.set_xlabel('white')
-        ax.set_ylabel('black')
+def plot_symmetric():
+    stats = (stored()
+                .assign(
+                    wins=lambda df: df.black_reward == 1,
+                    games=lambda df: pd.Series(1, df.index))
+                .groupby(['black_name', 'white_name'])[['wins', 'games']].sum()
+                .astype(int)
+                .unstack())
+
+    average = (stats.wins + (stats.games - stats.wins).T)/(stats.games + stats.games.T)
+    plot(average)
 
 def stddev(df, n_trajs):
     alpha = df*n_trajs + 1
