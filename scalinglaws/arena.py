@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+from matplotlib.pyplot import connect
 import numpy as np
 import pandas as pd
 import pickle
@@ -5,8 +7,11 @@ import torch
 from rebar import paths, storing, arrdict, numpy
 from logging import getLogger
 from IPython.display import clear_output
+import sqlite3
 
 log = getLogger(__name__)
+
+DATABASE = 'output/arena.sql'
 
 def assemble_agent(agentfunc, sd):
     agent = agentfunc()
@@ -74,7 +79,20 @@ class Conductor:
 
         return [(tuple(n), tuple(r)) for n, r in zip(names, rewards)]
 
-def store(results):
+@contextmanager
+def database():
+    with sqlite3.connect(DATABASE) as conn:
+        results_table = 'create table if not exists results(run_name text, time text, black text, white text, black_reward real, white_reward real)'
+        cursor = conn.execute(results_table)
+        yield cursor
+
+def store(run_name, results):
+    timestamp = pd.Timestamp.now().strftime()
+    with database() as c:
+        results = [(run_name, )]
+        c.executemany('insert into results (?, ?, ?, ?, ?, ?)')
+        
+
     pass
 
 def summarize(vals, idxs, n_agents):
