@@ -53,11 +53,17 @@ class SimpleMatcher:
 def invert(d):
     return {v: k for k, v in d.items()}
 
+def scatter_add(counts, idxs):
+    fst, snd = idxs[:, 0], idxs[:, 1]
+    n_fst, n_snd = counts.shape
+    ones = counts.new_ones((len(idxs),))
+    counts.view(-1).scatter_add_(0, fst*n_snd + snd, ones)
+
 class AdaptiveMatcher:
 
-    def __init__(self, worldfunc, device='cpu'):
+    def __init__(self, worldfunc, n_envs=1, device='cpu'):
         self.worldfunc = worldfunc
-        self.worlds = worldfunc(0)
+        self.worlds = worldfunc(n_envs)
         self.device = device
 
         self.next_id = 0
@@ -85,18 +91,24 @@ class AdaptiveMatcher:
         del self.names[id]
         self._refresh(terminal)
 
-    def agent_indices(self):
-        idxs = np.arange(self.n_envs)
-        fstidxs, sndidxs, _ = np.unravel_index(idxs, (self.n_agents, self.n_agents, self.n_copies))
-
-        self.worlds = self.worldfunc(len(idxs), self.device)
-        self.idxs = torch.as_tensor(np.stack([fstidxs, sndidxs], -1), device=self.device) 
-
-        self.rewards = torch.zeros((self.n_envs, self.worlds.n_seats))
-
     def _refresh(self, terminal):
         # Update the matchup distribution to better match the priorities
-        pass
+        if terminal.any():
+            scatter_add(self.counts, self.matchups[terminal])
+            self.rewards[terminal] = 0
+
+            targets = self.counts.sum()*torch.full_like(self.counts, 1/self.counts.nelement())
+            scatter_add(targets, self.matchups[~terminal])
+
+            error = targets - self.counts
+            prior = torch.ones_like(error)
+            dist = error + prior/(error + prior).sum()
+            
+            n_agents = self.counts.size(1)
+            sample = torch.distributions.Categorical(probs=dist).sample()
+            sample = torch.stack([sample // n_agents, sample % n_agents], -1)
+
+            self.matchups[terminal] = sample 
 
     def step(self):
         terminal=torch.zeros((len(self.matchups)), dtype=torch.bool, device=self.device)
@@ -114,6 +126,6 @@ class AdaptiveMatcher:
         names = np.array(list(self.agents.keys()))[matchups[terminal]]
         rewards = arrdict.numpyify(self.rewards[terminal])
 
-        self.refresh(terminal)
+        self._refresh(terminal)
 
         return [(tuple(n), tuple(r)) for n, r in zip(names, rewards)]
