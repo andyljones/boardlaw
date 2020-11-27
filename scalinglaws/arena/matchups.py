@@ -105,6 +105,7 @@ class AdaptiveMatcher:
                 scatter_add(targets, self.matchups[~terminal])
 
             error = targets - self.counts
+            error = error - error.min()
             prior = torch.ones_like(error)
             dist = error + prior/(error + prior).sum()
             
