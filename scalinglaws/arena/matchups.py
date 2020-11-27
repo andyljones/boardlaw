@@ -70,8 +70,8 @@ class AdaptiveMatcher:
         self.next_id = 0
         self.agents = {}
         self.names = {}
-        self.matchups = torch.empty((0, self.worlds.n_seats), dtype=torch.long, device=device)
-        self.rewards = torch.zeros((n_envs,), device=device)
+        self.matchups = None
+        self.rewards = torch.zeros((n_envs, self.worlds.n_seats), device=device)
 
         self.counts = torch.empty((0, 0))
 
@@ -85,36 +85,32 @@ class AdaptiveMatcher:
         counts[:-1, :-1] = self.counts
         self.counts = counts
 
-    def drop_agent(self, name):
-        id = invert(self.names)[name]
-        terminal = self.matchups == self.names[id]
-        del self.agents[id]
-        del self.names[id]
-        self._refresh(terminal)
+    def _initialize(self):
+        self.matchups = torch.randint(0, len(self.agents), (self.worlds.n_envs, self.worlds.n_seats))
 
     def _refresh(self, terminal, clear=False):
         # Update the matchup distribution to better match the priorities
-        if terminal.any():
-            scatter_add(self.counts, self.matchups[terminal])
-            self.rewards[terminal] = 0
+        scatter_add(self.counts, self.matchups[terminal])
+        self.rewards[terminal] = 0
 
-            targets = self.counts.sum()*torch.full_like(self.counts, 1/self.counts.nelement())
-            scatter_add(targets, self.matchups[~terminal])
+        targets = self.counts.sum()*torch.full_like(self.counts, 1/self.counts.nelement())
+        scatter_add(targets, self.matchups[~terminal])
 
-            error = targets - self.counts
-            prior = torch.ones_like(error)
-            dist = error + prior/(error + prior).sum()
-            
-            n_agents = self.counts.size(1)
-            sample = torch.distributions.Categorical(probs=dist).sample()
-            sample = torch.stack([sample // n_agents, sample % n_agents], -1)
+        error = targets - self.counts
+        prior = torch.ones_like(error)
+        dist = error + prior/(error + prior).sum()
+        
+        n_agents = self.counts.size(1)
+        sample = torch.distributions.Categorical(probs=dist).sample()
+        sample = torch.stack([sample // n_agents, sample % n_agents], -1)
 
-            self.matchups[terminal] = sample 
+        self.matchups[terminal] = sample 
 
     def step(self):
-        if len(self.matchups) == 0:
-            terminal = torch.ones((self.worlds.n_envs,), dtype=torch.bool, device=self.device)
-            self._refresh(terminal)
+        if len(self.agents) == 0:
+            return []
+        if self.matchups is None:
+            self._initialize()
 
         terminal = torch.zeros((len(self.matchups)), dtype=torch.bool, device=self.device)
         for (i, id) in enumerate(self.agents):
@@ -131,7 +127,8 @@ class AdaptiveMatcher:
         names = np.array(list(self.agents.keys()))[matchups[terminal]]
         rewards = arrdict.numpyify(self.rewards[terminal])
 
-        self._refresh(terminal)
+        if terminal.any():
+            self._refresh(terminal)
 
         return [(tuple(n), tuple(r)) for n, r in zip(names, rewards)]
 
