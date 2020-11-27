@@ -1,26 +1,71 @@
-from rebar import storing
+from scalinglaws.heads import Tensor
+import torch
+import time
+from rebar import storing, logging
 import pickle
 from . import database, matchups
+from logging import getLogger
+from functools import wraps
+from contextlib import contextmanager
+from multiprocessing import Process, Event, set_start_method
 
-def assemble_agent(agentfunc, sd):
-    agent = agentfunc()
-    agent.load_state_dict(sd['agent'])
+log = getLogger(__name__)
+
+def assemble_agent(agentfunc, sd, device='cpu'):
+    agent = agentfunc(device=device)
+    #TODO: Should be remapping devices with torch's map_location
+    sd = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in sd['agent'].items()}
+    agent.load_state_dict(sd)
     return agent
 
-def periodic_agents(agentfunc, run_name):
+def periodic_agents(run_name, agentfunc, device='cpu'):
     stored = storing.stored_periodic(run_name)
-    challengers = {} 
+    agents = {} 
     for _, row in stored.iterrows():
         name = row.date.strftime('%a-%H%M%S')
         sd = pickle.load(row.path.open('rb'))
-        challengers[name] = assemble_agent(agentfunc, sd)
-    return challengers
+        agents[name] = assemble_agent(agentfunc, sd, device)
+    return agents
 
-def latest_agent(agentfunc, run_name):
+def latest_agent(run_name, agentfunc):
     sd = storing.load_latest(run_name)
     return assemble_agent(agentfunc, sd)
 
-def run(run_name, worldfunc, device='cpu'):
-    matcher = matchups.Matcher(worldfunc, device=device)
-    while True:
-        pass
+def run(run_name, worldfunc, agentfunc, device='cpu', canceller=None):
+    matcher = matchups.AdaptiveMatcher(worldfunc, device=device)
+    last = 0
+    with logging.via_dir(run_name):
+        while True:
+            if time.time() - last > 60:
+                agents = periodic_agents(run_name, agentfunc)
+                matcher.add_agents(agents)
+                last = time.time()
+                log.info(f'Loaded {len(agents)} agents')
+            
+            results = matcher.step()
+            database.store(run_name, results)
+            log.info(f'Stepped, stored {len(results)} results')
+
+            if canceller and canceller.is_set():
+                log.info('Cancelled')
+                break
+            
+@wraps(run)
+@contextmanager
+def monitor(*args, **kwargs):
+    set_start_method('spawn', True)
+    canceller = Event()
+    kwargs = {**kwargs, 'canceller': canceller}
+    p = Process(target=run, args=args, kwargs=kwargs, name='monitor')
+    p.start()
+    log.info('Launched')
+    try:
+        yield
+    finally:
+        log.info('Cancelling')
+        canceller.set()
+        for _ in range(50):
+            time.sleep(.1)
+            if not p.is_alive():
+                break
+        log.info('Dead')

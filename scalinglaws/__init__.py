@@ -1,7 +1,8 @@
+from scalinglaws.arena.monitor import monitor
 import numpy as np
 import torch
 from rebar import paths, widgets, logging, stats, arrdict, storing
-from . import hex, mcts, networks, learning, validation, analysis
+from . import hex, mcts, networks, learning, validation, analysis, arena
 from torch.nn import functional as F
 from logging import getLogger
 from itertools import cycle
@@ -87,8 +88,8 @@ def optimize(network, opt, batch):
 def worldfunc(n_envs, device='cuda'):
     return hex.Hex.initial(n_envs=n_envs, boardsize=5, device=device)
 
-def agentfunc():
-    worlds = worldfunc(n_envs=1)
+def agentfunc(*args, **kwargs):
+    worlds = worldfunc(n_envs=1, *args, **kwargs)
     network = networks.Network(worlds.obs_space, worlds.action_space, width=32).to(worlds.device)
     return mcts.MCTSAgent(network, n_nodes=16)
 
@@ -105,7 +106,7 @@ def run():
     run_name = paths.timestamp('az-test')
     compositor = widgets.Compositor()
     paths.clear(run_name)
-    with logging.via_dir(run_name, compositor), stats.via_dir(run_name, compositor):
+    with logging.via_dir(run_name, compositor), stats.via_dir(run_name, compositor), arena.monitor(run_name, worldfunc, agentfunc):
         buffer = []
         idxs = cycle(learning.batch_indices(buffer_length, n_envs, batch_size, worlds.device))
         while True:

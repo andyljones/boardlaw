@@ -85,6 +85,11 @@ class AdaptiveMatcher:
         counts[:-1, :-1] = self.counts
         self.counts = counts
 
+    def add_agents(self, agents):
+        for name, agent in agents.items():
+            if name not in self.names:
+                self.add_agent(name, agent)
+
     def drop_agent(self, name):
         raise NotImplementedError()
         id = invert(self.names)[name]
@@ -133,8 +138,8 @@ class AdaptiveMatcher:
 
         self.seat = (self.seat + 1) % self.worlds.n_seats
         
-        matchups = arrdict.numpyify(self.matchups)
-        names = np.array(list(self.agents.keys()))[matchups[terminal]]
+        matchups = arrdict.numpyify(self.matchups[terminal])
+        names = np.array(list(self.names.values()))[matchups]
         rewards = arrdict.numpyify(self.rewards[terminal])
 
         if terminal.any():

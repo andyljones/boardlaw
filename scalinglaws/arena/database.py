@@ -16,10 +16,16 @@ def database():
         yield conn
 
 def store(run_name, results):
+    if not results:
+        return
     timestamp = pd.Timestamp.now('utc').strftime('%Y-%m-%d %H:%M:%S.%fZ')
     with database() as conn:
-        results = [(run_name, timestamp, *names, *map(float, rewards)) for names, rewards in results]
+        results = [(run_name, timestamp, *map(str, names), *map(float, rewards)) for names, rewards in results]
         conn.executemany('insert into results values (null,?,?,?,?,?,?)', results)
+
+def delete(run_name):
+    with database() as conn:
+        conn.execute('delete from results where run_name=?', (run_name,))
 
 def stored():
     with database() as c:
