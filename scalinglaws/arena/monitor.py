@@ -19,13 +19,17 @@ def assemble_agent(agentfunc, sd, device='cpu'):
     return agent
 
 def periodic_agents(run_name, agentfunc, device='cpu'):
-    stored = storing.stored_periodic(run_name)
-    agents = {} 
-    for _, row in stored.iterrows():
-        name = row.date.strftime('%a-%H%M%S')
-        sd = pickle.load(row.path.open('rb'))
-        agents[name] = assemble_agent(agentfunc, sd, device)
-    return agents
+    try:
+        stored = storing.stored_periodic(run_name)
+    except ValueError:
+        return {}
+    else:
+        agents = {} 
+        for _, row in stored.iterrows():
+            name = row.date.strftime('%a-%H%M%S')
+            sd = pickle.load(row.path.open('rb'))
+            agents[name] = assemble_agent(agentfunc, sd, device)
+        return agents
 
 def latest_agent(run_name, agentfunc):
     sd = storing.load_latest(run_name)
@@ -33,22 +37,25 @@ def latest_agent(run_name, agentfunc):
 
 def run(run_name, worldfunc, agentfunc, device='cpu', canceller=None):
     matcher = matchups.AdaptiveMatcher(worldfunc, device=device)
-    last = 0
+    last_load = 0
+    last_loop = 0
     with logging.via_dir(run_name):
         while True:
-            if time.time() - last > 60:
-                agents = periodic_agents(run_name, agentfunc)
-                matcher.add_agents(agents)
-                last = time.time()
-                log.info(f'Loaded {len(agents)} agents')
-            
-            results = matcher.step()
-            database.store(run_name, results)
-            log.info(f'Stepped, stored {len(results)} results')
+            if time.time() - last_loop > 1:
+                last_loop = time.time()
+                if time.time() - last_load > 60:
+                    last_load = time.time()
+                    agents = periodic_agents(run_name, agentfunc)
+                    matcher.add_agents(agents)
+                    log.info(f'Loaded {len(agents)} agents')
+                
+                results = matcher.step()
+                database.store(run_name, results)
+                log.info(f'Stepped, stored {len(results)} results')
 
-            if canceller and canceller.is_set():
-                log.info('Cancelled')
-                break
+                if canceller and canceller.is_set():
+                    log.info('Cancelled')
+                    break
             
 @wraps(run)
 @contextmanager

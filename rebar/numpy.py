@@ -29,7 +29,7 @@ def make_header(dtype):
 class FileWriter:
 
     def __init__(self, path, period=5):
-        self._path = Path(path) if isinstance(path, str) else Path
+        self._path = Path(path) if isinstance(path, str) else path
         self._file = None
         self._period = period 
         self._next = time.time()
@@ -80,7 +80,7 @@ class Writer:
 class FileReader:
 
     def __init__(self, path):
-        self._path = Path(path) if isinstance(path, str) else Path
+        self._path = Path(path) if isinstance(path, str) else path
         self._file = None
 
     def _init(self):

@@ -124,7 +124,7 @@ def run():
             chunk = arrdict.stack(buffer)
             chunk_stats(chunk, buffer_inc)
 
-            optimize(network, opt, chunk[:, next(idxs)])
+            optimize(agent.evaluator, opt, chunk[:, next(idxs)])
             log.info('learner stepped')
             
             buffer = buffer[buffer_inc:]
