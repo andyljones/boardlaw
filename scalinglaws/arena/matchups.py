@@ -70,7 +70,7 @@ class AdaptiveMatcher:
         self.next_id = 0
         self.agents = {}
         self.names = {}
-        self.matchups = torch.empty((0, self.worlds.n_seats), dtype=torch.long, device=device)
+        self.matchups = None
         self.rewards = torch.zeros((n_envs, self.worlds.n_seats), device=device)
 
         self.counts = torch.empty((0, 0))
@@ -86,42 +86,41 @@ class AdaptiveMatcher:
         self.counts = counts
 
     def drop_agent(self, name):
+        raise NotImplementedError()
         id = invert(self.names)[name]
         terminal = self.matchups == self.names[id]
         del self.agents[id]
         del self.names[id]
         self._refresh(terminal)
 
-    def _refresh(self, terminal):
+    def _initialize(self):
+        self.matchups = torch.randint(0, self.next_id, (self.worlds.n_envs, self.worlds.n_seats), device=self.device)
+
+    def _update(self, terminal):
+        scatter_add(self.counts, self.matchups[terminal])
+        self.rewards[terminal] = 0
+
+    def _respawn(self, terminal):
         # Update the matchup distribution to better match the priorities
-        if terminal.any():
-            if len(self.matchups) == 0:
-                targets = self.counts
-            else:
-                scatter_add(self.counts, self.matchups[terminal])
-                self.rewards[terminal] = 0
+        targets = self.counts.sum()*torch.full_like(self.counts, 1/self.counts.nelement())
+        scatter_add(targets, self.matchups[~terminal])
 
-                targets = self.counts.sum()*torch.full_like(self.counts, 1/self.counts.nelement())
-                scatter_add(targets, self.matchups[~terminal])
+        error = targets - self.counts
+        error = error - error.min()
+        prior = torch.ones_like(error)
+        dist = error + prior/(error + prior).sum()
+        
+        n_agents = self.counts.size(1)
+        sample = torch.distributions.Categorical(probs=dist.flatten()).sample((terminal.sum(),))
+        sample = torch.stack([sample // n_agents, sample % n_agents], -1)
 
-            error = targets - self.counts
-            error = error - error.min()
-            prior = torch.ones_like(error)
-            dist = error + prior/(error + prior).sum()
-            
-            n_agents = self.counts.size(1)
-            sample = torch.distributions.Categorical(probs=dist.flatten()).sample((terminal.sum(),))
-            sample = torch.stack([sample // n_agents, sample % n_agents], -1)
-
-            if len(self.matchups) == 0:
-                self.matchups = sample
-            else:
-                self.matchups[terminal] = sample 
+        self.matchups[terminal] = sample 
 
     def step(self):
-        if len(self.matchups) == 0:
-            terminal = torch.ones((self.worlds.n_envs,), dtype=torch.bool, device=self.device)
-            self._refresh(terminal)
+        if len(self.agents) == 0:
+            return []
+        if self.matchups is None:
+            self._initialize()
 
         terminal = torch.zeros((len(self.matchups)), dtype=torch.bool, device=self.device)
         for (i, id) in enumerate(self.agents):
@@ -138,7 +137,9 @@ class AdaptiveMatcher:
         names = np.array(list(self.agents.keys()))[matchups[terminal]]
         rewards = arrdict.numpyify(self.rewards[terminal])
 
-        self._refresh(terminal)
+        if terminal.any():
+            self._update(terminal)
+            self._respawn(terminal)
 
         return [(tuple(n), tuple(r)) for n, r in zip(names, rewards)]
 
@@ -146,13 +147,17 @@ def test():
     from ..validation import All, RandomAgent
 
     def worldfunc(*args, **kwargs):
-        return All.initial(*args, **kwargs, n_seats=2)
+        return All.initial(*args, **kwargs, n_seats=2, length=5)
         
     matcher = AdaptiveMatcher(worldfunc, n_envs=4)
 
     matcher.add_agent('one', RandomAgent())
     matcher.add_agent('two', RandomAgent())
 
-    results = []
-    for _ in range(4):
-        results.append(matcher.step())
+    rewards = torch.zeros((2, 2, 2))
+    for _ in range(1000):
+        results = matcher.step()
+        for (idxs, r) in results:
+            rewards[idxs] += torch.as_tensor(r)
+
+    assert matcher.counts.sub(50).lt(5).all()
