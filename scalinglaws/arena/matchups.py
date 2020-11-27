@@ -71,7 +71,7 @@ class AdaptiveMatcher:
         self.agents = {}
         self.names = {}
         self.matchups = torch.empty((0, self.worlds.n_seats), dtype=torch.long, device=device)
-        self.rewards = torch.zeros((n_envs,), device=device)
+        self.rewards = torch.zeros((n_envs, self.worlds.n_seats), device=device)
 
         self.counts = torch.empty((0, 0))
 
@@ -92,24 +92,30 @@ class AdaptiveMatcher:
         del self.names[id]
         self._refresh(terminal)
 
-    def _refresh(self, terminal, clear=False):
+    def _refresh(self, terminal):
         # Update the matchup distribution to better match the priorities
         if terminal.any():
-            scatter_add(self.counts, self.matchups[terminal])
-            self.rewards[terminal] = 0
+            if len(self.matchups) == 0:
+                targets = self.counts
+            else:
+                scatter_add(self.counts, self.matchups[terminal])
+                self.rewards[terminal] = 0
 
-            targets = self.counts.sum()*torch.full_like(self.counts, 1/self.counts.nelement())
-            scatter_add(targets, self.matchups[~terminal])
+                targets = self.counts.sum()*torch.full_like(self.counts, 1/self.counts.nelement())
+                scatter_add(targets, self.matchups[~terminal])
 
             error = targets - self.counts
             prior = torch.ones_like(error)
             dist = error + prior/(error + prior).sum()
             
             n_agents = self.counts.size(1)
-            sample = torch.distributions.Categorical(probs=dist).sample()
+            sample = torch.distributions.Categorical(probs=dist.flatten()).sample((terminal.sum(),))
             sample = torch.stack([sample // n_agents, sample % n_agents], -1)
 
-            self.matchups[terminal] = sample 
+            if len(self.matchups) == 0:
+                self.matchups = sample
+            else:
+                self.matchups[terminal] = sample 
 
     def step(self):
         if len(self.matchups) == 0:
@@ -138,7 +144,14 @@ class AdaptiveMatcher:
 def test():
     from ..validation import All, RandomAgent
 
-    matcher = AdaptiveMatcher(All.initial, n_envs=4)
+    def worldfunc(*args, **kwargs):
+        return All.initial(*args, **kwargs, n_seats=2)
+        
+    matcher = AdaptiveMatcher(worldfunc, n_envs=4)
 
     matcher.add_agent('one', RandomAgent())
     matcher.add_agent('two', RandomAgent())
+
+    results = []
+    for _ in range(4):
+        results.append(matcher.step())
