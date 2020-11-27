@@ -86,6 +86,12 @@ class AdaptiveMatcher:
         counts[:-1, :-1] = self.counts
         self.counts = counts
 
+    def add_agents(self, agents):
+        current = self.names.values()
+        for name, agent in agents.items():
+            if name not in current:
+                self.add_agent(name, agent)
+
     def _initialize(self):
         self.matchups = torch.randint(0, len(self.agents), (self.worlds.n_envs, self.worlds.n_seats))
 
