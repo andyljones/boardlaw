@@ -30,7 +30,7 @@ def periodic_agents(run_name, agentfunc):
     else:
         agents = {} 
         for _, row in stored.iterrows():
-            name = row.date.strftime('%a-%H%M%S')
+            name = row.date.strftime(r'%y%m%d-%H%M%S')
             sd = pickle.load(row.path.open('rb'))
             agents[name] = assemble_agent(agentfunc, sd)
         return agents

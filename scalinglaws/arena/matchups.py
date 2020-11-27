@@ -67,7 +67,7 @@ class AdaptiveMatcher:
         self.matchups[terminal] = sample 
 
     def step(self):
-        if len(self.agents) == 0:
+        if len(self.agents) <= 1:
             return []
         if self.matchups is None:
             self._initialize()
