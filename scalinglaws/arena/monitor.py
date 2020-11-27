@@ -56,7 +56,7 @@ def run(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], canceller=Non
                 last_step = time.time()
                 results = matcher.step()
                 database.store(run_name, results)
-                log.info('Stepped')
+                log.info(f'Stepped, stored {len(results)} results')
             
             if canceller and canceller.is_set():
                 log.info('Breaking')

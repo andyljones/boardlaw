@@ -18,9 +18,13 @@ def database():
 def store(run_name, results):
     timestamp = pd.Timestamp.now('utc').strftime('%Y-%m-%d %H:%M:%S.%fZ')
     with database() as conn:
-        results = [(run_name, timestamp, *names, *map(float, rewards)) for names, rewards in results]
+        results = [(run_name, timestamp, *map(str, names), *map(float, rewards)) for names, rewards in results]
         conn.executemany('insert into results values (null,?,?,?,?,?,?)', results)
 
-def stored():
+def stored(run_name=''):
     with database() as c:
-        return pd.read_sql_query('select * from results', c)
+        return pd.read_sql_query('select * from results where run_name like ?', c, params=(f'{run_name}%',))
+    
+def delete(run_name):
+    with database() as c:
+        c.execute('delete from results where run_name=?', (run_name,))
