@@ -17,7 +17,7 @@ def assemble_agent(agentfunc, sd, device='cpu'):
     return agent
 
 def periodic_agents(run_name, agentfunc):
-    if not isinstance(run_name, str):
+    if not isinstance(run_name, (int, str)):
         agents = {}
         for r in run_name:
             agents.update(periodic_agents(r, agentfunc))
@@ -57,10 +57,11 @@ def run(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], canceller=Non
                 results = matcher.step()
                 database.store(run_name, results)
                 log.info(f'Stepped, stored {len(results)} results')
-            
-            if canceller and canceller.is_set():
-                log.info('Breaking')
-                break
+
+            # #TODO: Hangs occasionally, and damned if I know why.
+            # if canceller and canceller.wait(.1):
+            #     log.info('Breaking')
+            #     break
 
 @wraps(run)
 @contextmanager
@@ -73,6 +74,7 @@ def monitor(*args, **kwargs):
         p.start()
         yield
     finally:
+        log.info('Setting canceller')
         canceller.set()
         for _ in range(50):
             if not p.is_alive():

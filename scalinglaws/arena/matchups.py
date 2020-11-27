@@ -84,7 +84,7 @@ class AdaptiveMatcher:
         self.seat = (self.seat + 1) % self.worlds.n_seats
         
         matchups = arrdict.numpyify(self.matchups[terminal])
-        names = np.array(list(self.names.keys()))[matchups]
+        names = np.array(list(self.names.values()))[matchups]
         rewards = arrdict.numpyify(self.rewards[terminal])
 
         if terminal.any():
