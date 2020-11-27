@@ -66,6 +66,7 @@ class AdaptiveMatcher:
         self.worlds = worldfunc(n_envs, device=device)
         self.device = device
         self.seat = 0
+        assert self.worlds.n_seats == 2, 'Only support 2 seats for now'
 
         self.next_id = 0
         self.agents = {}
@@ -88,7 +89,7 @@ class AdaptiveMatcher:
     def _initialize(self):
         self.matchups = torch.randint(0, len(self.agents), (self.worlds.n_envs, self.worlds.n_seats))
 
-    def _refresh(self, terminal, clear=False):
+    def _refresh(self, terminal):
         # Update the matchup distribution to better match the priorities
         scatter_add(self.counts, self.matchups[terminal])
         self.rewards[terminal] = 0
@@ -97,11 +98,12 @@ class AdaptiveMatcher:
         scatter_add(targets, self.matchups[~terminal])
 
         error = targets - self.counts
+        error = error - error.min()
         prior = torch.ones_like(error)
         dist = error + prior/(error + prior).sum()
         
         n_agents = self.counts.size(1)
-        sample = torch.distributions.Categorical(probs=dist).sample()
+        sample = torch.distributions.Categorical(probs=dist.flatten()).sample((terminal.sum(),))
         sample = torch.stack([sample // n_agents, sample % n_agents], -1)
 
         self.matchups[terminal] = sample 
@@ -123,8 +125,8 @@ class AdaptiveMatcher:
 
         self.seat = (self.seat + 1) % self.worlds.n_seats
         
-        matchups = arrdict.numpyify(self.matchups)
-        names = np.array(list(self.agents.keys()))[matchups[terminal]]
+        matchups = arrdict.numpyify(self.matchups[terminal])
+        names = np.array(list(self.names.keys()))[matchups]
         rewards = arrdict.numpyify(self.rewards[terminal])
 
         if terminal.any():
@@ -135,7 +137,10 @@ class AdaptiveMatcher:
 def test():
     from ..validation import All, RandomAgent
 
-    matcher = AdaptiveMatcher(All.initial, n_envs=4)
+    def worldfunc(n_envs, device='cpu'):
+        return All.initial(n_envs, 2, device=device)
+
+    matcher = AdaptiveMatcher(worldfunc, n_envs=4)
 
     matcher.add_agent('one', RandomAgent())
     matcher.add_agent('two', RandomAgent())
