@@ -87,8 +87,8 @@ def optimize(network, opt, batch):
 def worldfunc(n_envs, device='cuda'):
     return hex.Hex.initial(n_envs=n_envs, boardsize=5, device=device)
 
-def agentfunc():
-    worlds = worldfunc(n_envs=1)
+def agentfunc(device='cuda'):
+    worlds = worldfunc(n_envs=1, device=device)
     network = networks.Network(worlds.obs_space, worlds.action_space, width=32).to(worlds.device)
     return mcts.MCTSAgent(network, n_nodes=16)
 

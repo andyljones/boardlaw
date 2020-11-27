@@ -1,3 +1,4 @@
+import torch
 from rebar import storing, logging
 import pickle
 from . import database, matchups
@@ -9,9 +10,10 @@ from multiprocessing import Process, Event
 
 log = getLogger(__name__)
 
-def assemble_agent(agentfunc, sd):
-    agent = agentfunc()
-    agent.load_state_dict(sd['agent'])
+def assemble_agent(agentfunc, sd, device='cpu'):
+    agent = agentfunc(device=device)
+    sd = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in sd['agent'].items()}
+    agent.load_state_dict(sd)
     return agent
 
 def periodic_agents(run_name, agentfunc):
@@ -21,21 +23,25 @@ def periodic_agents(run_name, agentfunc):
             agents.update(periodic_agents(r, agentfunc))
         return agents
 
-    stored = storing.stored_periodic(run_name)
-    agents = {} 
-    for _, row in stored.iterrows():
-        name = row.date.strftime('%a-%H%M%S')
-        sd = pickle.load(row.path.open('rb'))
-        agents[name] = assemble_agent(agentfunc, sd)
-    return agents
+    try:
+        stored = storing.stored_periodic(run_name)
+    except ValueError:
+        return {}
+    else:
+        agents = {} 
+        for _, row in stored.iterrows():
+            name = row.date.strftime('%a-%H%M%S')
+            sd = pickle.load(row.path.open('rb'))
+            agents[name] = assemble_agent(agentfunc, sd)
+        return agents
 
-def latest_agent(run_name, agentfunc):
+def latest_agent(run_name, agentfunc, **kwargs):
     sd = storing.load_latest(run_name)
-    return assemble_agent(agentfunc, sd)
+    return assemble_agent(agentfunc, sd, **kwargs)
 
-def run(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], canceller=None):
+def run(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], canceller=None, **kwargs):
     with logging.via_dir(run_name):
-        matcher = matchups.AdaptiveMatcher(worldfunc, device=device)
+        matcher = matchups.AdaptiveMatcher(worldfunc, device=device, **kwargs)
         runs = ref_runs + [run_name]
         
         last_load, last_step = 0, 0
@@ -50,8 +56,9 @@ def run(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], canceller=Non
                 last_step = time.time()
                 results = matcher.step()
                 database.store(run_name, results)
+                log.info('Stepped')
             
-            if canceller.is_set():
+            if canceller and canceller.is_set():
                 log.info('Breaking')
                 break
 
@@ -76,4 +83,7 @@ def monitor(*args, **kwargs):
             p.terminate()
 
 def test():
-    pass
+    from scalinglaws import worldfunc, agentfunc
+    from rebar import paths
+    paths.clear('test')
+    run('test', worldfunc, agentfunc, ref_runs=['2020-11-27 19-40-27 az-test'])
