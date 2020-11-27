@@ -110,7 +110,7 @@ def __from_dir(canceller, run_name, out, rule, throttle=1):
             # Base slightly into the future, else by the time the resample actually happens you're 
             # left with an almost-empty last interval.
             base = int(time.time() % 60) + 5
-            values = reader.resample(rule=rule, base=f'{base}s')
+            values = reader.resample(rule=rule, offset=f'{base}s')
             
             if len(values) > 0:
                 values = values.ffill(limit=1).iloc[-1].to_dict()

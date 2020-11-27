@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from rebar import paths, widgets, logging, stats, arrdict, storing
-from . import hex, mcts, networks, learning, validation, analysis
+from . import hex, mcts, networks, learning, validation, analysis, arena
 from torch.nn import functional as F
 from logging import getLogger
 from itertools import cycle
@@ -105,7 +105,8 @@ def run():
     run_name = paths.timestamp('az-test')
     compositor = widgets.Compositor()
     paths.clear(run_name)
-    with logging.via_dir(run_name, compositor), stats.via_dir(run_name, compositor):
+    with logging.via_dir(run_name, compositor), stats.via_dir(run_name, compositor), \
+            arena.monitor(run_name, worldfunc, agentfunc, n_envs=8):
         buffer = []
         idxs = cycle(learning.batch_indices(buffer_length, n_envs, batch_size, worlds.device))
         while True:

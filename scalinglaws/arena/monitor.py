@@ -6,7 +6,7 @@ import time
 from logging import getLogger
 from contextlib import contextmanager
 from functools import wraps
-from multiprocessing import Process, Event
+from multiprocessing import Process, Event, set_start_method
 
 log = getLogger(__name__)
 
@@ -40,7 +40,7 @@ def latest_agent(run_name, agentfunc, **kwargs):
     return assemble_agent(agentfunc, sd, **kwargs)
 
 def run(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], canceller=None, **kwargs):
-    with logging.via_dir(run_name):
+    with logging.to_dir(run_name):
         matcher = matchups.AdaptiveMatcher(worldfunc, device=device, **kwargs)
         runs = ref_runs + [run_name]
         
@@ -67,7 +67,8 @@ def run(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], canceller=Non
 def monitor(*args, **kwargs):
     canceller = Event()
     kwargs = {**kwargs, 'canceller': canceller}
-    p = Process(target=run, args=args, kwargs=kwargs)
+    set_start_method('spawn', True)
+    p = Process(target=run, args=args, kwargs=kwargs, name='arena-monitor')
     try:
         p.start()
         yield
