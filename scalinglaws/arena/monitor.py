@@ -16,11 +16,11 @@ def assemble_agent(agentfunc, sd, device='cpu'):
     agent.load_state_dict(sd)
     return agent
 
-def periodic_agents(run_name, agentfunc):
+def periodic_agents(run_name, agentfunc, device='cpu'):
     if not isinstance(run_name, (int, str)):
         agents = {}
         for r in run_name:
-            agents.update(periodic_agents(r, agentfunc))
+            agents.update(periodic_agents(r, agentfunc, device))
         return agents
 
     try:
@@ -32,7 +32,7 @@ def periodic_agents(run_name, agentfunc):
         for _, row in stored.iterrows():
             name = row.date.strftime(r'%y%m%d-%H%M%S')
             sd = pickle.load(row.path.open('rb'))
-            agents[name] = assemble_agent(agentfunc, sd)
+            agents[name] = assemble_agent(agentfunc, sd, device)
         return agents
 
 def latest_agent(run_name, agentfunc, **kwargs):
@@ -40,7 +40,7 @@ def latest_agent(run_name, agentfunc, **kwargs):
     return assemble_agent(agentfunc, sd, **kwargs)
 
 def run(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], canceller=None, **kwargs):
-    with logging.to_dir(run_name):
+    with logging.via_dir(run_name):
         matcher = matchups.AdaptiveMatcher(worldfunc, device=device, **kwargs)
         runs = ref_runs + [run_name]
         
@@ -48,7 +48,7 @@ def run(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], canceller=Non
         while True:
             if time.time() - last_load > 60:
                 last_load = time.time()
-                agents = periodic_agents(runs, agentfunc)
+                agents = periodic_agents(runs, agentfunc, device)
                 matcher.add_agents(agents)
                 log.info(f'Loading {len(agents)} agents')
             

@@ -45,7 +45,7 @@ class AdaptiveMatcher:
                 self.add_agent(name, agent)
 
     def _initialize(self):
-        self.matchups = torch.randint(0, len(self.agents), (self.worlds.n_envs, self.worlds.n_seats))
+        self.matchups = torch.randint(0, len(self.agents), (self.worlds.n_envs, self.worlds.n_seats), device=self.device)
 
     def _refresh(self, terminal):
         # Update the matchup distribution to better match the priorities
