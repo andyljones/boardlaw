@@ -6,7 +6,7 @@ from rebar import arrdict
 def invert(d):
     return {v: k for k, v in d.items()}
 
-def select(counts):
+def select(counts, current):
     # Matchup ideals
     # * Shouldn't use more than n_cores MoHex agents
     # * Should concentrate PyTorch agents
@@ -14,7 +14,12 @@ def select(counts):
 
     targets = np.full_like(counts, 1/counts.nelement())
     error = targets - arrdict.numpyify(counts/counts.sum())
-    return np.unravel_index(error.argmax(), error.shape)
+    error = np.exp(error)/np.exp(error).sum()
+
+    best = np.unravel_index(error.argmax(), error.shape)
+    
+    # Bit of hysteresis
+    return best if (error[best] - 2*error[current]) else current
 
 class AdaptiveMatcher:
 
@@ -42,6 +47,7 @@ class AdaptiveMatcher:
         counts = torch.zeros((self.next_id, self.next_id), device=self.device)
         counts[:-1, :-1] = self.counts
         self.counts = counts
+        self._refresh(torch.ones((self.worlds.n_envs,), device=self.device))
 
     def add_agents(self, agents):
         current = self.names.values()
@@ -57,7 +63,7 @@ class AdaptiveMatcher:
         self.counts[tuple(self.matchup)] += terminal.sum()
         self.wins[terminal] = 0
 
-        new_matchup = select(self.counts)
+        new_matchup = select(self.counts, self.matchup)
         if new_matchup != self.matchup:
             self.matchup = new_matchup
             self.worlds = self.initial.clone()
@@ -70,11 +76,12 @@ class AdaptiveMatcher:
         seats = self.worlds.seats.clone()
         terminal = torch.zeros((self.worlds.n_envs,), dtype=torch.bool, device=self.device)
         for i, id in enumerate(self.matchup):
-            mask = seats == id
-            decisions = self.agents[id](self.worlds[mask])
-            self.worlds[mask], transitions = self.worlds[mask].step(decisions.actions)
-            terminal[mask] = transitions.terminal
-            self.wins[mask] += (transitions.rewards == 1).long()
+            mask = seats == i
+            if mask.any():
+                decisions = self.agents[id](self.worlds[mask])
+                self.worlds[mask], transitions = self.worlds[mask].step(decisions.actions)
+                terminal[mask] = transitions.terminal
+                self.wins[mask] += (transitions.rewards == 1).long()
         
         if terminal.any():
             wins = tuple(map(int, self.wins[terminal].sum(0)))
