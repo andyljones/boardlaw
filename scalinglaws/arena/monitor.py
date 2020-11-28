@@ -55,8 +55,8 @@ def run(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], canceller=Non
             if time.time() - last_step > 1:
                 last_step = time.time()
                 results = matcher.step()
-                database.store(run_name, results)
-                log.info(f'Stepped, stored {len(results)} results')
+                database.store(run_name, **results)
+                log.info(f'Stepped, stored {results["games"]} games')
 
             # #TODO: Hangs occasionally, and damned if I know why.
             # if canceller and canceller.wait(.1):

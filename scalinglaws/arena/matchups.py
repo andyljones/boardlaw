@@ -1,3 +1,4 @@
+import aljpy
 import torch
 import numpy as np
 from rebar import arrdict
@@ -5,44 +6,30 @@ from rebar import arrdict
 def invert(d):
     return {v: k for k, v in d.items()}
 
-def scatter_add(counts, idxs):
-    fst, snd = idxs[:, 0], idxs[:, 1]
-    n_fst, n_snd = counts.shape
-    ones = counts.new_ones((len(idxs),))
-    counts.view(-1).scatter_add_(0, fst*n_snd + snd, ones)
-
-def sample(counts, n_samples):
+def select(counts):
     # Matchup ideals
     # * Shouldn't use more than n_cores MoHex agents
     # * Should concentrate PyTorch agents
     # * Should fill out some sort of pattern before filling out uniformly
 
-    targets = counts.sum()*torch.full_like(counts, 1/counts.nelement())
-
-    error = targets - counts
-    error = error - error.min()
-    prior = torch.ones_like(error)
-    dist = error + prior/(error + prior).sum()
-    
-    n_agents = counts.size(1)
-    sample = torch.distributions.Categorical(probs=dist.flatten()).sample((n_samples,))
-    sample = torch.stack([sample // n_agents, sample % n_agents], -1)
-
-    return sample
+    targets = np.full_like(counts, 1/counts.nelement())
+    error = targets - arrdict.numpyify(counts/counts.sum())
+    return np.unravel_index(error.argmax(), error.shape)
 
 class AdaptiveMatcher:
 
-    def __init__(self, worldfunc, n_envs=1, device='cpu'):
+    def __init__(self, worldfunc, n_envs=1024, device='cpu'):
         self.worldfunc = worldfunc
-        self.worlds = worldfunc(n_envs, device=device)
+        self.initial = worldfunc(n_envs, device=device)
+        self.worlds = self.initial.clone()
         self.device = device
         assert self.worlds.n_seats == 2, 'Only support 2 seats for now'
 
         self.next_id = 0
         self.agents = {}
         self.names = {}
-        self.matchups = None
-        self.rewards = torch.zeros((n_envs, self.worlds.n_seats), device=device)
+        self.matchup = (0,)*self.worlds.n_seats
+        self.wins = torch.zeros((n_envs, self.worlds.n_seats), dtype=torch.int, device=device)
 
         self.counts = torch.empty((0, 0))
 
@@ -62,45 +49,46 @@ class AdaptiveMatcher:
             if name not in current:
                 self.add_agent(name, agent)
 
-    def _initialize(self):
-        self.matchups = torch.randint(0, len(self.agents), (self.worlds.n_envs, self.worlds.n_seats), device=self.device)
-
     def _refresh(self, terminal):
         if not terminal.any():
             return 
 
         # Update the matchup distribution to better match the priorities
-        scatter_add(self.counts, self.matchups[terminal])
-        self.rewards[terminal] = 0
+        self.counts[tuple(self.matchup)] += terminal.sum()
+        self.wins[terminal] = 0
 
-        # Add in-flight matchups to the counts
-        counts = self.counts.clone()
-        scatter_add(counts, self.matchups[~terminal])
-
-        self.matchups[terminal] = sample(counts, terminal.sum())
+        new_matchup = select(self.counts)
+        if new_matchup != self.matchup:
+            self.matchup = new_matchup
+            self.worlds = self.initial.clone()
+            self.wins[:] = 0
 
     def step(self):
         if len(self.agents) <= 1:
             return []
-        if self.matchups is None:
-            self._initialize()
 
-        hotseat = self.matchups.gather(1, self.worlds.seats[:, None])
+        seats = self.worlds.seats.clone()
         terminal = torch.zeros((self.worlds.n_envs,), dtype=torch.bool, device=self.device)
-        for id in hotseat.unique():
-            mask = hotseat == id
+        for i, id in enumerate(self.matchup):
+            mask = seats == id
             decisions = self.agents[id](self.worlds[mask])
             self.worlds[mask], transitions = self.worlds[mask].step(decisions.actions)
             terminal[mask] = transitions.terminal
-            self.rewards[mask] += transitions.rewards
+            self.wins[mask] += (transitions.rewards == 1).long()
         
-        matchups = arrdict.numpyify(self.matchups[terminal])
-        names = np.array(list(self.names.values()))[matchups]
-        rewards = arrdict.numpyify(self.rewards[terminal])
+        if terminal.any():
+            wins = tuple(map(int, self.wins[terminal].sum(0)))
+        else: 
+            wins = (0,)*self.worlds.n_seats
+        result = aljpy.dotdict(
+            black_name=self.names[self.matchup[0]], white_name=self.names[self.matchup[1]], 
+            black_wins=wins[0], white_wins=wins[1],
+            games=int(terminal.sum()))
 
         self._refresh(terminal)
 
-        return [(tuple(n), tuple(r)) for n, r in zip(names, rewards)]
+        return result
+
 
 def test():
     from ..validation import All, RandomAgent

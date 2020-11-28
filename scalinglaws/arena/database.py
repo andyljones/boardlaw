@@ -2,24 +2,32 @@ import sqlite3
 import pandas as pd
 from contextlib import contextmanager
 
-DATABASE = 'output/arena.sql'
+DATABASE = 'output/arena-2.sql'
 
 @contextmanager
 def database():
     with sqlite3.connect(DATABASE) as conn:
         results_table = '''
-            create table if not exists results(id integer primary key, 
-                run_name text, time text, 
+            create table if not exists results(
+                run_name text, 
                 black_name text, white_name text, 
-                black_reward real, white_reward real)'''
+                black_wins real, white_wins real,
+                PRIMARY KEY (run_name, black_name, white_name))'''
         conn.execute(results_table)
         yield conn
 
-def store(run_name, results):
-    timestamp = pd.Timestamp.now('utc').strftime('%Y-%m-%d %H:%M:%S.%fZ')
+def store(run_name, result):
+    # upsert: https://stackoverflow.com/questions/2717590/sqlite-insert-on-duplicate-key-update-upsert
     with database() as conn:
-        results = [(run_name, timestamp, *map(str, names), *map(float, rewards)) for names, rewards in results]
-        conn.executemany('insert into results values (null,?,?,?,?,?,?)', results)
+        subs = (
+            run_name, result.black_name, result.white_name, result.black_wins, result.white_wins, 
+            result.black_wins, result.white_wins)
+        conn.execute('''
+            insert into results 
+            values (?,?,?,?,?)
+            on conflict(run_name, black_name, white_name) do update set 
+            black_wins = black_wins + ?,
+            white_wins = white_wins + ?''', subs)
 
 def stored(run_name=''):
     with database() as c:
