@@ -121,9 +121,9 @@ def vectorization_benchmark(n_envs=None, T=10, device=None):
     from scalinglaws import worldfunc, agentfunc
 
     if device is None:
-        return pd.concat([vectorization_benchmark(n_envs, T, d) for d in ['cpu', 'cuda']])
+        return pd.concat([vectorization_benchmark(n_envs, T, d) for d in ['cpu', 'cuda']], ignore_index=True)
     if n_envs is None:
-        return pd.concat([vectorization_benchmark(n, T, device) for n in [60, 240, 960]])
+        return pd.concat([vectorization_benchmark(n, T, device) for n in [60, 240, 960]], ignore_index=True)
 
     assert n_envs % 60 == 0
 
@@ -147,6 +147,6 @@ def vectorization_benchmark(n_envs=None, T=10, device=None):
         print(results[-1])
 
     df = pd.DataFrame(results)
-    df['rate'] = df.n_samples/df.time
+    df['rate'] = (df.n_samples/df.time).astype(int)
 
     return df
