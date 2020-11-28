@@ -83,6 +83,8 @@ class AdaptiveMatcher:
 
             if terminal.all():
                 break
+
+        self.counts[matchup] += terminal.sum()
         
         wins = tuple(map(int, wins.sum(0)))
         result = aljpy.dotdict(

@@ -2,7 +2,7 @@ import sqlite3
 import pandas as pd
 from contextlib import contextmanager
 
-DATABASE = 'output/arena-2.sql'
+DATABASE = 'output/arena.sql'
 
 @contextmanager
 def database():
@@ -43,3 +43,18 @@ def rate(period='600s'):
     mask = times > times.max() - pd.Timedelta(period)
     rate = len(times[mask])/(times[mask].max() - times[mask].min()).total_seconds()
     print(f'{rate:.1f} games/second')
+
+def _transfer():
+    old = stored()
+
+    new = (old
+        .assign(black_wins=lambda df: df.black_reward == 1, white_wins=lambda df: df.white_reward == 1)
+        .groupby(['run_name', 'black_name', 'white_name'])[['black_wins', 'white_wins']].sum()
+        .reset_index())
+
+    from tqdm.auto import tqdm
+    import aljpy
+
+    for _, row in tqdm(new.iterrows(), total=len(new)):
+        database.store(row.run_name, aljpy.dotdict(row))
+        
