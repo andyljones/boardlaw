@@ -2,6 +2,9 @@ import aljpy
 import torch
 import numpy as np
 from rebar import arrdict
+from logging import getLogger
+
+log = getLogger(__name__)
 
 def invert(d):
     return {v: k for k, v in d.items()}
@@ -47,13 +50,24 @@ class AdaptiveMatcher:
         counts = torch.zeros((self.next_id, self.next_id), device=self.device)
         counts[:-1, :-1] = self.counts
         self.counts = counts
-        self._refresh(torch.ones((self.worlds.n_envs,), device=self.device))
+        self._refresh(torch.ones((self.worlds.n_envs,), device=self.device, dtype=torch.bool))
 
     def add_agents(self, agents):
         current = self.names.values()
         for name, agent in agents.items():
             if name not in current:
                 self.add_agent(name, agent)
+
+    def set_counts(self, dbcounts):
+        raw = (dbcounts
+            .assign(games=lambda df: df.black_wins + df.white_wins)
+            .groupby(['black_name', 'white_name'])
+            .games.sum()
+            .unstack())
+
+        agents = list(self.names.values())
+        counts = raw.reindex(index=agents, columns=agents).fillna(0)
+        self.counts = torch.as_tensor(counts.values, device=self.device, dtype=torch.int)
 
     def _refresh(self, terminal):
         if not terminal.any():
@@ -65,6 +79,7 @@ class AdaptiveMatcher:
 
         new_matchup = select(self.counts, self.matchup)
         if new_matchup != self.matchup:
+            log.info(f'Swapping from a matchup with {self.counts[self.matchup]} games to one with {self.counts[new_matchup]} games')
             self.matchup = new_matchup
             self.worlds = self.initial.clone()
             self.wins[:] = 0

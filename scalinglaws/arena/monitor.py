@@ -50,13 +50,15 @@ def run(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], canceller=Non
                 last_load = time.time()
                 agents = periodic_agents(runs, agentfunc, device)
                 matcher.add_agents(agents)
-                log.info(f'Loading {len(agents)} agents')
+                log.info(f'Loaded {len(agents)} agents')
+                matcher.set_counts(database.stored(run_name))
+                log.info(f'Set counts for {int(matcher.counts.sum())} games')
             
             if time.time() - last_step > 1:
                 last_step = time.time()
                 results = matcher.step()
                 database.store(run_name, results)
-                log.info(f'Stepped, stored {results["games"]} games between {results["black_name"]} and {results["white_name"]}')
+                log.info(f'Stepped, stored {results["games"]:4d} games between {results["black_name"]} and {results["white_name"]}')
 
             # #TODO: Hangs occasionally, and damned if I know why.
             # if canceller and canceller.wait(.1):
