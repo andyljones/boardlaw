@@ -48,13 +48,13 @@ def plot_symmetric(run_name, min_games=1):
             .groupby(['black_name', 'white_name'])
             [['black_wins', 'white_wins']]
             .sum()
-            .unstack()
-            .fillna(0))
+            .unstack())
     games = df.black_wins + df.white_wins
-    average = (df.black_wins + df.white_wins.T)/(games + games.T)
+    average = .5*df.black_wins/games + .5*df.white_wins.T/games.T
+    games = games + games.T
 
     with plt.style.context('seaborn-poster'):
-        ax = plot(average.where(games > min_games))
+        ax = plot(average.where((games > min_games) & (games.T > min_games)))
         ax.set_xlabel(f'{run_name}')
         ax.set_ylabel('')
         ax.set_title(f'symmetrized win rate')
