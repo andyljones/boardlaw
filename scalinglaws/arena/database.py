@@ -1,6 +1,7 @@
 import sqlite3
 import pandas as pd
 from contextlib import contextmanager
+from rebar import paths
 
 DATABASE = 'output/arena.sql'
 
@@ -30,6 +31,7 @@ def store(run_name, result):
             white_wins = white_wins + ?''', subs)
 
 def stored(run_name=''):
+    run_name = paths.resolve(run_name)
     with database() as c:
         return pd.read_sql_query('select * from results where run_name like ?', c, params=(f'{run_name}%',))
     
@@ -37,9 +39,29 @@ def delete(run_name):
     with database() as c:
         c.execute('delete from results where run_name=?', (run_name,))
 
-def n_games(run_name):
-    df = stored(run_name)
+def summary(run_name):
+    return (stored(run_name)
+            .groupby(['black_name', 'white_name'])
+            [['black_wins', 'white_wins']]
+            .sum()
+            .unstack()
+            .fillna(0))
+
+def games(run_name):
+    df = summary(run_name)
     return (df.white_wins + df.black_wins).sum()
+
+def winrate(run_name, min_games=256):
+    df = summary(run_name)
+    games = df.white_wins + df.black_wins
+    games = games.where(games > min_games)
+    return df.black_wins/games
+
+def symmetric_winrate(run_name, min_games=256):
+    df = summary(run_name)
+    games = df.black_wins + df.white_wins
+    games = games.where(games > min_games)
+    return .5*df.black_wins/games + .5*df.white_wins.T/games.T
 
 def _transfer():
     old = stored()

@@ -14,48 +14,23 @@ def plot(df, vmin=0, vmax=1):
         im.axes.set_yticks([])
         return im.axes
 
-def plot_games(run_name):
-    df = (database.stored(run_name)
-            .groupby(['black_name', 'white_name'])
-            [['black_wins', 'white_wins']]
-            .sum()
-            .sum(1)
-            .unstack())
-
+def games(run_name):
+    df = database.games(run_name)
     with plt.style.context('seaborn-poster'):
         ax = plot(df, vmax=df.max().max())
 
-def plot_black(run_name, min_games=1):
-    run_name = paths.resolve(run_name)
-    df = (database.stored(run_name)
-            .groupby(['black_name', 'white_name'])
-            [['black_wins', 'white_wins']]
-            .sum()
-            .unstack()
-            .fillna(0))
-    games = (df.black_wins + df.white_wins)
-    average = df.black_wins/games
-
+def black(*args, **kwargs):
+    df = database.winrate(*args, **kwargs)
     with plt.style.context('seaborn-poster'):
-        ax = plot(average.where(games > min_games))
+        ax = plot(df)
         ax.set_xlabel('white')
         ax.set_ylabel('black')
         ax.set_title('black win rate')
 
-def plot_symmetric(run_name, min_games=1):
-    run_name = paths.resolve(run_name)
-    df = (database.stored(run_name)
-            .groupby(['black_name', 'white_name'])
-            [['black_wins', 'white_wins']]
-            .sum()
-            .unstack())
-    games = df.black_wins + df.white_wins
-    average = .5*df.black_wins/games + .5*df.white_wins.T/games.T
-    games = games + games.T
-
+def symmetric(*args, **kwargs):
+    df = database.symmetric_winrate(*args, **kwargs)
     with plt.style.context('seaborn-poster'):
-        ax = plot(average.where((games > min_games) & (games.T > min_games)))
-        ax.set_xlabel(f'{run_name}')
+        ax = plot(df)
         ax.set_ylabel('')
         ax.set_title(f'symmetrized win rate')
 
