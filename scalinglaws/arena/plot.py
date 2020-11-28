@@ -2,6 +2,7 @@ import pandas as pd
 from . import database
 import seaborn as sns
 import matplotlib.pyplot as plt
+from rebar import paths
 
 def plot(df):
         if df.size <= 525:
@@ -14,10 +15,13 @@ def plot(df):
             return im.axes
 
 def plot_black(run_name):
+    run_name = paths.resolve(run_name)
     df = (database.stored(run_name)
-            .assign(black_win=lambda df: df.black_reward == 1)
-            .groupby(['black_name', 'white_name']).black_win.mean()
+            .groupby(['black_name', 'white_name'])
+            [['black_wins', 'white_wins']]
+            .sum()
             .unstack())
+    df = df.black_wins/(df.black_wins + df.white_wins)
 
     with plt.style.context('seaborn-poster'):
         ax = plot(df)
@@ -26,14 +30,14 @@ def plot_black(run_name):
         ax.set_title('black win rate')
 
 def plot_symmetric(run_name):
-    stats = (database.stored(run_name)
-                .assign(
-                    wins=lambda df: df.black_reward == 1,
-                    games=lambda df: pd.Series(1, df.index))
-                .groupby(['black_name', 'white_name'])[['wins', 'games']].sum()
-                .astype(int)
-                .unstack())
-    average = (stats.wins + (stats.games - stats.wins).T)/(stats.games + stats.games.T)
+    run_name = paths.resolve(run_name)
+    df = (database.stored(run_name)
+            .groupby(['black_name', 'white_name'])
+            [['black_wins', 'white_wins']]
+            .sum()
+            .unstack())
+    games = df.black_wins + df.white_wins
+    average = (df.black_wins + df.white_wins.T)/(games + games.T)
 
     with plt.style.context('seaborn-poster'):
         ax = plot(average)
