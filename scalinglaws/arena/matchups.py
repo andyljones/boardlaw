@@ -121,14 +121,19 @@ def vectorization_benchmark(n_envs=None, T=10, device=None):
     from scalinglaws import worldfunc, agentfunc
 
     if device is None:
-        return pd.concat([vectorization_benchmark(n_envs, T, d) for d in ['cpu', 'cuda']], ignore_index=True)
+        df = pd.concat([vectorization_benchmark(n_envs, T, d) for d in ['cpu', 'cuda']], ignore_index=True)
+        import seaborn as sns
+        with sns.axes_style('whitegrid'):
+            g = sns.FacetGrid(df, row='device', col='n_envs')
+            g.map(sns.barplot, "n_agents", "rate")
+        return df
     if n_envs is None:
         return pd.concat([vectorization_benchmark(n, T, device) for n in [60, 240, 960]], ignore_index=True)
 
     assert n_envs % 60 == 0
 
     results = []
-    for n in [1, 2]:#, 3, 4, 6, 10, 20]:
+    for n in [1, 2, 5, 10]:
         worlds = worldfunc(n_envs, device=device)
         agents = {i: agentfunc(device=device) for i in range(n)}
 
