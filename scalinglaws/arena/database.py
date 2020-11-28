@@ -28,3 +28,10 @@ def stored(run_name=''):
 def delete(run_name):
     with database() as c:
         c.execute('delete from results where run_name=?', (run_name,))
+
+def rate(period='600s'):
+    df = stored()
+    times = pd.to_datetime(df.time)
+    mask = times > times.max() - pd.Timedelta(period)
+    rate = len(times[mask])/(times[mask].max() - times[mask].min()).total_seconds()
+    print(f'{rate:.1f} games/second')
