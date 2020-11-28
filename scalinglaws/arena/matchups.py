@@ -11,6 +11,26 @@ def scatter_add(counts, idxs):
     ones = counts.new_ones((len(idxs),))
     counts.view(-1).scatter_add_(0, fst*n_snd + snd, ones)
 
+def sample(agents, counts, n_samples):
+    # Matchup ideals
+    # * Shouldn't use more than n_cores MoHex agents
+    # * Should concentrate PyTorch agents
+    # * Should fill out some sort of pattern before filling out uniformly
+
+    targets = counts.sum()*torch.full_like(counts, 1/counts.nelement())
+
+    error = targets - counts
+    error = error - error.min()
+    prior = torch.ones_like(error)
+    dist = error + prior/(error + prior).sum()
+    
+    n_agents = counts.size(1)
+    sample = torch.distributions.Categorical(probs=dist.flatten()).sample((n_samples,))
+    sample = torch.stack([sample // n_agents, sample % n_agents], -1)
+
+    return sample
+
+
 class AdaptiveMatcher:
 
     def __init__(self, worldfunc, n_envs=1, device='cpu'):
@@ -48,23 +68,16 @@ class AdaptiveMatcher:
         self.matchups = torch.randint(0, len(self.agents), (self.worlds.n_envs, self.worlds.n_seats), device=self.device)
 
     def _refresh(self, terminal):
+
         # Update the matchup distribution to better match the priorities
         scatter_add(self.counts, self.matchups[terminal])
         self.rewards[terminal] = 0
 
-        targets = self.counts.sum()*torch.full_like(self.counts, 1/self.counts.nelement())
-        scatter_add(targets, self.matchups[~terminal])
+        # Add in-flight matchups to the counts
+        counts = self.counts.clone()
+        scatter_add(counts, self.matchups[~terminal])
 
-        error = targets - self.counts
-        error = error - error.min()
-        prior = torch.ones_like(error)
-        dist = error + prior/(error + prior).sum()
-        
-        n_agents = self.counts.size(1)
-        sample = torch.distributions.Categorical(probs=dist.flatten()).sample((terminal.sum(),))
-        sample = torch.stack([sample // n_agents, sample % n_agents], -1)
-
-        self.matchups[terminal] = sample 
+        self.matchups[terminal] = sample(self.agents, counts, terminal.sum())
 
     def step(self):
         if len(self.agents) <= 1:
