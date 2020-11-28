@@ -27,13 +27,13 @@ def winrate(black, white):
 def simulate(black, white, n_games):
     return torch.distributions.Binomial(n_games, winrate(black, white)).sample()
 
-def infer(wins, games, initial):
+def infer(wins, games, initial, prior=1):
     ranks = nn.Parameter(initial)
     optim = torch.optim.LBFGS([ranks])
 
     def closure():
         rates = winrate(ranks[:, None], ranks[None, :])
-        losses = -(wins + 1)*torch.log(rates) - (games - wins + 1)*torch.log(1 - rates)
+        losses = -(wins + prior)*torch.log(rates) - (games - wins + prior)*torch.log(1 - rates)
         loss = losses.sum()
         optim.zero_grad()
         loss.backward()
@@ -48,9 +48,9 @@ def solve(ranks, games_per=256):
     wins = torch.zeros((n_agents, n_agents))
     games = torch.zeros((n_agents, n_agents))
 
-    errs = []
     estimates = torch.full((n_agents,), 1000.)
-    for _ in range(1000):
+    i = 1
+    while True:
         estimates = infer(wins, games, estimates)
 
         black, white = torch.randint(n_agents, (2,))
@@ -61,6 +61,19 @@ def solve(ranks, games_per=256):
         games[white, black] += games_per
 
         err = (estimates - estimates[0]) - (ranks - ranks[0])
-        errs.append(err.pow(2).mean()/(ranks - ranks[0]).pow(2).mean())
+        ratio = err.pow(2).mean()/(ranks - ranks[0]).pow(2).mean()
+        if ratio < .01:
+            break
 
-    plt.plot(torch.stack(errs).detach().numpy())
+        i += 1
+
+    return i
+
+def benchmark():
+    counts = []
+    for _ in range(100):
+        ranks = random_ranks(n_agents=10)
+        counts.append(solve(ranks))
+    q = np.quantile(counts, .95)
+    return q
+
