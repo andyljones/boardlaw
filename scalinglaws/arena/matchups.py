@@ -9,7 +9,7 @@ log = getLogger(__name__)
 def invert(d):
     return {v: k for k, v in d.items()}
 
-def select(counts, current):
+def select(counts):
     # Matchup ideals
     # * Shouldn't use more than n_cores MoHex agents
     # * Should concentrate PyTorch agents
@@ -19,25 +19,19 @@ def select(counts, current):
     error = targets - arrdict.numpyify(counts/counts.sum())
     error = np.exp(error)/np.exp(error).sum()
 
-    best = np.unravel_index(error.argmax(), error.shape)
-    
-    # Bit of hysteresis
-    return best if (error[best] - 2*error[current]) else current
+    return np.unravel_index(error.argmax(), error.shape)
 
 class AdaptiveMatcher:
 
     def __init__(self, worldfunc, n_envs=1024, device='cpu'):
         self.worldfunc = worldfunc
         self.initial = worldfunc(n_envs, device=device)
-        self.worlds = self.initial.clone()
         self.device = device
-        assert self.worlds.n_seats == 2, 'Only support 2 seats for now'
+        assert self.initial.n_seats == 2, 'Only support 2 seats for now'
 
         self.next_id = 0
         self.agents = {}
         self.names = {}
-        self.matchup = (0,)*self.worlds.n_seats
-        self.wins = torch.zeros((n_envs, self.worlds.n_seats), dtype=torch.int, device=device)
 
         self.counts = torch.empty((0, 0))
 
@@ -50,7 +44,6 @@ class AdaptiveMatcher:
         counts = torch.zeros((self.next_id, self.next_id), device=self.device)
         counts[:-1, :-1] = self.counts
         self.counts = counts
-        self._refresh(torch.ones((self.worlds.n_envs,), device=self.device, dtype=torch.bool))
 
     def add_agents(self, agents):
         current = self.names.values()
@@ -69,45 +62,33 @@ class AdaptiveMatcher:
         counts = raw.reindex(index=agents, columns=agents).fillna(0)
         self.counts = torch.as_tensor(counts.values, device=self.device, dtype=torch.int)
 
-    def _refresh(self, terminal):
-        if not terminal.any():
-            return 
-
-        # Update the matchup distribution to better match the priorities
-        self.counts[tuple(self.matchup)] += terminal.sum()
-        self.wins[terminal] = 0
-
-        new_matchup = select(self.counts, self.matchup)
-        if new_matchup != self.matchup:
-            log.info(f'Swapping from a matchup with {self.counts[self.matchup]} games to one with {self.counts[new_matchup]} games')
-            self.matchup = new_matchup
-            self.worlds = self.initial.clone()
-            self.wins[:] = 0
-
     def step(self):
         if len(self.agents) <= 1:
-            return []
+            return None
 
-        seats = self.worlds.seats.clone()
-        terminal = torch.zeros((self.worlds.n_envs,), dtype=torch.bool, device=self.device)
-        for i, id in enumerate(self.matchup):
-            mask = seats == i
-            if mask.any():
-                decisions = self.agents[id](self.worlds[mask])
-                self.worlds[mask], transitions = self.worlds[mask].step(decisions.actions)
-                terminal[mask] = transitions.terminal
-                self.wins[mask] += (transitions.rewards == 1).long()
+        matchup = select(self.counts)
+        log.info(f'Generating games for a matchup with {self.counts[matchup]} existing games')
+
+        worlds = self.initial.clone()
+        terminal = torch.zeros((worlds.n_envs,), dtype=torch.bool, device=self.device)
+        wins = torch.zeros((worlds.n_envs, worlds.n_seats), dtype=torch.int, device=self.device)
+        while True:
+            for i, id in enumerate(matchup):
+                mask = (worlds.seats == i) & ~terminal
+                if mask.any():
+                    decisions = self.agents[id](worlds[mask])
+                    worlds[mask], transitions = worlds[mask].step(decisions.actions)
+                    terminal[mask] = transitions.terminal
+                    wins[mask] += (transitions.rewards == 1).int()
+
+            if terminal.all():
+                break
         
-        if terminal.any():
-            wins = tuple(map(int, self.wins[terminal].sum(0)))
-        else: 
-            wins = (0,)*self.worlds.n_seats
+        wins = tuple(map(int, wins.sum(0)))
         result = aljpy.dotdict(
-            black_name=self.names[self.matchup[0]], white_name=self.names[self.matchup[1]], 
+            black_name=self.names[matchup[0]], white_name=self.names[matchup[1]], 
             black_wins=wins[0], white_wins=wins[1],
             games=int(terminal.sum()))
-
-        self._refresh(terminal)
 
         return result
 
