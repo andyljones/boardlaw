@@ -11,7 +11,7 @@ def scatter_add(counts, idxs):
     ones = counts.new_ones((len(idxs),))
     counts.view(-1).scatter_add_(0, fst*n_snd + snd, ones)
 
-def sample(agents, counts, n_samples):
+def sample(counts, n_samples):
     # Matchup ideals
     # * Shouldn't use more than n_cores MoHex agents
     # * Should concentrate PyTorch agents
@@ -30,14 +30,12 @@ def sample(agents, counts, n_samples):
 
     return sample
 
-
 class AdaptiveMatcher:
 
     def __init__(self, worldfunc, n_envs=1, device='cpu'):
         self.worldfunc = worldfunc
         self.worlds = worldfunc(n_envs, device=device)
         self.device = device
-        self.seat = 0
         assert self.worlds.n_seats == 2, 'Only support 2 seats for now'
 
         self.next_id = 0
@@ -68,6 +66,8 @@ class AdaptiveMatcher:
         self.matchups = torch.randint(0, len(self.agents), (self.worlds.n_envs, self.worlds.n_seats), device=self.device)
 
     def _refresh(self, terminal):
+        if not terminal.any():
+            return 
 
         # Update the matchup distribution to better match the priorities
         scatter_add(self.counts, self.matchups[terminal])
@@ -77,7 +77,7 @@ class AdaptiveMatcher:
         counts = self.counts.clone()
         scatter_add(counts, self.matchups[~terminal])
 
-        self.matchups[terminal] = sample(self.agents, counts, terminal.sum())
+        self.matchups[terminal] = sample(counts, terminal.sum())
 
     def step(self):
         if len(self.agents) <= 1:
@@ -85,23 +85,20 @@ class AdaptiveMatcher:
         if self.matchups is None:
             self._initialize()
 
-        terminal = torch.zeros((len(self.matchups)), dtype=torch.bool, device=self.device)
-        for (i, id) in enumerate(self.agents):
-            mask = (self.matchups[:, self.seat] == i) & (self.worlds.seats == self.seat)
-            if mask.any():
-                decisions = self.agents[id](self.worlds[mask])
-                self.worlds[mask], transitions = self.worlds[mask].step(decisions.actions)
-                terminal[mask] = transitions.terminal
-                self.rewards[mask] += transitions.rewards
-
-        self.seat = (self.seat + 1) % self.worlds.n_seats
+        hotseat = self.matchups.gather(1, self.worlds.seats[:, None])
+        terminal = torch.zeros((self.worlds.n_envs,), dtype=torch.bool, device=self.device)
+        for id in hotseat.unique():
+            mask = hotseat == id
+            decisions = self.agents[id](self.worlds[mask])
+            self.worlds[mask], transitions = self.worlds[mask].step(decisions.actions)
+            terminal[mask] = transitions.terminal
+            self.rewards[mask] += transitions.rewards
         
         matchups = arrdict.numpyify(self.matchups[terminal])
         names = np.array(list(self.names.values()))[matchups]
         rewards = arrdict.numpyify(self.rewards[terminal])
 
-        if terminal.any():
-            self._refresh(terminal)
+        self._refresh(terminal)
 
         return [(tuple(n), tuple(r)) for n, r in zip(names, rewards)]
 
@@ -115,3 +112,39 @@ def test():
 
     matcher.add_agent('one', RandomAgent())
     matcher.add_agent('two', RandomAgent())
+
+    matcher.step()
+
+def vectorization_benchmark(n_envs=60, T=10, device=None):
+    import pandas as pd
+    import aljpy
+    from scalinglaws import worldfunc, agentfunc
+
+    if device is None:
+        return pd.concat([vectorization_benchmark(n_envs, T, d) for d in ['cpu', 'cuda']])
+
+    assert n_envs % 60 == 0
+
+    results = []
+    for n in [1, 2]:#, 3, 4, 6, 10, 20]:
+        worlds = worldfunc(60, device=device)
+        agents = {i: agentfunc(device=device) for i in range(n)}
+
+        envs = torch.arange(n_envs, device=device)/n_envs
+        masks = {i: (i/n <= envs) & (envs < (i+1)/n) for i in agents}
+
+        torch.cuda.synchronize()
+        with aljpy.timer() as timer:
+            for _ in range(T):
+                for i, agent in agents.items():
+                    decisions = agent(worlds[masks[i]])
+                    worlds[masks[i]].step(decisions.actions)
+            torch.cuda.synchronize()
+
+        results.append({'n_agents': n, 'n_envs': n_envs, 'n_samples': T*n_envs, 'time': timer.time(), 'device': device})
+        print(results[-1])
+
+    df = pd.DataFrame(results)
+    df['rate'] = df.samples/df.time
+
+    return df
