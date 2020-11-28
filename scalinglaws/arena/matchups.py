@@ -15,15 +15,23 @@ def select(counts):
     # * Should concentrate PyTorch agents
     # * Should fill out some sort of pattern before filling out uniformly
 
-    # Priviledge power-of-two diagonals
     rows, cols = np.indices(counts.shape)
+
+    # Priviledge power-of-two rows/cols
+    log_rows = (np.log2(rows+1) % 1 == 0).astype(float)
+    row_weights = log_rows*rows
+    log_cols = (np.log2(cols+1) % 1 == 0).astype(float)
+    col_weights = log_cols*cols
+    level_weights = (row_weights + col_weights)/(row_weights + col_weights).sum()
+
+    # Priviledge power-of-two diagonals
     diags = abs(rows - cols)
     log_diags = (np.log2(diags+1) % 1 == 0).astype(float)
     diag_weights = log_diags*diags
     diag_weights = diag_weights/diag_weights.sum()
 
     targets = np.full_like(counts, 1/counts.nelement())
-    targets = .5*targets + .5*diag_weights
+    targets = .5*targets + .0*diag_weights + .5*level_weights
 
     error = targets - arrdict.numpyify(counts/counts.sum())
     error = np.exp(error)/np.exp(error).sum()

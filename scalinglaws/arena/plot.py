@@ -25,7 +25,7 @@ def plot_games(run_name):
     with plt.style.context('seaborn-poster'):
         ax = plot(df, vmax=df.max().max())
 
-def plot_black(run_name):
+def plot_black(run_name, min_games=1):
     run_name = paths.resolve(run_name)
     df = (database.stored(run_name)
             .groupby(['black_name', 'white_name'])
@@ -33,10 +33,11 @@ def plot_black(run_name):
             .sum()
             .unstack()
             .fillna(0))
-    df = df.black_wins/(df.black_wins + df.white_wins)
+    games = (df.black_wins + df.white_wins)
+    average = df.black_wins/games
 
     with plt.style.context('seaborn-poster'):
-        ax = plot(df)
+        ax = plot(average.where(games > min_games))
         ax.set_xlabel('white')
         ax.set_ylabel('black')
         ax.set_title('black win rate')
