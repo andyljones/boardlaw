@@ -5,6 +5,7 @@ So what does a general-purpose evaluator look like?
 * Goal is to estimate the Elo of a set of target agents to a specific level of confidence, as fast as possible
 * This is basically the ResponseGraphUCB problem.
 """
+import matploblib.pylot as plt
 import numpy as np
 import scipy as sp
 import scipy.stats
@@ -47,8 +48,9 @@ def solve(ranks, games_per=10):
     wins = torch.zeros((n_agents, n_agents))
     games = torch.zeros((n_agents, n_agents))
 
+    errs = []
     estimates = torch.full((n_agents,), 1000.)
-    while True:
+    for _ in range(1000):
         estimates = infer(wins, games, estimates)
 
         black, white = torch.randint(n_agents, (2,))
@@ -57,3 +59,8 @@ def solve(ranks, games_per=10):
         wins[white, black] += games_per - black_wins
         games[black, white] += games_per
         games[white, black] += games_per
+
+        err = (estimates - estimates[0]) - (ranks - ranks[0])
+        errs.append(err.pow(2).mean()/(ranks - ranks[0]).pow(2).mean())
+
+    plt.plot(torch.stack(errs).detach().numpy())
