@@ -10,33 +10,50 @@ import scipy as sp
 import scipy.stats
 import networkx as nx
 from rebar import arrdict
+import torch
+from torch import nn
+from torch.distributions import Uniform, SigmoidTransform, AffineTransform, TransformedDistribution
 
-def random_problem(mean=1000, std=400, n_agents=5, n_games=20, concentration=.7):
-    ranks = np.random.normal(mean, std, (n_agents,))
+def random_ranks(mean=1000, std=400, n_agents=10):
+    base_distribution = Uniform(0, 1)
+    transforms = [SigmoidTransform().inv, AffineTransform(loc=mean, scale=std)]
+    logistic = TransformedDistribution(base_distribution, transforms)
+    return logistic.sample((n_agents,))
 
-    concentration = .7
-    alpha = np.full(n_agents*(n_agents-1)//2, concentration)
-    ps = sp.stats.dirichlet(alpha).rvs(())
+def winrate(black, white):
+    return 1/(1 + 10**(-(black - white)/400))
 
-    games = sp.random.binomial(n_games, ps)
+def simulate(black, white, n_games):
+    return torch.distributions.Binomial(n_games, winrate(black, white)).sample()
 
-    k = 0
-    wins = np.zeros_like(games)
-    edges = np.zeros((len(games), 2), dtype=int)
-    for i in range(n_agents):
-        for j in range(i+1, n_agents):
-            winrate = sp.special.expit((ranks[i] - ranks[j])/std)
-            
-            wins[k] = sp.random.binomial(games[k], winrate)
-            edges[k] = (i, j)
-            
-            k += 1
-            
-    return arrdict.arrdict(
-            ranks=ranks,
-            wins=wins,
-            games=games,
-            edges=edges)
+def infer(wins, games, initial):
+    ranks = nn.Parameter(initial)
+    optim = torch.optim.LBFGS([ranks])
 
-def solve(prob):
-    pass
+    def closure():
+        rates = winrate(ranks[:, None], ranks[None, :])
+        losses = -(wins + 1)*torch.log(rates) - (games - wins + 1)*torch.log(1 - rates)
+        loss = losses.sum()
+        optim.zero_grad()
+        loss.backward()
+        return loss
+
+    optim.step(closure)
+
+    return ranks
+
+def solve(ranks, games_per=10):
+    n_agents = len(ranks)
+    wins = torch.zeros((n_agents, n_agents))
+    games = torch.zeros((n_agents, n_agents))
+
+    estimates = torch.full((n_agents,), 1000.)
+    while True:
+        estimates = infer(wins, games, estimates)
+
+        black, white = torch.randint(n_agents, (2,))
+        black_wins = simulate(ranks[black], ranks[white], games_per)
+        wins[black, white] += black_wins
+        wins[white, black] += games_per - black_wins
+        games[black, white] += games_per
+        games[white, black] += games_per
