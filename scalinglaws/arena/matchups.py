@@ -15,7 +15,16 @@ def select(counts):
     # * Should concentrate PyTorch agents
     # * Should fill out some sort of pattern before filling out uniformly
 
+    # Priviledge power-of-two diagonals
+    rows, cols = np.indices(counts.shape)
+    diags = abs(rows - cols)
+    log_diags = (np.log2(diags+1) % 1 == 0).astype(float)
+    diag_weights = log_diags*diags
+    diag_weights = diag_weights/diag_weights.sum()
+
     targets = np.full_like(counts, 1/counts.nelement())
+    targets = .5*targets + .5*diag_weights
+
     error = targets - arrdict.numpyify(counts/counts.sum())
     error = np.exp(error)/np.exp(error).sum()
 
