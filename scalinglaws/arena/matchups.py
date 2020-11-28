@@ -115,19 +115,21 @@ def test():
 
     matcher.step()
 
-def vectorization_benchmark(n_envs=60, T=10, device=None):
+def vectorization_benchmark(n_envs=None, T=10, device=None):
     import pandas as pd
     import aljpy
     from scalinglaws import worldfunc, agentfunc
 
     if device is None:
         return pd.concat([vectorization_benchmark(n_envs, T, d) for d in ['cpu', 'cuda']])
+    if n_envs is None:
+        return pd.concat([vectorization_benchmark(n, T, device) for n in [60, 240, 960]])
 
     assert n_envs % 60 == 0
 
     results = []
     for n in [1, 2]:#, 3, 4, 6, 10, 20]:
-        worlds = worldfunc(60, device=device)
+        worlds = worldfunc(n_envs, device=device)
         agents = {i: agentfunc(device=device) for i in range(n)}
 
         envs = torch.arange(n_envs, device=device)/n_envs
@@ -145,6 +147,6 @@ def vectorization_benchmark(n_envs=60, T=10, device=None):
         print(results[-1])
 
     df = pd.DataFrame(results)
-    df['rate'] = df.samples/df.time
+    df['rate'] = df.n_samples/df.time
 
     return df
