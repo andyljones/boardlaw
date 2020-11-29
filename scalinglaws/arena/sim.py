@@ -5,6 +5,7 @@ So what does a general-purpose evaluator look like?
 * Goal is to estimate the Elo of a set of target agents to a specific level of confidence, as fast as possible
 * This is basically the ResponseGraphUCB problem.
 """
+import pystan
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy as sp
@@ -92,6 +93,44 @@ def solve(truth, games_per=256):
 
     return i
 
+def stan_model():
+    ocode = """
+    data {
+        int<lower=0> N;
+        int wins[N, N];
+        int games[N, N];
+    }
+    parameters {
+        real mu[N];
+        real<lower=0> sigma[N];
+        vector[N] skill;
+    }
+    model {
+        real d;
+        
+        sigma ~ gamma(2, 2);
+        skill ~ normal(mu, sigma);
+
+        for (i in 1:N) {
+            for (j in 1:N) {
+                d = log(10)*(skill[i] - skill[j]);
+                wins[i, j] ~ binomial_logit(games[i, j], d);
+            }
+        }
+    }
+    """
+    return pystan.StanModel(model_code=ocode)
+
+def stan_solve(wins, games):
+    model = stan_model()
+
+    data = dict(
+        N=wins.size(0),
+        wins=wins.int().numpy(),
+        games=games.int().numpy())
+
+    result = model.vb(data=data, verbose=True)
+
 def benchmark():
     counts = []
     for _ in range(100):
@@ -103,8 +142,9 @@ def benchmark():
 def example():
     from . import database
 
-    wins = torch.as_tensor(database.winrate(-1).fillna(0).values)
-    games = torch.as_tensor(database.games(-1).values)
+    winrate = torch.as_tensor(database.symmetric_winrate(-1).fillna(0).values)
+    games = torch.as_tensor(database.symmetric_games(-1).values)
+    wins = winrate*games
 
     estimates = torch.full((wins.shape[0],), 1000.)
 

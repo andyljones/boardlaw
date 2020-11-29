@@ -60,6 +60,10 @@ def winrate(run_name, min_games=256):
     games = games.where(games > min_games)
     return df.black_wins/games
 
+def symmetric_games(run_name):
+    g = games(run_name)
+    return .5*g + .5*g.T
+
 def symmetric_winrate(run_name, min_games=256):
     df = summary(run_name)
     games = df.black_wins + df.white_wins
