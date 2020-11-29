@@ -106,20 +106,38 @@ def stan_model():
         vector[N] skill;
     }
     model {
-        real d;
+        vector[N] d;
         
-        sigma ~ gamma(2, 2);
+        sigma ~ gamma(2, 1);
         skill ~ normal(mu, sigma);
 
         for (i in 1:N) {
-            for (j in 1:N) {
-                d = log(10)*(skill[i] - skill[j]);
-                wins[i, j] ~ binomial_logit(games[i, j], d);
-            }
+            d = -(skill - skill[i]);
+            wins[i] ~ binomial_logit(games[i], d);
         }
     }
     """
     return pystan.StanModel(model_code=ocode)
+
+def unpack(result):
+    if isinstance(result, dict):
+        means = dict(zip(result['mean_par_names'], result['mean_pars']))
+    else:
+        s = result.summary()
+        means = dict(zip(s['summary_rownames'], s['summary'][:-1, 0]))
+
+    dicts = {}
+    for k, v in means.items():
+        name, pos = k[:-1].split('[')
+        dicts.setdefault(name, {})[int(pos)] = v
+
+    arrs = {}
+    for name, d in dicts.items():
+        arrs[name] = np.zeros(len(d))
+        for i, v in d.items():
+            arrs[name][i-1] = v
+
+    return arrs
 
 def stan_solve(wins, games):
     model = stan_model()
