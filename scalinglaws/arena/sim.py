@@ -21,6 +21,9 @@ def random_ranks(std=400, n_agents=10):
     totals = totals - totals.min()
     return torch.sort(totals).values
 
+def log_ranks(n_agents=10):
+    return 200*torch.linspace(1, 26, n_agents).float().log()
+
 def winrate(black, white):
     return 1/(1 + 10**(-(black - white)/400))
 
@@ -47,11 +50,21 @@ def infer(wins, games, ranks):
 
     return ranks.data
 
-def sensitivities(wins, games, ranks):
+def unravel(index, shape):
+    n_agents = shape[-1]
+    black, white = index // n_agents, index % n_agents
+    return black, white
+
+def min_suggest(wins, games, ranks):
+    return unravel(games.argmin(), games.shape)
+
+def grad_suggest(wins, games, ranks):
     wins = nn.Parameter(wins)
     l = loss(wins, games, ranks)
     l.backward()
-    return wins.grad
+
+    sensitivities = wins.grad.abs()
+    return unravel(sensitivities.argmax(), games.shape)
 
 def solve(truth, games_per=256):
     n_agents = len(truth)
@@ -63,7 +76,7 @@ def solve(truth, games_per=256):
     while True:
         ranks = infer(wins, games, ranks)
 
-        black, white = torch.randint(n_agents, (2,))
+        black, white = min_suggest(wins, games, ranks)
         black_wins = simulate(truth[black], truth[white], games_per)
         wins[black, white] += black_wins
         wins[white, black] += games_per - black_wins
