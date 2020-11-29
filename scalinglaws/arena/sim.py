@@ -6,6 +6,7 @@ So what does a general-purpose evaluator look like?
 * This is basically the ResponseGraphUCB problem.
 """
 import pystan
+import pymc3 as pm
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy as sp
@@ -151,6 +152,21 @@ def stan_solve(wins, games):
     result = unpack(raw)
 
     return result
+
+def pymc_solve(wins, games):
+    n_agents = wins.shape[0]
+    with pm.Model() as model:
+        sigma = pm.Gamma('sigma', alpha=2, beta=1, shape=(n_agents,))
+        mu = pm.Normal('mu', mu=0, sigma=10, shape=(n_agents,))
+        
+        skills = pm.Normal('skills', mu, sigma, shape=(n_agents,))
+        
+        diffs = skills[:, None] - skills[None, :]
+        rate = 1/(1 + 10**diffs)
+        
+        outcomes = pm.Binomial('outcomes', n=games, p=rate, observed=wins, shape=(n_agents, n_agents))
+        
+        idata = pm.sample(2000, tune=1500, return_inferencedata=True)
 
 def benchmark():
     counts = []
