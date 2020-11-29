@@ -147,7 +147,10 @@ def stan_solve(wins, games):
         wins=wins.int().numpy(),
         games=games.int().numpy())
 
-    result = model.vb(data=data, verbose=True)
+    raw = model.vb(data=data, diagnostic_file='output/stan-diag.txt', tol_rel_obj=1e-5, verbose=True)
+    result = unpack(raw)
+
+    return result
 
 def benchmark():
     counts = []
@@ -164,9 +167,9 @@ def example():
     games = torch.as_tensor(database.symmetric_games(-1).values)
     wins = winrate*games
 
-    estimates = torch.full((wins.shape[0],), 1000.)
+    ranks = torch.zeros((wins.shape[0],))
+    ranks = infer(wins, games, ranks)
 
-    estimates = infer(wins, games, estimates)
-
-    import matplotlib.pyplot as plt
-    plt.plot((estimates - estimates[0]).detach().numpy())
+    result = stan_solve(wins, games)
+    plt.plot((result['mu'] - result['mu'][0])/(result['mu'][-1] - result['mu'][0]))
+    plt.plot((ranks - ranks[0])/(ranks[-1] - ranks[0]))
