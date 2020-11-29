@@ -77,3 +77,15 @@ def benchmark():
     q = np.quantile(counts, .95)
     return q
 
+def example():
+    from . import database
+
+    wins = torch.as_tensor(database.winrate(-1).fillna(0).values)
+    games = torch.as_tensor(database.games(-1).values)
+
+    estimates = torch.full((wins.shape[0],), 1000.)
+
+    estimates = infer(wins, games, estimates)
+
+    import matplotlib.pyplot as plt
+    plt.plot((estimates - estimates[0]).detach().numpy())

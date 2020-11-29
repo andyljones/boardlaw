@@ -40,16 +40,19 @@ def delete(run_name):
         c.execute('delete from results where run_name=?', (run_name,))
 
 def summary(run_name):
-    return (stored(run_name)
+    df = (stored(run_name)
             .groupby(['black_name', 'white_name'])
             [['black_wins', 'white_wins']]
             .sum()
-            .unstack()
-            .fillna(0))
+            .unstack())
+    
+    names = sorted(list(set(df.index) | set(df.columns.get_level_values(1))))
+    df = df.reindex(index=names).reindex(columns=names, level=1)
+    return df.fillna(0)
 
 def games(run_name):
     df = summary(run_name)
-    return (df.white_wins + df.black_wins).sum()
+    return df.white_wins + df.black_wins
 
 def winrate(run_name, min_games=256):
     df = summary(run_name)
