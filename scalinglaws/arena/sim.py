@@ -27,41 +27,51 @@ def winrate(black, white):
 def simulate(black, white, n_games):
     return torch.distributions.Binomial(n_games, winrate(black, white)).sample()
 
-def infer(wins, games, initial, prior=1):
-    ranks = nn.Parameter(initial)
+def loss(wins, games, ranks, prior=1):
+    rates = winrate(ranks[:, None], ranks[None, :])
+    losses = -(wins + prior)*torch.log(rates) - (games - wins + prior)*torch.log(1 - rates)
+    return losses.sum()
+
+def infer(wins, games, ranks):
+    ranks = nn.Parameter(ranks)
     optim = torch.optim.LBFGS([ranks])
 
     def closure():
-        rates = winrate(ranks[:, None], ranks[None, :])
-        losses = -(wins + prior)*torch.log(rates) - (games - wins + prior)*torch.log(1 - rates)
-        loss = losses.sum()
         optim.zero_grad()
-        loss.backward()
-        return loss
+        l = loss(wins, games, ranks)
+        l.backward()
+        return l
 
+    # Only need one step to converge; everything's done internally.
     optim.step(closure)
 
-    return ranks
+    return ranks.data
 
-def solve(ranks, games_per=256):
-    n_agents = len(ranks)
+def sensitivities(wins, games, ranks):
+    wins = nn.Parameter(wins)
+    l = loss(wins, games, ranks)
+    l.backward()
+    return wins.grad
+
+def solve(truth, games_per=256):
+    n_agents = len(truth)
     wins = torch.zeros((n_agents, n_agents))
     games = torch.zeros((n_agents, n_agents))
 
-    estimates = torch.full((n_agents,), 1000.)
+    ranks = torch.full((n_agents,), 1000.)
     i = 1
     while True:
-        estimates = infer(wins, games, estimates)
+        ranks = infer(wins, games, ranks)
 
         black, white = torch.randint(n_agents, (2,))
-        black_wins = simulate(ranks[black], ranks[white], games_per)
+        black_wins = simulate(truth[black], truth[white], games_per)
         wins[black, white] += black_wins
         wins[white, black] += games_per - black_wins
         games[black, white] += games_per
         games[white, black] += games_per
 
-        err = (estimates - estimates[0]) - (ranks - ranks[0])
-        ratio = err.pow(2).mean()/(ranks - ranks[0]).pow(2).mean()
+        err = (ranks - ranks[0]) - (truth - truth[0])
+        ratio = err.pow(2).mean()/(truth - truth[0]).pow(2).mean()
         if ratio < .01:
             break
 
