@@ -27,6 +27,6 @@ def delete(run_name):
     with database() as conn:
         conn.execute('delete from results where run_name=?', (run_name,))
 
-def stored():
+def stored(run_name=''):
     with database() as c:
-        return pd.read_sql_query('select * from results', c)
+        return pd.read_sql_query('select * from results where run_name like ?', c, params=(run_name + '%',))
