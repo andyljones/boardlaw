@@ -156,17 +156,34 @@ def stan_solve(wins, games):
 def pymc_solve(wins, games):
     n_agents = wins.shape[0]
     with pm.Model() as model:
-        sigma = pm.Gamma('sigma', alpha=2, beta=1, shape=(n_agents,))
-        mu = pm.Normal('mu', mu=0, sigma=10, shape=(n_agents,))
+        sigma = pm.InverseGamma('sigma', alpha=1, beta=1, shape=(n_agents-1,))
+        mu = pm.Normal('mu', mu=0, sigma=10, shape=(n_agents-1,))
         
-        skills = pm.Normal('skills', mu, sigma, shape=(n_agents,))
+        skills = pm.math.concatenate([
+            pm.math.zeros_like(mu[:1]), 
+            pm.Normal('skills', mu, sigma, shape=(n_agents-1,))])
         
         diffs = skills[:, None] - skills[None, :]
-        rate = 1/(1 + 10**diffs)
+        rate = 1/(1 + 10**(-diffs))
         
         outcomes = pm.Binomial('outcomes', n=games, p=rate, observed=wins, shape=(n_agents, n_agents))
         
-        idata = pm.sample(2000, tune=1500, return_inferencedata=True)
+        mf = pm.fit(n=25000)
+
+    return mf
+
+def pymc_plot(mf):
+    import pandas as pd
+    import seaborn as sns
+    trace = mf.sample(5000)
+
+    df = (pd.DataFrame(trace['skills'])
+            .rename_axis(index='sample', columns='agent')
+            .stack()
+            .reset_index()
+            .rename(columns={0: 'elo'}))
+    ax = sns.violinplot(data=df, x='agent', y='elo', inner=None, linewidth=1)
+    ax.set_xticks([])
 
 def benchmark():
     counts = []
