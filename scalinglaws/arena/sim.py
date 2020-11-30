@@ -96,26 +96,29 @@ def solve(truth, games_per=256):
 def pymc_solve(wins, games):
     n_agents = wins.shape[0]
     with pm.Model() as model:
-        sigma = pm.InverseGamma('sigma', alpha=1, beta=1, shape=(n_agents-1,))
-        mu = pm.Normal('mu', mu=0, sigma=10, shape=(n_agents-1,))
-        
         skills = pm.math.concatenate([
-            pm.math.zeros_like(mu[:1]), 
-            pm.Normal('skills', mu, sigma, shape=(n_agents-1,))])
+            np.zeros((1,)), 
+            pm.Normal('skills', 0, 10, shape=(n_agents-1,))])
         
         diffs = skills[:, None] - skills[None, :]
-        rate = 1/(1 + 10**(-diffs))
+        rate = pm.math.invlogit(diffs) # need to multiply by 400*log(10) to get Elos
         
-        outcomes = pm.Binomial('outcomes', n=games, p=rate, observed=wins, shape=(n_agents, n_agents))
-        
-        mf = pm.fit(n=25000)
+        pm.Binomial('outcomes', n=games, p=rate, observed=wins, shape=(n_agents, n_agents))
 
-    return mf
+        advi = pm.FullRankADVI()
+        tracker = pm.callbacks.Tracker(
+            mean=advi.approx.mean.eval,
+            std=advi.approx.std.eval)
+        conv = pm.callbacks.CheckParametersConvergence(diff='absolute', tolerance=.01, every=1000)
 
-def pymc_plot(mf):
+        approx = advi.fit(50000, callbacks=[tracker, conv])
+
+
+    return approx
+
+def pymc_plot(trace):
     import pandas as pd
     import seaborn as sns
-    trace = mf.sample(5000)
 
     df = (pd.DataFrame(trace['skills'])
             .rename_axis(index='sample', columns='agent')
@@ -136,13 +139,13 @@ def benchmark():
 def example():
     from . import database
 
-    winrate = torch.as_tensor(database.symmetric_winrate(-1).fillna(0).values)
-    games = torch.as_tensor(database.symmetric_games(-1).values)
+    run_name = '2020-11-27 21-32-59 az-test'
+    winrate = database.symmetric_winrate(run_name).fillna(0).values
+    games = database.symmetric_games(run_name).values
     wins = winrate*games
 
-    ranks = torch.zeros((wins.shape[0],))
-    ranks = infer(wins, games, ranks)
+    approx = pymc_solve(wins, games)
 
-    result = pymc_solve(wins, games)
-    plt.plot((result['mu'] - result['mu'][0])/(result['mu'][-1] - result['mu'][0]))
-    plt.plot((ranks - ranks[0])/(ranks[-1] - ranks[0]))
+    trace = approx.sample(5000)
+    
+    pymc_plot(trace)
