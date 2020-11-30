@@ -114,9 +114,9 @@ def pymc_solve(wins, games):
         approx = advi.fit(50000, callbacks=[tracker, conv])
 
 
-    return approx
+    return advi, approx
 
-def pymc_plot(trace):
+def pymc_plot_means(trace):
     import pandas as pd
     import seaborn as sns
 
@@ -127,6 +127,15 @@ def pymc_plot(trace):
             .rename(columns={0: 'elo'}))
     ax = sns.violinplot(data=df, x='agent', y='elo', inner=None, linewidth=1)
     ax.set_xticks([])
+
+def pymc_diff_stds(advi):
+    mu = advi.approx.mean.eval()
+    cov = advi.approx.cov.eval()
+
+    mu_d = mu[:, None] - mu[None, :]
+    std_d = np.diag(cov)[:, None] + np.diag(cov)[None, :] - 2*cov
+
+    return std_d
 
 def benchmark():
     counts = []
@@ -144,7 +153,7 @@ def example():
     games = database.symmetric_games(run_name).values
     wins = winrate*games
 
-    approx = pymc_solve(wins, games)
+    advi, approx = pymc_solve(wins, games)
 
     trace = approx.sample(5000)
     
