@@ -5,7 +5,6 @@ So what does a general-purpose evaluator look like?
 * Goal is to estimate the Elo of a set of target agents to a specific level of confidence, as fast as possible
 * This is basically the ResponseGraphUCB problem.
 """
-import pystan
 import pymc3 as pm
 import matplotlib.pyplot as plt
 import numpy as np
@@ -94,65 +93,6 @@ def solve(truth, games_per=256):
 
     return i
 
-def stan_model():
-    ocode = """
-    data {
-        int<lower=0> N;
-        int wins[N, N];
-        int games[N, N];
-    }
-    parameters {
-        real mu[N];
-        real<lower=0> sigma[N];
-        vector[N] skill;
-    }
-    model {
-        vector[N] d;
-        
-        sigma ~ gamma(2, 1);
-        skill ~ normal(mu, sigma);
-
-        for (i in 1:N) {
-            d = -(skill - skill[i]);
-            wins[i] ~ binomial_logit(games[i], d);
-        }
-    }
-    """
-    return pystan.StanModel(model_code=ocode)
-
-def unpack(result):
-    if isinstance(result, dict):
-        means = dict(zip(result['mean_par_names'], result['mean_pars']))
-    else:
-        s = result.summary()
-        means = dict(zip(s['summary_rownames'], s['summary'][:-1, 0]))
-
-    dicts = {}
-    for k, v in means.items():
-        name, pos = k[:-1].split('[')
-        dicts.setdefault(name, {})[int(pos)] = v
-
-    arrs = {}
-    for name, d in dicts.items():
-        arrs[name] = np.zeros(len(d))
-        for i, v in d.items():
-            arrs[name][i-1] = v
-
-    return arrs
-
-def stan_solve(wins, games):
-    model = stan_model()
-
-    data = dict(
-        N=wins.size(0),
-        wins=wins.int().numpy(),
-        games=games.int().numpy())
-
-    raw = model.vb(data=data, diagnostic_file='output/stan-diag.txt', tol_rel_obj=1e-5, verbose=True)
-    result = unpack(raw)
-
-    return result
-
 def pymc_solve(wins, games):
     n_agents = wins.shape[0]
     with pm.Model() as model:
@@ -203,6 +143,6 @@ def example():
     ranks = torch.zeros((wins.shape[0],))
     ranks = infer(wins, games, ranks)
 
-    result = stan_solve(wins, games)
+    result = pymc_solve(wins, games)
     plt.plot((result['mu'] - result['mu'][0])/(result['mu'][-1] - result['mu'][0]))
     plt.plot((ranks - ranks[0])/(ranks[-1] - ranks[0]))
