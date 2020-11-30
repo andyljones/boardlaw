@@ -1,4 +1,3 @@
-from scalinglaws.arena.monitor import monitor
 import numpy as np
 import torch
 from rebar import paths, widgets, logging, stats, arrdict, storing
@@ -88,8 +87,8 @@ def optimize(network, opt, batch):
 def worldfunc(n_envs, device='cuda'):
     return hex.Hex.initial(n_envs=n_envs, boardsize=5, device=device)
 
-def agentfunc(*args, **kwargs):
-    worlds = worldfunc(n_envs=1, *args, **kwargs)
+def agentfunc(device='cuda'):
+    worlds = worldfunc(n_envs=1, device=device)
     network = networks.Network(worlds.obs_space, worlds.action_space, width=32).to(worlds.device)
     return mcts.MCTSAgent(network, n_nodes=16)
 
@@ -106,7 +105,8 @@ def run():
     run_name = paths.timestamp('az-test')
     compositor = widgets.Compositor()
     paths.clear(run_name)
-    with logging.via_dir(run_name, compositor), stats.via_dir(run_name, compositor), arena.monitor(run_name, worldfunc, agentfunc):
+    with logging.via_dir(run_name, compositor), stats.via_dir(run_name, compositor), \
+            arena.monitor(run_name, worldfunc, agentfunc, n_envs=8):
         buffer = []
         idxs = cycle(learning.batch_indices(buffer_length, n_envs, batch_size, worlds.device))
         while True:

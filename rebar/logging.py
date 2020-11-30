@@ -133,9 +133,13 @@ class Reader:
             for line in f.readlines():
                 yield path, line.rstrip('\n')
 
+def tail(iterable, n):
+    return iter(deque(iterable, maxlen=n))
+
 def __from_dir(canceller, renderer, reader):
+    # Get the last ~hundred lines of whatever's there already
     while True:
-        for path, line in reader.read():
+        for path, line in tail(reader.read(), 100):
             renderer.emit(path, line)
 
         if canceller.is_set():

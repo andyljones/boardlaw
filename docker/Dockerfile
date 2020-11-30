@@ -39,8 +39,10 @@ RUN git config --global user.name "Andrew Jones" && \
 RUN pip install  \
         # Core reqs
         numpy torch torchvision tqdm matplotlib beautifulsoup4 shapely rasterio psutil ninja \ 
+        # Sampling libs
+        pystan pymc3
         # Things I find useful
-        pandas jupyter seaborn bokeh setproctitle wurlitzer ipython==7.5 av flake8 rope gitpython \ 
+        pandas jupyter seaborn bokeh setproctitle wurlitzer ipython==7.5 av flake8 rope gitpython networkx \ 
         # Docs
         sphinx
 
@@ -76,30 +78,30 @@ RUN pip install jupyter_contrib_nbextensions && \
     jupyter nbextension enable stripcommon/main && \
     jupyter nbextension enable autoscroll/main 
 
-RUN pip install cmake && \\ 
-    apt-get install clang-10 && \\
-    ln -s $(which clang-10) /usr/bin/clang++ && \\
-    cd / && \\
-    git clone https://github.com/andyljones/open_spiel.git && \\
+RUN pip install cmake && \
+    apt-get install clang-10 -y --no-install-recommends && \
+    ln -s $(which clang-10) /usr/bin/clang++ && \
+    cd / && \
+    git clone https://github.com/andyljones/open_spiel.git
     # TODO: The install.sh bit will fail here after getting the subrepos we're after.
-    cd open_spiel && install.sh && pip install -e . \\
+    # cd open_spiel && install.sh || true && pip install -e .
 
 # Set up MoHex
-RUN apt-get install libdb-dev libboost-all-dev && \\
-    cd / && \\
-    git clone https://github.com/cgao3/benzene-vanilla-cmake.git mohex && \\
-    mkdir mohex/build && \\
-    cd mohex/build && \\
-    cmake ../ && \\
-    make -j4 && \\
+RUN apt-get install libdb-dev libboost-all-dev -y --no-install-recommends && \
+    cd / && \
+    git clone https://github.com/cgao3/benzene-vanilla-cmake.git mohex && \
+    mkdir mohex/build && \
+    cd mohex/build && \
+    cmake ../ && \
+    make -j4 && \
     ln -s src/mohex/mohex /bin/mohex
 
 # Only commit the input cells of notebooks
 # https://stackoverflow.com/questions/18734739/using-ipython-notebooks-under-version-control
-RUN curl https://raw.githubusercontent.com/toobaz/ipynb_output_filter/master/ipynb_output_filter.py > /bin/ipynb_output_filter.py && \\
-    echo "*.ipynb   filter=ipynb_output_filter" > /root/.gitattributes && \\
-    git config --global core.attributesfile /root/.gitattributes && \\
-    git config --global filter.ipynb_output_filter.clean python /bin/ipynb_output_filter.py && \\
+RUN curl https://raw.githubusercontent.com/toobaz/ipynb_output_filter/master/ipynb_output_filter.py > /bin/ipynb_output_filter.py && \
+    echo "*.ipynb   filter=ipynb_output_filter" > /root/.gitattributes && \
+    git config --global core.attributesfile /root/.gitattributes && \
+    git config --global filter.ipynb_output_filter.clean python /bin/ipynb_output_filter.py && \
     git config --global filter.ipynb_output_filter.smudge cat
 
 # Set up the entrypoint script

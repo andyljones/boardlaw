@@ -2,32 +2,35 @@ import pandas as pd
 from . import database
 import seaborn as sns
 import matplotlib.pyplot as plt
+from rebar import paths
 
-def plot(df):
-    with plt.style.context('seaborn-poster'):
-        ax = sns.heatmap(df, cmap='RdBu', annot=True, vmin=0, vmax=1, annot_kws={'fontsize': 'large'}, cbar=False, square=True)
+def plot(df, vmin=0, vmax=1):
+    if df.size <= 525:
+        ax = sns.heatmap(df, cmap='RdBu', annot=True, vmin=vmin, vmax=vmax, annot_kws={'fontsize': 'large'}, cbar=False, square=True)
         return ax
+    else:
+        im = plt.imshow(df, cmap='RdBu', vmin=vmin, vmax=vmax)
+        im.axes.set_xticks([])
+        im.axes.set_yticks([])
+        return im.axes
 
-def plot_black(run_name=''):
-    stats = (database.stored(run_name)
-            .assign(black_win=lambda df: df.black_reward == 1)
-            .groupby(['black_name', 'white_name']).black_win.mean()
-            .unstack())
-    ax = plot(stats)
-    ax.set_xlabel('white')
-    ax.set_ylabel('black')
+def games(run_name):
+    df = database.games(run_name)
+    with plt.style.context('seaborn-poster'):
+        ax = plot(df, vmax=df.max().max())
 
-def plot_symmetric(run_name=''):
-    stats = (database.stored(run_name)
-                .assign(
-                    wins=lambda df: df.black_reward == 1,
-                    games=lambda df: pd.Series(1, df.index))
-                .groupby(['black_name', 'white_name'])[['wins', 'games']].sum()
-                .astype(int)
-                .unstack())
+def black(*args, **kwargs):
+    df = database.winrate(*args, **kwargs)
+    with plt.style.context('seaborn-poster'):
+        ax = plot(df)
+        ax.set_xlabel('white')
+        ax.set_ylabel('black')
+        ax.set_title('black win rate')
 
-    average = (stats.wins + (stats.games - stats.wins).T)/(stats.games + stats.games.T)
-    ax = plot(average)
-    ax.set_xlabel('')
-    ax.set_ylabel('')
+def symmetric(*args, **kwargs):
+    df = database.symmetric_winrate(*args, **kwargs)
+    with plt.style.context('seaborn-poster'):
+        ax = plot(df)
+        ax.set_ylabel('')
+        ax.set_title(f'symmetrized win rate')
 

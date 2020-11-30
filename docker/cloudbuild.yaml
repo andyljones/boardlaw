@@ -1,0 +1,22 @@
+# Command: `gcloud builds submit --config cloudbuild.yaml`
+steps:
+# Fetch the dockerhub login
+- name: gcr.io/cloud-builders/gcloud
+  entrypoint: 'bash'
+  args: [ '-c', "gcloud secrets versions access latest --secret=dockerhub --format='get(payload.data)' | tr '_-' '/+' | base64 -d > dockerhub-password.txt" ]
+# Log into docker hub
+- name: "gcr.io/cloud-builders/docker"
+  entrypoint: "bash"
+  args: ["-c", "docker login --username=andyljones --password-stdin < dockerhub-password.txt"]
+# Pull the cached image
+- name: 'gcr.io/cloud-builders/docker'
+  entrypoint: 'bash'
+  args: ['-c', 'docker pull gcr.io/andyljones/scalinglaws:latest || exit 0']
+# Build the new image
+- name: "gcr.io/cloud-builders/docker"
+  args: ["build", 
+          "--cache-from", "gcr.io/andyljones/scalinglaws:latest",
+          "-t", "andyljones/scalinglaws:latest", "."]
+# Push the new image
+images: "andyljones/scalinglaws:latest"
+timeout: 1800s

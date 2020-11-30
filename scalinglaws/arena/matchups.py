@@ -1,77 +1,54 @@
+import aljpy
 import torch
 import numpy as np
 from rebar import arrdict
+from logging import getLogger
 
-class SimpleMatcher:
-
-    def __init__(self, worldfunc, agents, device='cpu', n_copies=1):
-        self.worldfunc = worldfunc
-        self.device = device
-        self.agents = {k: agent.to(device) for k, agent in agents.items()}
-
-        self.n_agents = len(self.agents)
-        self.n_envs = n_copies*self.n_agents**2
-        self.n_copies = n_copies
-
-        self.worlds = None
-        self.idxs = None
-        self.seat = 0
-
-        self.rewards = None
-
-        self.initialize()
-
-    def initialize(self):
-        idxs = np.arange(self.n_envs)
-        fstidxs, sndidxs, _ = np.unravel_index(idxs, (self.n_agents, self.n_agents, self.n_copies))
-
-        self.worlds = self.worldfunc(len(idxs), self.device)
-        self.idxs = torch.as_tensor(np.stack([fstidxs, sndidxs], -1), device=self.device) 
-
-        self.rewards = torch.zeros((self.n_envs, self.worlds.n_seats))
-
-    def step(self):
-        terminal=torch.zeros((self.n_envs), dtype=torch.bool, device=self.device)
-        for (i, name) in enumerate(self.agents):
-            mask = (self.idxs[:, self.seat] == i) & (self.worlds.seats == self.seat)
-            if mask.any():
-                decisions = self.agents[name](self.worlds[mask])
-                self.worlds[mask], transitions = self.worlds[mask].step(decisions.actions)
-                terminal[mask] = transitions.terminal
-                self.rewards[mask] += transitions.rewards
-
-        self.seat = (self.seat + 1) % self.worlds.n_seats
-        
-        idxs = arrdict.numpyify(self.idxs)
-        names = np.array(list(self.agents.keys()))[idxs[terminal]]
-        rewards = arrdict.numpyify(self.rewards[terminal])
-
-        self.rewards[terminal] = 0.
-
-        return [(tuple(n), tuple(r)) for n, r in zip(names, rewards)]
+log = getLogger(__name__)
 
 def invert(d):
     return {v: k for k, v in d.items()}
 
-def scatter_add(counts, idxs):
-    fst, snd = idxs[:, 0], idxs[:, 1]
-    n_fst, n_snd = counts.shape
-    ones = counts.new_ones((len(idxs),))
-    counts.view(-1).scatter_add_(0, fst*n_snd + snd, ones)
+def select(counts):
+    # Matchup ideals
+    # * Shouldn't use more than n_cores MoHex agents
+    # * Should concentrate PyTorch agents
+    # * Should fill out some sort of pattern before filling out uniformly
+
+    rows, cols = np.indices(counts.shape)
+
+    # Priviledge power-of-two rows/cols
+    log_rows = (np.log2(rows+1) % 1 == 0).astype(float)
+    row_weights = log_rows*rows
+    log_cols = (np.log2(cols+1) % 1 == 0).astype(float)
+    col_weights = log_cols*cols
+    level_weights = (row_weights + col_weights)/(row_weights + col_weights).sum()
+
+    # Priviledge power-of-two diagonals
+    diags = abs(rows - cols)
+    log_diags = (np.log2(diags+1) % 1 == 0).astype(float)
+    diag_weights = log_diags*diags
+    diag_weights = diag_weights/diag_weights.sum()
+
+    targets = np.full_like(counts, 1/counts.nelement())
+    targets = .5*targets + .0*diag_weights + .5*level_weights
+
+    error = targets - arrdict.numpyify(counts/counts.sum())
+    error = np.exp(error)/np.exp(error).sum()
+
+    return np.unravel_index(error.argmax(), error.shape)
 
 class AdaptiveMatcher:
 
-    def __init__(self, worldfunc, n_envs=1, device='cpu'):
+    def __init__(self, worldfunc, n_envs=1024, device='cpu'):
         self.worldfunc = worldfunc
-        self.worlds = worldfunc(n_envs, device=device)
+        self.initial = worldfunc(n_envs, device=device)
         self.device = device
-        self.seat = 0
+        assert self.initial.n_seats == 2, 'Only support 2 seats for now'
 
         self.next_id = 0
         self.agents = {}
         self.names = {}
-        self.matchups = None
-        self.rewards = torch.zeros((n_envs, self.worlds.n_seats), device=device)
 
         self.counts = torch.empty((0, 0))
 
@@ -86,83 +63,105 @@ class AdaptiveMatcher:
         self.counts = counts
 
     def add_agents(self, agents):
+        current = self.names.values()
         for name, agent in agents.items():
-            if name not in self.names:
+            if name not in current:
                 self.add_agent(name, agent)
 
-    def drop_agent(self, name):
-        raise NotImplementedError()
-        id = invert(self.names)[name]
-        terminal = self.matchups == self.names[id]
-        del self.agents[id]
-        del self.names[id]
-        self._refresh(terminal)
+    def set_counts(self, dbcounts):
+        raw = (dbcounts
+            .assign(games=lambda df: df.black_wins + df.white_wins)
+            .groupby(['black_name', 'white_name'])
+            .games.sum()
+            .unstack())
 
-    def _initialize(self):
-        self.matchups = torch.randint(0, self.next_id, (self.worlds.n_envs, self.worlds.n_seats), device=self.device)
-
-    def _update(self, terminal):
-        scatter_add(self.counts, self.matchups[terminal])
-        self.rewards[terminal] = 0
-
-    def _respawn(self, terminal):
-        # Update the matchup distribution to better match the priorities
-        targets = self.counts.sum()*torch.full_like(self.counts, 1/self.counts.nelement())
-        scatter_add(targets, self.matchups[~terminal])
-
-        error = targets - self.counts
-        error = error - error.min()
-        prior = torch.ones_like(error)
-        dist = error + prior/(error + prior).sum()
-        
-        n_agents = self.counts.size(1)
-        sample = torch.distributions.Categorical(probs=dist.flatten()).sample((terminal.sum(),))
-        sample = torch.stack([sample // n_agents, sample % n_agents], -1)
-
-        self.matchups[terminal] = sample 
+        agents = list(self.names.values())
+        counts = raw.reindex(index=agents, columns=agents).fillna(0)
+        self.counts = torch.as_tensor(counts.values, device=self.device, dtype=torch.int)
 
     def step(self):
-        if len(self.agents) == 0:
-            return []
-        if self.matchups is None:
-            self._initialize()
+        if len(self.agents) <= 1:
+            return None
 
-        terminal = torch.zeros((len(self.matchups)), dtype=torch.bool, device=self.device)
-        for (i, id) in enumerate(self.agents):
-            mask = (self.matchups[:, self.seat] == i) & (self.worlds.seats == self.seat)
-            if mask.any():
-                decisions = self.agents[id](self.worlds[mask])
-                self.worlds[mask], transitions = self.worlds[mask].step(decisions.actions)
-                terminal[mask] = transitions.terminal
-                self.rewards[mask] += transitions.rewards
+        matchup = select(self.counts)
+        log.info(f'Generating games for a matchup with {self.counts[matchup]} existing games')
 
-        self.seat = (self.seat + 1) % self.worlds.n_seats
+        worlds = self.initial.clone()
+        terminal = torch.zeros((worlds.n_envs,), dtype=torch.bool, device=self.device)
+        wins = torch.zeros((worlds.n_envs, worlds.n_seats), dtype=torch.int, device=self.device)
+        while True:
+            for i, id in enumerate(matchup):
+                mask = (worlds.seats == i) & ~terminal
+                if mask.any():
+                    decisions = self.agents[id](worlds[mask])
+                    worlds[mask], transitions = worlds[mask].step(decisions.actions)
+                    terminal[mask] = transitions.terminal
+                    wins[mask] += (transitions.rewards == 1).int()
+
+            if terminal.all():
+                break
+
+        self.counts[matchup] += terminal.sum()
         
-        matchups = arrdict.numpyify(self.matchups[terminal])
-        names = np.array(list(self.names.values()))[matchups]
-        rewards = arrdict.numpyify(self.rewards[terminal])
+        wins = tuple(map(int, wins.sum(0)))
+        result = aljpy.dotdict(
+            black_name=self.names[matchup[0]], white_name=self.names[matchup[1]], 
+            black_wins=wins[0], white_wins=wins[1],
+            games=int(terminal.sum()))
 
-        if terminal.any():
-            self._update(terminal)
-            self._respawn(terminal)
+        return result
 
-        return [(tuple(n), tuple(r)) for n, r in zip(names, rewards)]
 
 def test():
     from ..validation import All, RandomAgent
 
-    def worldfunc(*args, **kwargs):
-        return All.initial(*args, **kwargs, n_seats=2, length=5)
-        
+    def worldfunc(n_envs, device='cpu'):
+        return All.initial(n_envs, 2, device=device)
+
     matcher = AdaptiveMatcher(worldfunc, n_envs=4)
 
     matcher.add_agent('one', RandomAgent())
     matcher.add_agent('two', RandomAgent())
 
-    rewards = torch.zeros((2, 2, 2))
-    for _ in range(1000):
-        results = matcher.step()
-        for (idxs, r) in results:
-            rewards[idxs] += torch.as_tensor(r)
+    matcher.step()
 
-    assert matcher.counts.sub(50).lt(5).all()
+def vectorization_benchmark(n_envs=None, T=10, device=None):
+    import pandas as pd
+    import aljpy
+    from scalinglaws import worldfunc, agentfunc
+
+    if device is None:
+        df = pd.concat([vectorization_benchmark(n_envs, T, d) for d in ['cpu', 'cuda']], ignore_index=True)
+        import seaborn as sns
+        with sns.axes_style('whitegrid'):
+            g = sns.FacetGrid(df, row='device', col='n_envs')
+            g.map(sns.barplot, "n_agents", "rate")
+        return df
+    if n_envs is None:
+        return pd.concat([vectorization_benchmark(n, T, device) for n in [60, 240, 960]], ignore_index=True)
+
+    assert n_envs % 60 == 0
+
+    results = []
+    for n in [1, 2, 5, 10]:
+        worlds = worldfunc(n_envs, device=device)
+        agents = {i: agentfunc(device=device) for i in range(n)}
+
+        envs = torch.arange(n_envs, device=device)/n_envs
+        masks = {i: (i/n <= envs) & (envs < (i+1)/n) for i in agents}
+
+        torch.cuda.synchronize()
+        with aljpy.timer() as timer:
+            for _ in range(T):
+                for i, agent in agents.items():
+                    decisions = agent(worlds[masks[i]])
+                    worlds[masks[i]].step(decisions.actions)
+            torch.cuda.synchronize()
+
+        results.append({'n_agents': n, 'n_envs': n_envs, 'n_samples': T*n_envs, 'time': timer.time(), 'device': device})
+        print(results[-1])
+
+    df = pd.DataFrame(results)
+    df['rate'] = (df.n_samples/df.time).astype(int)
+
+    return df
