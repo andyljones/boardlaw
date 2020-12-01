@@ -133,9 +133,9 @@ def pymc_diff_stds(advi):
     cov = advi.approx.cov.eval()
 
     mu_d = mu[:, None] - mu[None, :]
-    std_d = np.diag(cov)[:, None] + np.diag(cov)[None, :] - 2*cov
+    var_d = np.diag(cov)[:, None] + np.diag(cov)[None, :] - 2*cov
 
-    return std_d
+    return var_d**.5
 
 def benchmark():
     counts = []
