@@ -14,7 +14,7 @@ from tqdm.auto import tqdm
 σ0 = 2
 
 μ_lims = [-5*σ0, +5*σ0]
-σ_lims = [-2, +1]
+σ2_lims = [-4, +2]
 
 def test_d_integral():
     Σ = np.array([[.6, .5], [.5, 1]])
@@ -49,8 +49,8 @@ class Differ(nn.Module):
     def forward(self, μ, Σ):
         j, k = self.j, self.k
         μd = μ[j] - μ[k]
-        σd = Σ[j, j] - Σ[j, k] - Σ[k, j] + Σ[k, k]
-        return μd, σd**.5
+        σ2d = Σ[j, j] - Σ[j, k] - Σ[k, j] + Σ[k, k]
+        return μd, σ2d
 
     def as_square(self, x, fill=0.):
         y = torch.full((self.N, self.N), fill)
@@ -65,46 +65,47 @@ class GaussianExpectation(Function):
     @staticmethod
     def auxinfo(f, K=101, S=1000):
         μ = np.linspace(*μ_lims, K)
-        σ = np.logspace(*σ_lims, K, base=10)
+        σ2 = np.logspace(*σ2_lims, K, base=10)
 
         #TODO: Importance sample these zs
         zs = np.linspace(-5, +5, S)
         pdf = sp.stats.norm.pdf(zs)[None, None, :]
-        ds = (μ[:, None, None] + zs[None, None, :]*σ[None, :, None])
+        ds = (μ[:, None, None] + zs[None, None, :]*σ2[None, :, None]**.5)
         fs = (f(ds)*pdf/pdf.sum()).sum(-1)
-        f = sp.interpolate.RectBivariateSpline(μ, σ, fs, kx=1, ky=1)
+        f = sp.interpolate.RectBivariateSpline(μ, σ2, fs, kx=1, ky=1)
 
         dμs = (fs[2:, :] - fs[:-2, :])/(μ[2:] - μ[:-2])[:, None]
-        dμ = sp.interpolate.RectBivariateSpline(μ[1:-1], σ, dμs, kx=1, ky=1)
-        dσs = (fs[:, 2:] - fs[:, :-2])/(σ[2:] - σ[:-2])[None, :]
-        dσ = sp.interpolate.RectBivariateSpline(μ, σ[1:-1], dσs, kx=1, ky=1)
+        dμ = sp.interpolate.RectBivariateSpline(μ[1:-1], σ2, dμs, kx=1, ky=1)
+        dσ2s = (fs[:, 2:] - fs[:, :-2])/(σ2[2:] - σ2[:-2])[None, :]
+        dσ2 = sp.interpolate.RectBivariateSpline(μ, σ2[1:-1], dσ2s, kx=1, ky=1)
 
         return dotdict.dotdict(
-            μ=μ, σ=σ, 
-            f=f, dμ=dμ, dσ=dσ, 
-            fs=fs, dμs=dμs, dσs=dσs)
+            μ=μ, σ2=σ2, 
+            f=f, dμ=dμ, dσ2=dσ2, 
+            fs=fs, dμs=dμs, dσs=dσ2s)
 
     @staticmethod
-    def forward(ctx, μd, σd, aux):
-        ctx.save_for_backward(μd, σd)
+    def forward(ctx, μd, σ2d, aux):
+        ctx.save_for_backward(μd, σ2d)
         ctx.aux = aux
-        return evaluate(aux.f, μd, σd)
+        return evaluate(aux.f, μd, σ2d)
 
     @staticmethod
     def backward(ctx, dldf):
-        μd, σd = ctx.saved_tensors
-        dfdμ = evaluate(ctx.aux.dμ, μd, σd)
-        dfdσ = evaluate(ctx.aux.dσ, μd, σd)
+        μd, σ2d = ctx.saved_tensors
+        dfdμ = evaluate(ctx.aux.dμ, μd, σ2d)
+        dfdσ2d = evaluate(ctx.aux.dσ2, μd, σ2d)
 
         dldμ = dldf*dfdμ
-        dldσ = dldf*dfdσ
+        dldσ2d = dldf*dfdσ2d
 
-        return dldμ, dldσ, None
+        return dldμ, dldσ2d, None
 
-    def plot(self):
-        Y, X = np.meshgrid(self.μ, self.σ)
-        (t, b), (l, r) = μ_lims, σ_lims
-        plt.imshow(np.exp(self.fs), extent=(l, r, b, t), vmin=0, vmax=1, cmap='RdBu', aspect='auto')
+    @staticmethod
+    def plot(aux):
+        Y, X = np.meshgrid(aux.μ, aux.σ2)
+        (t, b), (l, r) = μ_lims, σ2_lims
+        plt.imshow(np.exp(aux.fs), extent=(l, r, b, t), vmin=0, vmax=1, cmap='RdBu', aspect='auto')
         plt.colorbar()
 
 
@@ -116,9 +117,9 @@ def expected_log_likelihood(n, w, μ, Σ):
         self._aux = GaussianExpectation.auxinfo(lambda d: -np.log(1 + np.exp(-d)))
     differ, aux = self._differ, self._aux
 
-    μd, σd = differ(μ, Σ)
-    wins = w*differ.as_square(GaussianExpectation.apply(μd, σd, aux), .5)
-    losses = (n - w)*differ.as_square(GaussianExpectation.apply(-μd, σd, aux), .5)
+    μd, σ2d = differ(μ, Σ)
+    wins = w*differ.as_square(GaussianExpectation.apply(μd, σ2d, aux), .5)
+    losses = (n - w)*differ.as_square(GaussianExpectation.apply(-μd, σ2d, aux), .5)
     return wins + losses
 
 def cross_entropy(n, w, μ, Σ):
@@ -165,7 +166,7 @@ def solve(n, w, tol=1e-5, T=5000):
             norm = torch.cat([μ.grad.flatten(), Σ.grad.flatten()]).abs().max()
             ls.append(l.detach())
             norms.append(norm.detach())
-            if len(ls) > 100 and max(ls[-100:]) - min(ls[-100:]) < tol*ls[-100]:
+            if len(ls) > 10 and max(ls[-10:]) - min(ls[-10:]) < tol*ls[-10]:
                 break
 
             pbar.update(1)
@@ -174,13 +175,13 @@ def solve(n, w, tol=1e-5, T=5000):
             print('Didn\'t converge')
 
     differ = Differ(N)
-    μd, σd = map(differ.as_square, differ(μ, Σ))
+    μd, σ2d = map(differ.as_square, differ(μ, Σ))
     
     return arrdict.arrdict(
         μ=μ, 
         Σ=Σ, 
         μd=μd,
-        σd=σd,
+        σ2d=σ2d,
         l=torch.as_tensor(ls),
         norms=torch.as_tensor(norms)).detach().numpy()
 
@@ -199,7 +200,7 @@ def plot(soln):
     ax.set_title('μ')
 
     ax = axes[2]
-    ax.imshow(soln.σd)
+    ax.imshow(soln.σ2d**.5)
     ax.set_title('σd')
 
 def test():
