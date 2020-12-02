@@ -9,6 +9,7 @@ import torch
 from torch import nn
 from torch.autograd import Function
 from tqdm.auto import tqdm
+import geotorch
 
 μ0 = 0
 σ0 = 2
@@ -53,12 +54,12 @@ class Differ(nn.Module):
         return μd, σ2d
 
     def as_square(self, x, fill=0.):
-        y = torch.full((self.N, self.N), fill).double()
+        y = torch.full((self.N, self.N), fill).float()
         y[self.j, self.k] = x
         return y
 
 def evaluate(interp, μd, σd):
-    return torch.as_tensor(interp(μd.detach().numpy(), σd.detach().numpy(), grid=False)).double()
+    return torch.as_tensor(interp(μd.detach().numpy(), σd.detach().numpy(), grid=False)).float()
 
 class GaussianExpectation(Function):
 
@@ -136,36 +137,32 @@ def cross_entropy(n, w, μ, Σ):
 def entropy(Σ):
     return 1/2*torch.logdet(2*np.pi*np.e*Σ)
 
-def elbo(n, w, μ, Σ):
-    return -cross_entropy(n, w, μ, Σ) + entropy(Σ)
+class VB(nn.Module):
+    
+    def __init__(self, N):
+        super().__init__()
+        self.register_parameter('μ', nn.Parameter(torch.zeros((N,)).float()))
+        self.register_parameter('Σ', nn.Parameter(torch.eye(N).float()))
+        geotorch.positive_definite(self, 'Σ')
 
-@torch.no_grad()
-def project(Σ):
-    symmetric = (Σ + Σ.T)/2
-    λ, v = torch.symeig(symmetric, True)
-    return v @ torch.diag(λ.clamp(1e-4, None)) @ v.T
+    def forward(self, n, w):
+        return -cross_entropy(n, w, self.μ, self.Σ) + entropy(self.Σ)
 
-def solve(n, w, tol=1e-6, T=5000):
+def solve(n, w, tol=1e-4, T=5000):
     N = n.shape[0]
 
-    μ = torch.nn.Parameter(torch.zeros((N,)).double())
-    Σ = torch.nn.Parameter(torch.eye(N).double())
-
-    optim = torch.optim.Adam([μ, Σ], 1e-3)
+    vb = VB(N)
+    optim = torch.optim.Adam(vb.parameters(), 1e-1)
 
     ls, norms = [], []
     with tqdm(total=T) as pbar:
         for i in range(T):
-            # μ.data[0] = 0
-            # Σ.data[0, 0] = 1e-2**2
-            Σ.data = project(Σ)
-
-            l = -elbo(n, w, μ, Σ)
+            l = -vb(n, w)
             optim.zero_grad()
             l.backward()
             optim.step()
 
-            norm = torch.cat([μ.grad.flatten(), Σ.grad.flatten()]).abs().max()
+            norm = torch.cat([p.flatten() for p in vb.parameters()]).abs().max()
 
             ls.append(l.detach())
             norms.append(norm)
@@ -178,11 +175,11 @@ def solve(n, w, tol=1e-6, T=5000):
             print('Didn\'t converge')
 
     differ = Differ(N)
-    μd, σ2d = map(differ.as_square, differ(μ, Σ))
+    μd, σ2d = map(differ.as_square, differ(vb.μ, vb.Σ))
     
     return arrdict.arrdict(
-        μ=μ, 
-        Σ=Σ, 
+        μ=vb.μ, 
+        Σ=vb.Σ, 
         μd=μd,
         σ2d=σ2d,
         l=torch.as_tensor(ls),
@@ -197,10 +194,10 @@ def plot(soln):
     ax.set_xlim(0, len(soln.l))
     ax.set_title('loss')
 
-    # ax = axes[1]
-    # ax.plot(soln.norms)
-    # ax.set_xlim(0, len(soln.norms))
-    # ax.set_title('norms')
+    ax = axes[1]
+    ax.plot(soln.norms)
+    ax.set_xlim(0, len(soln.norms))
+    ax.set_title('norms')
 
     ax = axes[2]
     ax.plot(soln.μ)

@@ -40,11 +40,14 @@ RUN pip install  \
         # Core reqs
         numpy torch torchvision tqdm matplotlib beautifulsoup4 shapely rasterio psutil ninja \ 
         # Sampling libs
-        pystan pymc3
+        pystan pymc3 
         # Things I find useful
         pandas jupyter seaborn bokeh setproctitle wurlitzer ipython==7.5 av flake8 rope gitpython networkx \ 
         # Docs
         sphinx
+
+# Geotorch
+RUN pip install git+https://github.com/Lezcano/geotorch/
 
 # Copy the Jupyter config into place. 
 ADD .jupyter /root/.jupyter
