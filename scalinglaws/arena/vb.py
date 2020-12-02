@@ -53,6 +53,9 @@ class Differ(nn.Module):
         σd = torch.diag(self.R @ Σ @ self.R.T)
         return μd, σd
 
+    def as_square(self, x):
+        return x.reshape(self.N, self.N)
+
 def evaluate(interp, μd, σd):
     return torch.as_tensor(interp(μd.detach().numpy(), σd.detach().numpy(), grid=False)).float()
 
@@ -114,8 +117,8 @@ def expected_log_likelihood(n, w, μ, Σ):
     differ, aux = self._differ, self._aux
 
     μd, σd = differ(μ, Σ)
-    wins = w*gaussian_expectation(μd, σd, aux).reshape(N, N)
-    losses = (n - w)*gaussian_expectation(-μd, σd, aux).reshape(N, N)
+    wins = w*differ.as_square(gaussian_expectation(μd, σd, aux))
+    losses = (n - w)*differ.as_square(gaussian_expectation(-μd, σd, aux))
     return wins + losses
 
 def cross_entropy(n, w, μ, Σ):
@@ -141,7 +144,7 @@ def solve(n, w):
     μ = torch.nn.Parameter(torch.zeros((N,)))
     Σ = torch.nn.Parameter(torch.eye(N))
 
-    optim = torch.optim.SGD([μ, Σ], .01)
+    optim = torch.optim.Adam([μ, Σ], .01)
 
     for _ in range(200):
         l = -elbo(n, w, μ, Σ)
@@ -150,7 +153,9 @@ def solve(n, w):
         optim.step()
         print(l)
     
-    return μ.detach().numpy(), Σ.detach().numpy()
+    return dotdict.dotdict(
+        μ=μ.detach().numpy(), 
+        Σ=Σ.detach().numpy())
 
 
 def test():
@@ -163,4 +168,7 @@ def test():
     d = s[:, None] - s[None, :]
     w = sp.stats.binom(n, 1/(1 + np.exp(-d))).rvs()
 
-    μf, Σf = solve(n, w)
+    soln = solve(n, w)
+
+    plt.plot(soln.μ)
+    plt.imshow(soln.Σ)
