@@ -123,21 +123,15 @@ def expected_log_likelihood(n, w, μ, Σ):
     return wins + losses
 
 def cross_entropy(n, w, μ, Σ):
-    N = n.shape[0]
-    μ0s = torch.full((N,), μ0).float()
-    μ0s[0] = 0
-    σ0s = torch.full((N,), σ0).float()
-    σ0s[0] = 1e-6
-
     # Proof:
     # from sympy.stats import E, Normal
     # s, μ, μ0, σ, σ0 = symbols('s μ μ_0 σ σ_0')
     # s = Normal('s', μ, σ)
     # 1/(2*σ0)*E(-(s - μ0)**2)
 
-    expected_prior = -1/(2*σ0s)*((μ - μ0s)**2 + torch.diag(Σ))
+    expected_prior = -1/(2*σ0)*((μ - μ0)**2 + torch.diag(Σ))
 
-    return -expected_log_likelihood(n, w, μ, Σ).sum() - expected_prior.sum()
+    return -expected_log_likelihood(n, w, μ, Σ).sum() - expected_prior[1:].sum()
 
 def entropy(Σ):
     return 1/2*torch.logdet(2*np.pi*np.e*Σ)
@@ -151,20 +145,24 @@ def project(Σ):
     λ, v = torch.symeig(symmetric, True)
     return v @ torch.diag(λ.clamp(1e-6, None)) @ v.T
 
-def solve(n, w, tol=1e-5, T=5000):
+def solve(n, w, tol=1e-6, T=5000):
     N = n.shape[0]
 
     μ = torch.nn.Parameter(torch.zeros((N,)))
-    Σ = torch.nn.Parameter(torch.eye(N))
+    Σ = torch.nn.Parameter(1e-4*torch.eye(N))
 
     optim = torch.optim.Adam([μ, Σ], 1e-3)
 
     ls, norms = [], []
     with tqdm(total=T) as pbar:
         for i in range(T):
+            # μ.data[0] = 0
+            # Σ.data[0, 0] = 1e-2**2
             Σ.data = project(Σ)
 
             l = -elbo(n, w, μ, Σ)
+            if torch.isnan(l):
+                import aljpy; aljpy.extract()
             optim.zero_grad()
             l.backward()
             optim.step()
@@ -173,7 +171,7 @@ def solve(n, w, tol=1e-5, T=5000):
             ls.append(l.detach())
             norms.append(norm.detach())
             if len(ls) > 100 and max(ls[-100:]) - min(ls[-100:]) < tol*ls[-100]:
-                break
+                pass
 
             pbar.update(1)
             pbar.set_description(f'{l:5G}')
@@ -192,8 +190,8 @@ def solve(n, w, tol=1e-5, T=5000):
         norms=torch.as_tensor(norms)).detach().numpy()
 
 def plot(soln):
-    fig, axes = plt.subplots(1, 3)
-    fig.set_size_inches(15, 5)
+    fig, axes = plt.subplots(1, 4)
+    fig.set_size_inches(20, 5)
 
     ax = axes[0]
     ax.plot(soln.l)
@@ -201,11 +199,16 @@ def plot(soln):
     ax.set_title('loss')
 
     ax = axes[1]
+    ax.plot(soln.norms)
+    ax.set_xlim(0, len(soln.norms))
+    ax.set_title('norms')
+
+    ax = axes[2]
     ax.plot(soln.μ)
     ax.set_xlim(0, len(soln.μ))
     ax.set_title('μ')
 
-    ax = axes[2]
+    ax = axes[3]
     ax.imshow(soln.σ2d**.5)
     ax.set_title('σd')
 
