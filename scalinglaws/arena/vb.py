@@ -1,3 +1,4 @@
+from rebar import arrdict, dotdict
 import numpy as np
 import sympy as sym
 import scipy as sp
@@ -5,6 +6,7 @@ import scipy.stats
 import matplotlib.pyplot as plt
 import torch
 from torch import nn
+from torch.autograd import Function
 
 μ0 = 0
 σ0 = 2
@@ -51,41 +53,49 @@ class Differ(nn.Module):
         σd = torch.diag(self.R @ Σ @ self.R.T)
         return μd, σd
 
-class GaussianExpectation(nn.Module):
+def evaluate(interp, μd, σd):
+    return torch.as_tensor(interp(μd.detach().numpy(), σd.detach().numpy(), grid=False)).float()
 
-    def __init__(self, f, K=101, S=1000):
-        super().__init__()
-        self.μ = np.linspace(*μ_lims, K)
-        self.σ = np.logspace(*σ_lims, K, base=10)
+class GaussianExpectation(Function):
+
+    @staticmethod
+    def auxinfo(f, K=101, S=1000):
+        μ = np.linspace(*μ_lims, K)
+        σ = np.logspace(*σ_lims, K, base=10)
 
         #TODO: Importance sample these zs
         zs = np.linspace(-5, +5, S)
         pdf = sp.stats.norm.pdf(zs)[None, None, :]
-        ds = (self.μ[:, None, None] + zs[None, None, :]*self.σ[None, :, None])
-        self.fs = (f(ds)*pdf/pdf.sum()).sum(-1)
-        self._f = sp.interpolate.RectBivariateSpline(self.μ, self.σ, self.fs, kx=1, ky=1)
+        ds = (μ[:, None, None] + zs[None, None, :]*σ[None, :, None])
+        fs = (f(ds)*pdf/pdf.sum()).sum(-1)
+        f = sp.interpolate.RectBivariateSpline(μ, σ, fs, kx=1, ky=1)
 
-        self.dμs = (self.fs[2:, :] - self.fs[:-2, :])/(self.μ[2:] - self.μ[:-2])[:, None]
-        self._dμ = sp.interpolate.RectBivariateSpline(self.μ[1:-1], self.σ, self.dμs, kx=1, ky=1)
-        self.dσs = (self.fs[:, 2:] - self.fs[:, :-2])/(self.σ[2:] - self.σ[:-2])[None, :]
-        self._dσ = sp.interpolate.RectBivariateSpline(self.μ, self.σ[1:-1], self.dσs, kx=1, ky=1)
+        dμs = (fs[2:, :] - fs[:-2, :])/(μ[2:] - μ[:-2])[:, None]
+        dμ = sp.interpolate.RectBivariateSpline(μ[1:-1], σ, dμs, kx=1, ky=1)
+        dσs = (fs[:, 2:] - fs[:, :-2])/(σ[2:] - σ[:-2])[None, :]
+        dσ = sp.interpolate.RectBivariateSpline(μ, σ[1:-1], dσs, kx=1, ky=1)
 
-    def _eval(self, interp, μd, σd):
-        return torch.as_tensor(interp(μd.numpy(), σd.numpy(), grid=False)).float()
+        return dotdict.dotdict(
+            μ=μ, σ=σ, 
+            f=f, dμ=dμ, dσ=dσ, 
+            fs=fs, dμs=dμs, dσs=dσs)
 
-    def forward(self, μd, σd):
-        self.save_for_backward(μd, σd)
-        return self._eval(self._f, μd.numpy(), σd.numpy())
+    @staticmethod
+    def forward(ctx, μd, σd, aux):
+        ctx.save_for_backward(μd, σd)
+        ctx.aux = aux
+        return evaluate(aux.f, μd, σd)
 
-    def backward(self, dldf):
-        μd, σd = self.saved_tensors
-        dfdμ = self._eval(self._dμ, μd, σd)
-        dfdσ = self._eval(self._dσ, μd, σd)
+    @staticmethod
+    def backward(ctx, dldf):
+        μd, σd = ctx.saved_tensors
+        dfdμ = evaluate(ctx.aux.dμ, μd, σd)
+        dfdσ = evaluate(ctx.aux.dσ, μd, σd)
 
         dldμ = dldf*dfdμ
         dldσ = dldf*dfdσ
 
-        return dldμ, dldσ
+        return dldμ, dldσ, None
 
     def plot(self):
         Y, X = np.meshgrid(self.μ, self.σ)
@@ -93,15 +103,20 @@ class GaussianExpectation(nn.Module):
         plt.imshow(np.exp(self.fs), extent=(l, r, b, t), vmin=0, vmax=1, cmap='RdBu', aspect='auto')
         plt.colorbar()
 
+gaussian_expectation = GaussianExpectation.apply
+
 def expected_log_likelihood(n, w, μ, Σ):
     self = expected_log_likelihood
-    if not hasattr(self, '_differ') or self._differ.N != n.shape[0]:
+    N = n.shape[0]
+    if not hasattr(self, '_differ') or self._differ.N != N:
         self._differ = Differ(n.shape[0])
-        self._expectation = GaussianExpectation(lambda d: -np.log(1 + np.exp(-d)))
-    differ, expectation = self._differ, self._expectation
+        self._aux = GaussianExpectation.auxinfo(lambda d: -np.log(1 + np.exp(-d)))
+    differ, aux = self._differ, self._aux
 
     μd, σd = differ(μ, Σ)
-    return w*expectation(μd, σd) + (n - w)*expectation(-μd, σd)
+    wins = w*gaussian_expectation(μd, σd, aux).reshape(N, N)
+    losses = (n - w)*gaussian_expectation(-μd, σd, aux).reshape(N, N)
+    return wins + losses
 
 def cross_entropy(n, w, μ, Σ):
 
@@ -115,8 +130,7 @@ def cross_entropy(n, w, μ, Σ):
     return -expected_log_likelihood(n, w, μ, Σ).sum() - expected_prior.sum()
 
 def entropy(Σ):
-    _, logdet = np.linalg.slogdet(2*np.pi*np.e*Σ)
-    return 1/2*logdet
+    return 1/2*torch.logdet(2*np.pi*np.e*Σ)
 
 def elbo(n, w, μ, Σ):
     return -cross_entropy(n, w, μ, Σ) + entropy(Σ)
@@ -124,31 +138,20 @@ def elbo(n, w, μ, Σ):
 def solve(n, w):
     N = n.shape[0]
 
-    def pack(μ, Σ):
-        return np.concatenate([μ, Σ.flatten()])
+    μ = torch.nn.Parameter(torch.zeros((N,)))
+    Σ = torch.nn.Parameter(torch.eye(N))
 
-    def unpack(x):
-        μ = x[:N]
-        Σ = x[N:].reshape(N, N)
-        Σsym = (Σ + Σ.T)/2
+    optim = torch.optim.SGD([μ, Σ], .01)
 
-        λ, v = np.linalg.eigh(Σsym)
-        Σproj = v @ np.diag(λ.clip(1e-3, None)) @ v.T 
-        
-        return μ, Σproj
+    for _ in range(200):
+        l = -elbo(n, w, μ, Σ)
+        optim.zero_grad()
+        l.backward()
+        optim.step()
+        print(l)
+    
+    return μ.detach().numpy(), Σ.detach().numpy()
 
-    def f(x):
-        μ, Σ = unpack(x)
-        return -elbo(n, w, μ, Σ)
-
-    μ0 = np.zeros((N,))
-    Σ0 = np.eye(N)
-    x0 = pack(μ0, Σ0)
-
-    soln = sp.optimize.minimize(f, x0)
-    μf, Σf = unpack(soln.x)
-
-    return μf, Σf
 
 def test():
     N = 5
