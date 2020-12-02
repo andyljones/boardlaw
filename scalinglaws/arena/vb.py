@@ -144,7 +144,7 @@ def project(Σ):
     λ, v = torch.symeig(symmetric, True)
     return v @ torch.diag(λ.clamp(1e-6, None)) @ v.T
 
-def solve(n, w, tol=1, T=1000):
+def solve(n, w, tol=1e-5, T=5000):
     N = n.shape[0]
 
     μ = torch.nn.Parameter(torch.zeros((N,)))
@@ -152,21 +152,24 @@ def solve(n, w, tol=1, T=1000):
 
     optim = torch.optim.Adam([μ, Σ], 1e-3)
 
-    ls = []
+    ls, norms = [], []
     with tqdm(total=T) as pbar:
         for i in range(T):
             Σ.data = project(Σ)
+            μ.data[0] = 0
             l = -elbo(n, w, μ, Σ)
             optim.zero_grad()
             l.backward()
             optim.step()
 
+            norm = torch.cat([μ.grad.flatten(), Σ.grad.flatten()]).abs().max()
             ls.append(l.detach())
-            if len(ls) > 100 and abs(ls[-1] - ls[-100]) < tol:
+            norms.append(norm.detach())
+            if len(ls) > 100 and max(ls[-100:]) - min(ls[-100:]) < tol*ls[-100]:
                 break
 
             pbar.update(1)
-            pbar.set_description(f'{l:5G}')
+            pbar.set_description(f'{l:5G}, {norm:5G}')
         else:
             print('Didn\'t converge')
 
@@ -178,7 +181,8 @@ def solve(n, w, tol=1, T=1000):
         Σ=Σ, 
         μd=μd,
         σd=σd,
-        l=torch.as_tensor(ls)).detach().numpy()
+        l=torch.as_tensor(ls),
+        norms=torch.as_tensor(norms)).detach().numpy()
 
 def plot(soln):
     fig, axes = plt.subplots(1, 3)
