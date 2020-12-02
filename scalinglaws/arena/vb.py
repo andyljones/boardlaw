@@ -2,9 +2,13 @@ import numpy as np
 import sympy as sym
 import scipy as sp
 import scipy.stats
+import matplotlib.pyplot as plt
 
 μ0 = 0
 σ0 = 1
+
+μ_lims = [-5, +5]
+σ_lims = [-2, +1]
 
 def test_d_integral():
     Σ = np.array([[.6, .5], [.5, 1]])
@@ -27,33 +31,46 @@ def test_d_integral():
 
     return expected, actual
 
-def winrate(μ, Σ):
-    # μ = MatrixSymbol('μ', 2, 1)
-    # Λ = MatrixSymbol('Λ', 2, 2)
-    # d, m = symbols('d m')
-    # I = Matrix([[1/2], [1/2]])
-    # D = Matrix([[1/2], [-1/2]])
+class LUT:
 
-    # integrand = trace(Matrix(-1/2*(m*I + d*D - μ).T @ Λ @ (m*I + d*D - μ)))
-    # integrand = integrand.subs(Λ[0, 1], Λ[1, 0])
-    # integrand = poly(integrand, m).coeffs()
+    def __init__(self, f, N, K=101, S=1000):
+        self.μ_range = np.linspace(*μ_lims, K)
+        self.σ_range = np.logspace(*σ_lims, K, base=10)
 
-    # a, b, c = symbols('a b c')
-    # gaussian_integrand = poly(-a*(m - b)**2 + c, m).coeffs()
+        #TODO: Importance sample these zs
+        zs = np.linspace(-5, +5, 101)
+        pdf = sp.stats.norm.pdf(zs)[None, None, :]
+        ds = (self.μ_range[:, None, None] + zs[None, None, :]*self.σ_range[None, :, None])
+        self.expectation = (f(ds)*pdf).sum(-1)
+        self.interp = sp.interpolate.RectBivariateSpline(self.μ_range, self.σ_range, self.expectation, kx=1, ky=1)
 
-    # [(a, b, c)] = solve([Eq(l, r) for l, r in zip(gaussian_integrand, integrand)], (a, b, c))
+        j, k = np.indices((N, N)).reshape(2, -1)
+        row = np.arange(len(j))
+        R = np.zeros((len(row), N))
+        R[row, j] = 1
+        R[row, k] = -1
+        self.R = R
 
-    # a = simplify(a)
-    # c = simplify(factor(c), rational=True)
-    # integral = E**c * sqrt(pi/a)
+    def winrates(self, μ, Σ):
+        μd = self.R @ μ
+        σd = np.diag(self.R @ Σ @ self.R.T)**.5
 
-    pass
+        N = self.R.shape[1]
+        return self.interp(μd, σd, grid=False).reshape(N, N)
 
-def lossrate(μ, Σ):
-    pass
+    def plot(self):
+        Y, X = np.meshgrid(self.μ_range, self.σ_range)
+        plt.contour(X, Y, np.exp(self.expectation))
+
+def likelihood(n, w, μ, Σ):
+    if not hasattr(likelihood, '_lut'):
+        likelihood._lut = LUT(lambda d: -np.log(1 + np.exp(-d)), n.shape[0])
+    lut = likelihood._lut
+
+    return w*lut.winrates(μ, Σ) + (n - w)*lut.winrates(-μ, Σ)
+
 
 def joint_prob(n, w, μ, Σ):
-    likelihood = w*winrate(μ, Σ) + (n - w)*lossrate(μ, Σ)
 
     # Proof:
     # from sympy.stats import E, Normal
@@ -62,4 +79,19 @@ def joint_prob(n, w, μ, Σ):
     # 1/(2*σ0)*E(-(s - μ0)**2)
     prior = -1/(2*σ0)*((μ - μ0)**2 + Σ**2)
 
-    return likelihood.sum() + prior.sum()
+    return likelihood(n, w, μ, Σ).sum() + prior.sum()
+
+def test():
+    N = 5
+
+    s = np.random.randn(N)
+
+    n = np.random.randint(1, 10, (N, N))
+
+    d = s[:, None] - s[None, :]
+    w = sp.stats.binom(n, 1/(1 + np.exp(-d))).rvs()
+
+    μ = np.zeros((N,))
+    Σ = np.eye(N)
+    
+    joint_prob(n, w, μ, Σ)
