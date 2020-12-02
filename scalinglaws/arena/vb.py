@@ -44,6 +44,7 @@ class LUT:
         self.expectation = (f(ds)*pdf/pdf.sum()).sum(-1)
         self.interp = sp.interpolate.RectBivariateSpline(self.μ_range, self.σ_range, self.expectation, kx=1, ky=1)
 
+        self.N = N
         j, k = np.indices((N, N)).reshape(2, -1)
         row = np.arange(len(j))
         R = np.zeros((len(row), N))
@@ -55,8 +56,7 @@ class LUT:
         μd = self.R @ μ
         σd = np.diag(self.R @ Σ @ self.R.T)**.5
 
-        N = self.R.shape[1]
-        return self.interp(μd, σd, grid=False).reshape(N, N)
+        return self.interp(μd, σd, grid=False).reshape(self.N, self.N)
 
     def plot(self):
         Y, X = np.meshgrid(self.μ_range, self.σ_range)
@@ -66,7 +66,7 @@ class LUT:
 
 def expected_log_likelihood(n, w, μ, Σ):
     self = expected_log_likelihood
-    if not hasattr(self, '_lut'):
+    if not hasattr(self, '_lut') or self._lut.N != n.shape[0]:
         self._lut = LUT(lambda d: -np.log(1 + np.exp(-d)), n.shape[0])
     lut = self._lut
 
