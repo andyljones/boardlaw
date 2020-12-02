@@ -1,34 +1,31 @@
 import numpy as np
 import sympy as sym
+import scipy as sp
+import scipy.stats
 
 μ0 = 0
 σ0 = 1
 
 def test_d_integral():
-    import numpy as np
-    import scipy as sp
-    import scipy.stats
-
-    Λ = np.array([[1, 0], [0, 1]])
-    μ = np.array([0, 0])
+    Σ = np.array([[.6, .5], [.5, 1]])
+    μ = np.array([0, 1])
 
     def ϕ(d):
         return 1/(1 + np.exp(-d))
 
-    def integrand(s):
-        return np.log(ϕ(s[..., 0] - s[..., 1]))
-        
+    N = sp.stats.multivariate_normal(μ, Σ)
+    s = N.rvs(10000)
+    actual = np.log(ϕ(s[..., 0] - s[..., 1])).mean()
 
-    N = sp.stats.multivariate_normal(μ, np.linalg.inv(Λ))
-    actual = integrand(N.rvs(1000)).mean()
+    R = np.array([[+1, -1]])
+    σ2d = R @ Σ @ R.T
+    μd = R @ μ
 
-    mult = np.sqrt(32*np.pi/(Λ[0, 0] + 2*Λ[0, 1] + Λ[1, 1]))
+    Nd = sp.stats.norm(μd, σ2d**.5)
+    d = Nd.rvs(10000)
+    expected = np.log(ϕ(d)).mean()
 
-    λd = (Λ[0, 0]*Λ[1, 1] - Λ[0, 1]**2)/(Λ[0, 0] + Λ[1, 1] + 2*Λ[0, 1])
-    μd = μ[0] - μ[1]
-
-    Nd = sp.stats.norm(μd, 1/λd**.5)
-    expected = mult*integrand(Nd.rvs(1000)).mean()
+    return expected, actual
 
 def winrate(μ, Σ):
     # μ = MatrixSymbol('μ', 2, 1)
