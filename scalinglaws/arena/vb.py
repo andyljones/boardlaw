@@ -1,3 +1,4 @@
+from torch.distributions.transforms import SigmoidTransform
 from rebar import arrdict, dotdict
 import numpy as np
 import sympy as sym
@@ -7,6 +8,7 @@ import matplotlib.pyplot as plt
 import torch
 from torch import nn
 from torch.autograd import Function
+from tqdm.auto import tqdm
 
 μ0 = 0
 σ0 = 2
@@ -41,16 +43,19 @@ class Differ(nn.Module):
         super().__init__()
 
         self.N = N
-        self.j, self.k = torch.as_tensor(np.indices((N, N)).reshape(2, -1))
+        j, k = torch.as_tensor(np.indices((N, N)).reshape(2, -1))
+        self.j, self.k = j[j != k], k[j != k]
 
     def forward(self, μ, Σ):
         j, k = self.j, self.k
         μd = μ[j] - μ[k]
         σd = Σ[j, j] - Σ[j, k] - Σ[k, j] + Σ[k, k]
-        return μd, σd.clamp(1e-6, None)**.5
+        return μd, σd**.5
 
-    def as_square(self, x):
-        return x.reshape(self.N, self.N)
+    def as_square(self, x, fill=0.):
+        y = torch.full((self.N, self.N), fill)
+        y[self.j, self.k] = x
+        return y
 
 def evaluate(interp, μd, σd):
     return torch.as_tensor(interp(μd.detach().numpy(), σd.detach().numpy(), grid=False)).float()
@@ -113,8 +118,8 @@ def expected_log_likelihood(n, w, μ, Σ):
     differ, aux = self._differ, self._aux
 
     μd, σd = differ(μ, Σ)
-    wins = w*differ.as_square(gaussian_expectation(μd, σd, aux))
-    losses = (n - w)*differ.as_square(gaussian_expectation(-μd, σd, aux))
+    wins = w*differ.as_square(gaussian_expectation(μd, σd, aux), .5)
+    losses = (n - w)*differ.as_square(gaussian_expectation(-μd, σd, aux), .5)
     return wins + losses
 
 def cross_entropy(n, w, μ, Σ):
@@ -138,33 +143,43 @@ def elbo(n, w, μ, Σ):
 def project(Σ):
     symmetric = (Σ + Σ.T)/2
     λ, v = torch.symeig(symmetric, True)
-    return v @ torch.diag(λ.clamp(1e-3, None)) @ v.T
+    return v @ torch.diag(λ.clamp(1e-6, None)) @ v.T
 
-def solve(n, w, tol=1e-3):
+def solve(n, w, tol=1e-3, T=1000):
     N = n.shape[0]
 
     μ = torch.nn.Parameter(torch.zeros((N,)))
     Σ = torch.nn.Parameter(torch.eye(N))
 
-    optim = torch.optim.Adam([μ, Σ], .01)
+    optim = torch.optim.Adam([μ, Σ], 1e-3)
 
     ls = []
-    for i in range(200):
-        l = -elbo(n, w, μ, Σ)
-        optim.zero_grad()
-        l.backward()
-        optim.step()
-        Σ = project(Σ)
+    with tqdm(total=T) as pbar:
+        for i in range(T):
+            Σ.data = project(Σ)
+            l = -elbo(n, w, μ, Σ)
+            optim.zero_grad()
+            l.backward()
+            optim.step()
 
-        ls = (ls + [l.detach()])[-10:]
-        if len(ls) > 1 and abs(ls[-1] - ls[0]) < tol*ls[0]:
-            break
-        if i % 10 == 0:
-            print(l)
-    else:
-        print('Didn\'t converge')
+            ls.append(l.detach())
+            if len(ls) > 10 and abs(ls[-1] - ls[-10]) < tol*ls[-10]:
+                pass
+
+            pbar.update(1)
+            pbar.set_description(f'{l:5G}')
+        else:
+            print('Didn\'t converge')
+
+    differ = Differ(N)
+    μd, σd = map(differ.as_square, differ(μ, Σ))
     
-    return dotdict.dotdict(μ=μ.detach(), Σ=Σ.detach())
+    return arrdict.arrdict(
+        μ=μ, 
+        Σ=Σ, 
+        μd=μd,
+        σd=σd,
+        ls=torch.as_tensor(ls)).detach().numpy()
 
 
 def test():
@@ -179,8 +194,17 @@ def test():
 
     soln = solve(n, w)
 
-    differ = Differ(N)
-    μd, σd = differ.as_square(*differ(soln.μ, soln.Σ))
 
     plt.plot(soln.μ)
     plt.imshow(soln.σd)
+
+    from scalinglaws.arena import database
+
+    run_name = '2020-11-27 21-32-59 az-test'
+    winrate = database.symmetric_winrate(run_name).fillna(0).values
+    n = database.symmetric_games(run_name).values
+    w = (winrate*n).astype(int)
+
+    n, w = map(torch.as_tensor, (n, w))
+
+    soln = solve(n, w)
