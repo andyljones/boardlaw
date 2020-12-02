@@ -47,7 +47,7 @@ class Differ(nn.Module):
         j, k = self.j, self.k
         μd = μ[j] - μ[k]
         σd = Σ[j, j] - Σ[j, k] - Σ[k, j] + Σ[k, k]
-        return μd, σd
+        return μd, σd.clamp(1e-6, None)**.5
 
     def as_square(self, x):
         return x.reshape(self.N, self.N)
@@ -134,7 +134,13 @@ def entropy(Σ):
 def elbo(n, w, μ, Σ):
     return -cross_entropy(n, w, μ, Σ) + entropy(Σ)
 
-def solve(n, w):
+@torch.no_grad()
+def project(Σ):
+    symmetric = (Σ + Σ.T)/2
+    λ, v = torch.symeig(symmetric, True)
+    return v @ torch.diag(λ.clamp(1e-3, None)) @ v.T
+
+def solve(n, w, tol=1e-3):
     N = n.shape[0]
 
     μ = torch.nn.Parameter(torch.zeros((N,)))
@@ -142,16 +148,23 @@ def solve(n, w):
 
     optim = torch.optim.Adam([μ, Σ], .01)
 
-    for _ in range(200):
+    ls = []
+    for i in range(200):
         l = -elbo(n, w, μ, Σ)
         optim.zero_grad()
         l.backward()
         optim.step()
-        print(l)
+        Σ = project(Σ)
+
+        ls = (ls + [l.detach()])[-10:]
+        if len(ls) > 1 and abs(ls[-1] - ls[0]) < tol*ls[0]:
+            break
+        if i % 10 == 0:
+            print(l)
+    else:
+        print('Didn\'t converge')
     
-    return dotdict.dotdict(
-        μ=μ.detach().numpy(), 
-        Σ=Σ.detach().numpy())
+    return dotdict.dotdict(μ=μ.detach(), Σ=Σ.detach())
 
 
 def test():
@@ -166,5 +179,8 @@ def test():
 
     soln = solve(n, w)
 
+    differ = Differ(N)
+    μd, σd = differ.as_square(*differ(soln.μ, soln.Σ))
+
     plt.plot(soln.μ)
-    plt.imshow(soln.Σ)
+    plt.imshow(soln.σd)
