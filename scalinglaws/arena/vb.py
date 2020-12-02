@@ -123,13 +123,19 @@ def expected_log_likelihood(n, w, μ, Σ):
     return wins + losses
 
 def cross_entropy(n, w, μ, Σ):
+    N = n.shape[0]
+    μ0s = torch.full((N,), μ0).float()
+    μ0s[0] = 0
+    σ0s = torch.full((N,), σ0).float()
+    σ0s[0] = 1e-6
 
     # Proof:
     # from sympy.stats import E, Normal
     # s, μ, μ0, σ, σ0 = symbols('s μ μ_0 σ σ_0')
     # s = Normal('s', μ, σ)
     # 1/(2*σ0)*E(-(s - μ0)**2)
-    expected_prior = -1/(2*σ0)*((μ - μ0)**2 + Σ**2)
+
+    expected_prior = -1/(2*σ0s)*((μ - μ0s)**2 + torch.diag(Σ))
 
     return -expected_log_likelihood(n, w, μ, Σ).sum() - expected_prior.sum()
 
@@ -157,7 +163,7 @@ def solve(n, w, tol=1e-5, T=5000):
     with tqdm(total=T) as pbar:
         for i in range(T):
             Σ.data = project(Σ)
-            μ.data[0] = 0
+
             l = -elbo(n, w, μ, Σ)
             optim.zero_grad()
             l.backward()
@@ -166,11 +172,11 @@ def solve(n, w, tol=1e-5, T=5000):
             norm = torch.cat([μ.grad.flatten(), Σ.grad.flatten()]).abs().max()
             ls.append(l.detach())
             norms.append(norm.detach())
-            if len(ls) > 10 and max(ls[-10:]) - min(ls[-10:]) < tol*ls[-10]:
+            if len(ls) > 100 and max(ls[-100:]) - min(ls[-100:]) < tol*ls[-100]:
                 break
 
             pbar.update(1)
-            pbar.set_description(f'{l:5G}, {norm:5G}')
+            pbar.set_description(f'{l:5G}')
         else:
             print('Didn\'t converge')
 
