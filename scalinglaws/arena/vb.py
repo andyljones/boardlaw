@@ -53,12 +53,12 @@ class Differ(nn.Module):
         return μd, σ2d
 
     def as_square(self, x, fill=0.):
-        y = torch.full((self.N, self.N), fill)
+        y = torch.full((self.N, self.N), fill).double()
         y[self.j, self.k] = x
         return y
 
 def evaluate(interp, μd, σd):
-    return torch.as_tensor(interp(μd.detach().numpy(), σd.detach().numpy(), grid=False)).float()
+    return torch.as_tensor(interp(μd.detach().numpy(), σd.detach().numpy(), grid=False)).double()
 
 class GaussianExpectation(Function):
 
@@ -143,13 +143,13 @@ def elbo(n, w, μ, Σ):
 def project(Σ):
     symmetric = (Σ + Σ.T)/2
     λ, v = torch.symeig(symmetric, True)
-    return v @ torch.diag(λ.clamp(1e-6, None)) @ v.T
+    return v @ torch.diag(λ.clamp(1e-4, None)) @ v.T
 
 def solve(n, w, tol=1e-6, T=5000):
     N = n.shape[0]
 
-    μ = torch.nn.Parameter(torch.zeros((N,)))
-    Σ = torch.nn.Parameter(torch.eye(N))
+    μ = torch.nn.Parameter(torch.zeros((N,)).double())
+    Σ = torch.nn.Parameter(torch.eye(N).double())
 
     optim = torch.optim.Adam([μ, Σ], 1e-3)
 
@@ -160,26 +160,15 @@ def solve(n, w, tol=1e-6, T=5000):
             # Σ.data[0, 0] = 1e-2**2
             Σ.data = project(Σ)
 
-            details = arrdict.arrdict()
-            optim.zero_grad()
-            expected_log_likelihood(n, w, μ, Σ).sum().backward()
-            details['ll'] = torch.cat([μ.grad.flatten(), Σ.grad.flatten()]).abs().max()
-            optim.zero_grad()
-            expected_prior(μ, Σ).sum().sum().backward()
-            details['p'] = torch.cat([μ.grad.flatten(), Σ.grad.flatten()]).abs().max()
-            optim.zero_grad()
-            entropy(Σ).sum().sum().backward()
-            details['e'] = torch.cat([μ.grad.flatten(), Σ.grad.flatten()]).abs().max()
-
             l = -elbo(n, w, μ, Σ)
             optim.zero_grad()
             l.backward()
             optim.step()
 
-            details['total'] = torch.cat([μ.grad.flatten(), Σ.grad.flatten()]).abs().max()
+            norm = torch.cat([μ.grad.flatten(), Σ.grad.flatten()]).abs().max()
 
             ls.append(l.detach())
-            norms.append(details)
+            norms.append(norm)
             if len(ls) > 100 and max(ls[-100:]) - min(ls[-100:]) < tol*ls[-100]:
                 break
 
@@ -208,10 +197,10 @@ def plot(soln):
     ax.set_xlim(0, len(soln.l))
     ax.set_title('loss')
 
-    ax = axes[1]
-    ax.plot(soln.norms)
-    ax.set_xlim(0, len(soln.norms))
-    ax.set_title('norms')
+    # ax = axes[1]
+    # ax.plot(soln.norms)
+    # ax.set_xlim(0, len(soln.norms))
+    # ax.set_title('norms')
 
     ax = axes[2]
     ax.plot(soln.μ)
