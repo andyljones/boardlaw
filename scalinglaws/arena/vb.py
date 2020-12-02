@@ -38,10 +38,10 @@ class LUT:
         self.σ_range = np.logspace(*σ_lims, K, base=10)
 
         #TODO: Importance sample these zs
-        zs = np.linspace(-5, +5, 101)
+        zs = np.linspace(-5, +5, S)
         pdf = sp.stats.norm.pdf(zs)[None, None, :]
         ds = (self.μ_range[:, None, None] + zs[None, None, :]*self.σ_range[None, :, None])
-        self.expectation = (f(ds)*pdf).sum(-1)
+        self.expectation = (f(ds)*pdf/pdf.sum()).sum(-1)
         self.interp = sp.interpolate.RectBivariateSpline(self.μ_range, self.σ_range, self.expectation, kx=1, ky=1)
 
         j, k = np.indices((N, N)).reshape(2, -1)
@@ -60,7 +60,9 @@ class LUT:
 
     def plot(self):
         Y, X = np.meshgrid(self.μ_range, self.σ_range)
-        plt.contour(X, Y, np.exp(self.expectation))
+        (t, b), (l, r) = μ_lims, σ_lims
+        plt.imshow(np.exp(self.expectation), extent=(l, r, b, t), vmin=0, vmax=1, cmap='RdBu')
+        plt.colorbar()
 
 def likelihood(n, w, μ, Σ):
     if not hasattr(likelihood, '_lut'):
