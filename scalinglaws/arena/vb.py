@@ -122,16 +122,16 @@ def expected_log_likelihood(n, w, μ, Σ):
     losses = (n - w)*differ.as_square(GaussianExpectation.apply(-μd, σ2d, aux), .5)
     return wins + losses
 
-def cross_entropy(n, w, μ, Σ):
+def expected_prior(μ, Σ):
     # Proof:
     # from sympy.stats import E, Normal
     # s, μ, μ0, σ, σ0 = symbols('s μ μ_0 σ σ_0')
     # s = Normal('s', μ, σ)
     # 1/(2*σ0)*E(-(s - μ0)**2)
+    return -1/(2*σ0)*((μ - μ0)**2 + torch.diag(Σ))
 
-    expected_prior = -1/(2*σ0)*((μ - μ0)**2 + torch.diag(Σ))
-
-    return -expected_log_likelihood(n, w, μ, Σ).sum() - expected_prior[1:].sum()
+def cross_entropy(n, w, μ, Σ):
+    return -expected_log_likelihood(n, w, μ, Σ).sum() - expected_prior(μ, Σ).sum()
 
 def entropy(Σ):
     return 1/2*torch.logdet(2*np.pi*np.e*Σ)
@@ -149,7 +149,7 @@ def solve(n, w, tol=1e-6, T=5000):
     N = n.shape[0]
 
     μ = torch.nn.Parameter(torch.zeros((N,)))
-    Σ = torch.nn.Parameter(1e-4*torch.eye(N))
+    Σ = torch.nn.Parameter(torch.eye(N))
 
     optim = torch.optim.Adam([μ, Σ], 1e-3)
 
@@ -160,18 +160,28 @@ def solve(n, w, tol=1e-6, T=5000):
             # Σ.data[0, 0] = 1e-2**2
             Σ.data = project(Σ)
 
+            details = arrdict.arrdict()
+            optim.zero_grad()
+            expected_log_likelihood(n, w, μ, Σ).sum().backward()
+            details['ll'] = torch.cat([μ.grad.flatten(), Σ.grad.flatten()]).abs().max()
+            optim.zero_grad()
+            expected_prior(μ, Σ).sum().sum().backward()
+            details['p'] = torch.cat([μ.grad.flatten(), Σ.grad.flatten()]).abs().max()
+            optim.zero_grad()
+            entropy(Σ).sum().sum().backward()
+            details['e'] = torch.cat([μ.grad.flatten(), Σ.grad.flatten()]).abs().max()
+
             l = -elbo(n, w, μ, Σ)
-            if torch.isnan(l):
-                import aljpy; aljpy.extract()
             optim.zero_grad()
             l.backward()
             optim.step()
 
-            norm = torch.cat([μ.grad.flatten(), Σ.grad.flatten()]).abs().max()
+            details['total'] = torch.cat([μ.grad.flatten(), Σ.grad.flatten()]).abs().max()
+
             ls.append(l.detach())
-            norms.append(norm.detach())
+            norms.append(details)
             if len(ls) > 100 and max(ls[-100:]) - min(ls[-100:]) < tol*ls[-100]:
-                pass
+                break
 
             pbar.update(1)
             pbar.set_description(f'{l:5G}')
@@ -187,7 +197,7 @@ def solve(n, w, tol=1e-6, T=5000):
         μd=μd,
         σ2d=σ2d,
         l=torch.as_tensor(ls),
-        norms=torch.as_tensor(norms)).detach().numpy()
+        norms=arrdict.stack(norms)).detach().numpy()
 
 def plot(soln):
     fig, axes = plt.subplots(1, 4)
