@@ -3,6 +3,8 @@ import sympy as sym
 import scipy as sp
 import scipy.stats
 import matplotlib.pyplot as plt
+import torch
+from torch import nn
 
 μ0 = 0
 σ0 = 2
@@ -31,9 +33,28 @@ def test_d_integral():
 
     return expected, actual
 
-class LUT:
+class Differ(nn.Module):
 
-    def __init__(self, f, N, K=101, S=1000):
+    def __init__(self, N):
+        super().__init__()
+
+        self.N = N
+        j, k = np.indices((N, N)).reshape(2, -1)
+        row = np.arange(len(j))
+        R = np.zeros((len(row), N))
+        R[row, j] = 1
+        R[row, k] = -1
+        self.R = torch.as_tensor(R).float()
+
+    def forward(self, μ, Σ):
+        μd = self.R @ μ
+        σd = torch.diag(self.R @ Σ @ self.R.T)
+        return μd, σd
+
+class GaussianExpectation(nn.Module):
+
+    def __init__(self, f, K=101, S=1000):
+        super().__init__()
         self.μ = np.linspace(*μ_lims, K)
         self.σ = np.logspace(*σ_lims, K, base=10)
 
@@ -49,36 +70,38 @@ class LUT:
         self.dσs = (self.fs[:, 2:] - self.fs[:, :-2])/(self.σ[2:] - self.σ[:-2])[None, :]
         self._dσ = sp.interpolate.RectBivariateSpline(self.μ, self.σ[1:-1], self.dσs, kx=1, ky=1)
 
-        self.N = N
-        j, k = np.indices((N, N)).reshape(2, -1)
-        row = np.arange(len(j))
-        R = np.zeros((len(row), N))
-        R[row, j] = 1
-        R[row, k] = -1
-        self.R = R
+    def _eval(self, interp, μd, σd):
+        return torch.as_tensor(interp(μd.numpy(), σd.numpy(), grid=False)).float()
 
-    def _eval(self, interp, μ, Σ):
-        μd = self.R @ μ
-        σd = np.diag(self.R @ Σ @ self.R.T)**.5
-        return interp(μd, σd, grid=False).reshape(self.N, self.N)
+    def forward(self, μd, σd):
+        self.save_for_backward(μd, σd)
+        return self._eval(self._f, μd.numpy(), σd.numpy())
 
-    f = lambda self, μ, Σ: self._eval(self._f, μ, Σ)
-    dμ = lambda self, μ, Σ: self._eval(self._dμ, μ, Σ)
-    dσ = lambda self, μ, Σ: self._eval(self._dσ, μ, Σ)
+    def backward(self, dldf):
+        μd, σd = self.saved_tensors
+        dfdμ = self._eval(self._dμ, μd, σd)
+        dfdσ = self._eval(self._dσ, μd, σd)
+
+        dldμ = dldf*dfdμ
+        dldσ = dldf*dfdσ
+
+        return dldμ, dldσ
 
     def plot(self):
         Y, X = np.meshgrid(self.μ, self.σ)
         (t, b), (l, r) = μ_lims, σ_lims
-        plt.imshow(np.exp(self.y(X, Y)), extent=(l, r, b, t), vmin=0, vmax=1, cmap='RdBu', aspect='auto')
+        plt.imshow(np.exp(self.fs), extent=(l, r, b, t), vmin=0, vmax=1, cmap='RdBu', aspect='auto')
         plt.colorbar()
 
 def expected_log_likelihood(n, w, μ, Σ):
     self = expected_log_likelihood
-    if not hasattr(self, '_lut') or self._lut.N != n.shape[0]:
-        self._lut = LUT(lambda d: -np.log(1 + np.exp(-d)), n.shape[0])
-    lut = self._lut
+    if not hasattr(self, '_differ') or self._differ.N != n.shape[0]:
+        self._differ = Differ(n.shape[0])
+        self._expectation = GaussianExpectation(lambda d: -np.log(1 + np.exp(-d)))
+    differ, expectation = self._differ, self._expectation
 
-    return w*lut.f(μ, Σ) + (n - w)*lut.f(-μ, Σ)
+    μd, σd = differ(μ, Σ)
+    return w*expectation(μd, σd) + (n - w)*expectation(-μd, σd)
 
 def cross_entropy(n, w, μ, Σ):
 
