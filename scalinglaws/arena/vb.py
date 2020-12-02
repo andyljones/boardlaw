@@ -4,6 +4,32 @@ import sympy as sym
 μ0 = 0
 σ0 = 1
 
+def test_d_integral():
+    import numpy as np
+    import scipy as sp
+    import scipy.stats
+
+    Λ = np.array([[1, 0], [0, 1]])
+    μ = np.array([0, 0])
+
+    def ϕ(d):
+        return 1/(1 + np.exp(-d))
+
+    def integrand(s):
+        return np.log(ϕ(s[..., 0] - s[..., 1]))
+        
+
+    N = sp.stats.multivariate_normal(μ, np.linalg.inv(Λ))
+    actual = integrand(N.rvs(1000)).mean()
+
+    mult = np.sqrt(32*np.pi/(Λ[0, 0] + 2*Λ[0, 1] + Λ[1, 1]))
+
+    λd = (Λ[0, 0]*Λ[1, 1] - Λ[0, 1]**2)/(Λ[0, 0] + Λ[1, 1] + 2*Λ[0, 1])
+    μd = μ[0] - μ[1]
+
+    Nd = sp.stats.norm(μd, 1/λd**.5)
+    expected = mult*integrand(Nd.rvs(1000)).mean()
+
 def winrate(μ, Σ):
     # μ = MatrixSymbol('μ', 2, 1)
     # Λ = MatrixSymbol('Λ', 2, 2)
@@ -23,7 +49,6 @@ def winrate(μ, Σ):
     # a = simplify(a)
     # c = simplify(factor(c), rational=True)
     # integral = E**c * sqrt(pi/a)
-
 
     pass
 
