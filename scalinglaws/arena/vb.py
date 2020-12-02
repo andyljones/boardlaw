@@ -5,9 +5,9 @@ import scipy.stats
 import matplotlib.pyplot as plt
 
 μ0 = 0
-σ0 = 1
+σ0 = 2
 
-μ_lims = [-5, +5]
+μ_lims = [-5*σ0, +5*σ0]
 σ_lims = [-2, +1]
 
 def test_d_integral():
@@ -34,15 +34,20 @@ def test_d_integral():
 class LUT:
 
     def __init__(self, f, N, K=101, S=1000):
-        self.μ_range = np.linspace(*μ_lims, K)
-        self.σ_range = np.logspace(*σ_lims, K, base=10)
+        self.μ = np.linspace(*μ_lims, K)
+        self.σ = np.logspace(*σ_lims, K, base=10)
 
         #TODO: Importance sample these zs
         zs = np.linspace(-5, +5, S)
         pdf = sp.stats.norm.pdf(zs)[None, None, :]
-        ds = (self.μ_range[:, None, None] + zs[None, None, :]*self.σ_range[None, :, None])
-        self.expectation = (f(ds)*pdf/pdf.sum()).sum(-1)
-        self.interp = sp.interpolate.RectBivariateSpline(self.μ_range, self.σ_range, self.expectation, kx=1, ky=1)
+        ds = (self.μ[:, None, None] + zs[None, None, :]*self.σ[None, :, None])
+        self.fs = (f(ds)*pdf/pdf.sum()).sum(-1)
+        self._f = sp.interpolate.RectBivariateSpline(self.μ, self.σ, self.fs, kx=1, ky=1)
+
+        self.dμs = (self.fs[2:, :] - self.fs[:-2, :])/(self.μ[2:] - self.μ[:-2])[:, None]
+        self._dμ = sp.interpolate.RectBivariateSpline(self.μ[1:-1], self.σ, self.dμs, kx=1, ky=1)
+        self.dσs = (self.fs[:, 2:] - self.fs[:, :-2])/(self.σ[2:] - self.σ[:-2])[None, :]
+        self._dσ = sp.interpolate.RectBivariateSpline(self.μ, self.σ[1:-1], self.dσs, kx=1, ky=1)
 
         self.N = N
         j, k = np.indices((N, N)).reshape(2, -1)
@@ -52,16 +57,19 @@ class LUT:
         R[row, k] = -1
         self.R = R
 
-    def winrates(self, μ, Σ):
+    def _eval(self, interp, μ, Σ):
         μd = self.R @ μ
         σd = np.diag(self.R @ Σ @ self.R.T)**.5
+        return interp(μd, σd, grid=False).reshape(self.N, self.N)
 
-        return self.interp(μd, σd, grid=False).reshape(self.N, self.N)
+    f = lambda self, μ, Σ: self._eval(self._f, μ, Σ)
+    dμ = lambda self, μ, Σ: self._eval(self._dμ, μ, Σ)
+    dσ = lambda self, μ, Σ: self._eval(self._dσ, μ, Σ)
 
     def plot(self):
-        Y, X = np.meshgrid(self.μ_range, self.σ_range)
+        Y, X = np.meshgrid(self.μ, self.σ)
         (t, b), (l, r) = μ_lims, σ_lims
-        plt.imshow(np.exp(self.expectation), extent=(l, r, b, t), vmin=0, vmax=1, cmap='RdBu', aspect='auto')
+        plt.imshow(np.exp(self.y(X, Y)), extent=(l, r, b, t), vmin=0, vmax=1, cmap='RdBu', aspect='auto')
         plt.colorbar()
 
 def expected_log_likelihood(n, w, μ, Σ):
@@ -70,7 +78,7 @@ def expected_log_likelihood(n, w, μ, Σ):
         self._lut = LUT(lambda d: -np.log(1 + np.exp(-d)), n.shape[0])
     lut = self._lut
 
-    return w*lut.winrates(μ, Σ) + (n - w)*lut.winrates(-μ, Σ)
+    return w*lut.f(μ, Σ) + (n - w)*lut.f(-μ, Σ)
 
 def cross_entropy(n, w, μ, Σ):
 
