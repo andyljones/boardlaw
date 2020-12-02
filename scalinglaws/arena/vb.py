@@ -17,27 +17,6 @@ import geotorch
 μ_lims = [-5*σ0, +5*σ0]
 σ2_lims = [-4, +2]
 
-def test_d_integral():
-    Σ = np.array([[.6, .5], [.5, 1]])
-    μ = np.array([0, 1])
-
-    def ϕ(d):
-        return 1/(1 + np.exp(-d))
-
-    N = sp.stats.multivariate_normal(μ, Σ)
-    s = N.rvs(10000)
-    actual = np.log(ϕ(s[..., 0] - s[..., 1])).mean()
-
-    R = np.array([[+1, -1]])
-    σ2d = R @ Σ @ R.T
-    μd = R @ μ
-
-    Nd = sp.stats.norm(μd, σ2d**.5)
-    d = Nd.rvs(10000)
-    expected = np.log(ϕ(d)).mean()
-
-    return expected, actual
-
 class Differ(nn.Module):
 
     def __init__(self, N):
@@ -109,44 +88,40 @@ class GaussianExpectation(Function):
         plt.imshow(np.exp(aux.fs), extent=(l, r, b, t), vmin=0, vmax=1, cmap='RdBu', aspect='auto')
         plt.colorbar()
 
-
-def expected_log_likelihood(n, w, μ, Σ):
-    self = expected_log_likelihood
-    N = n.shape[0]
-    if not hasattr(self, '_differ') or self._differ.N != N:
-        self._differ = Differ(n.shape[0])
-        self._aux = GaussianExpectation.auxinfo(lambda d: -np.log(1 + np.exp(-d)))
-    differ, aux = self._differ, self._aux
-
-    μd, σ2d = differ(μ, Σ)
-    wins = w*differ.as_square(GaussianExpectation.apply(μd, σ2d, aux), .5)
-    losses = (n - w)*differ.as_square(GaussianExpectation.apply(-μd, σ2d, aux), .5)
-    return wins + losses
-
-def expected_prior(μ, Σ):
-    # Proof:
-    # from sympy.stats import E, Normal
-    # s, μ, μ0, σ, σ0 = symbols('s μ μ_0 σ σ_0')
-    # s = Normal('s', μ, σ)
-    # 1/(2*σ0)*E(-(s - μ0)**2)
-    return -1/(2*σ0)*((μ - μ0)**2 + torch.diag(Σ))
-
-def cross_entropy(n, w, μ, Σ):
-    return -expected_log_likelihood(n, w, μ, Σ).sum() - expected_prior(μ, Σ).sum()
-
-def entropy(Σ):
-    return 1/2*torch.logdet(2*np.pi*np.e*Σ)
-
 class VB(nn.Module):
     
     def __init__(self, N):
         super().__init__()
+        self.N = N
         self.register_parameter('μ', nn.Parameter(torch.zeros((N,)).float()))
         self.register_parameter('Σ', nn.Parameter(torch.eye(N).float()))
         geotorch.positive_definite(self, 'Σ')
 
+        self.differ = Differ(N)
+        self.aux = GaussianExpectation.auxinfo(lambda d: -np.log(1 + np.exp(-d)))
+
+    def expected_log_likelihood(self, n, w):
+        μd, σ2d = self.differ(self.μ, self.Σ)
+        wins = w*self.differ.as_square(GaussianExpectation.apply(μd, σ2d, self.aux), .5)
+        losses = (n - w)*self.differ.as_square(GaussianExpectation.apply(-μd, σ2d, self.aux), .5)
+        return wins + losses
+
+    def expected_prior(self):
+        # Proof:
+        # from sympy.stats import E, Normal
+        # s, μ, μ0, σ, σ0 = symbols('s μ μ_0 σ σ_0')
+        # s = Normal('s', μ, σ)
+        # 1/(2*σ0)*E(-(s - μ0)**2)
+        return -1/(2*σ0)*((self.μ - μ0)**2 + torch.diag(self.Σ))
+
+    def cross_entropy(self, n, w):
+        return -self.expected_log_likelihood(n, w).sum() - self.expected_prior().sum()
+
+    def entropy(self):
+        return 1/2*torch.logdet(2*np.pi*np.e*self.Σ)
+
     def forward(self, n, w):
-        return -cross_entropy(n, w, self.μ, self.Σ) + entropy(self.Σ)
+        return -self.cross_entropy(n, w) + self.entropy()
 
 def solve(n, w, tol=1e-4, T=5000):
     N = n.shape[0]
@@ -208,7 +183,7 @@ def plot(soln):
     ax.imshow(soln.σ2d**.5)
     ax.set_title('σd')
 
-def test():
+def test_artificial():
     N = 5
 
     s = np.random.randn(N)
@@ -220,10 +195,9 @@ def test():
 
     soln = solve(n, w)
 
+    plt.scatter(s, soln.μ)
 
-    plt.plot(soln.μ)
-    plt.imshow(soln.σd)
-
+def test_organic():
     from scalinglaws.arena import database
 
     run_name = '2020-11-27 21-32-59 az-test'
