@@ -46,7 +46,7 @@ class Differ(nn.Module):
     def forward(self, μ, Σ):
         j, k = self.j, self.k
         μd = μ[j] - μ[k]
-        σd = Σ[j, j] - 2*Σ[j, k] + Σ[k, k]
+        σd = Σ[j, j] - Σ[j, k] - Σ[k, j] + Σ[k, k]
         return μd, σd
 
     def as_square(self, x):
