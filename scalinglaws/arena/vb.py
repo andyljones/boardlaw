@@ -107,7 +107,6 @@ class GaussianExpectation(Function):
         plt.imshow(np.exp(self.fs), extent=(l, r, b, t), vmin=0, vmax=1, cmap='RdBu', aspect='auto')
         plt.colorbar()
 
-gaussian_expectation = GaussianExpectation.apply
 
 def expected_log_likelihood(n, w, μ, Σ):
     self = expected_log_likelihood
@@ -118,8 +117,8 @@ def expected_log_likelihood(n, w, μ, Σ):
     differ, aux = self._differ, self._aux
 
     μd, σd = differ(μ, Σ)
-    wins = w*differ.as_square(gaussian_expectation(μd, σd, aux), .5)
-    losses = (n - w)*differ.as_square(gaussian_expectation(-μd, σd, aux), .5)
+    wins = w*differ.as_square(GaussianExpectation.apply(μd, σd, aux), .5)
+    losses = (n - w)*differ.as_square(GaussianExpectation.apply(-μd, σd, aux), .5)
     return wins + losses
 
 def cross_entropy(n, w, μ, Σ):
@@ -145,7 +144,7 @@ def project(Σ):
     λ, v = torch.symeig(symmetric, True)
     return v @ torch.diag(λ.clamp(1e-6, None)) @ v.T
 
-def solve(n, w, tol=1e-3, T=1000):
+def solve(n, w, tol=1, T=1000):
     N = n.shape[0]
 
     μ = torch.nn.Parameter(torch.zeros((N,)))
@@ -163,8 +162,8 @@ def solve(n, w, tol=1e-3, T=1000):
             optim.step()
 
             ls.append(l.detach())
-            if len(ls) > 10 and abs(ls[-1] - ls[-10]) < tol*ls[-10]:
-                pass
+            if len(ls) > 100 and abs(ls[-1] - ls[-100]) < tol:
+                break
 
             pbar.update(1)
             pbar.set_description(f'{l:5G}')
@@ -179,8 +178,25 @@ def solve(n, w, tol=1e-3, T=1000):
         Σ=Σ, 
         μd=μd,
         σd=σd,
-        ls=torch.as_tensor(ls)).detach().numpy()
+        l=torch.as_tensor(ls)).detach().numpy()
 
+def plot(soln):
+    fig, axes = plt.subplots(1, 3)
+    fig.set_size_inches(15, 5)
+
+    ax = axes[0]
+    ax.plot(soln.l)
+    ax.set_xlim(0, len(soln.l))
+    ax.set_title('loss')
+
+    ax = axes[1]
+    ax.plot(soln.μ)
+    ax.set_xlim(0, len(soln.μ))
+    ax.set_title('μ')
+
+    ax = axes[2]
+    ax.imshow(soln.σd)
+    ax.set_title('σd')
 
 def test():
     N = 5
@@ -208,3 +224,5 @@ def test():
     n, w = map(torch.as_tensor, (n, w))
 
     soln = solve(n, w)
+
+    plot(soln)
