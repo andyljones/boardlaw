@@ -41,16 +41,12 @@ class Differ(nn.Module):
         super().__init__()
 
         self.N = N
-        j, k = np.indices((N, N)).reshape(2, -1)
-        row = np.arange(len(j))
-        R = np.zeros((len(row), N))
-        R[row, j] = 1
-        R[row, k] = -1
-        self.R = torch.as_tensor(R).float()
+        self.j, self.k = torch.as_tensor(np.indices((N, N)).reshape(2, -1))
 
     def forward(self, μ, Σ):
-        μd = self.R @ μ
-        σd = torch.diag(self.R @ Σ @ self.R.T)
+        j, k = self.j, self.k
+        μd = μ[j] - μ[k]
+        σd = Σ[j, j] - 2*Σ[j, k] + Σ[k, k]
         return μd, σd
 
     def as_square(self, x):
