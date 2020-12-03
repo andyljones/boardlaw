@@ -1,4 +1,3 @@
-from torch._C import get_num_interop_threads
 from torch.distributions.transforms import SigmoidTransform
 from rebar import arrdict, dotdict
 import numpy as np
@@ -44,15 +43,13 @@ def evaluate(interp, μd, σd):
 class GaussianExpectation(Function):
 
     @staticmethod
-    def auxinfo(f, K=101, S=1000):
+    def auxinfo(f, K=501, S=50):
         μ = np.linspace(*μ_lims, K)
         σ2 = np.logspace(*σ2_lims, K, base=10)
 
-        #TODO: Importance sample these zs
-        zs = np.linspace(-5, +5, S)
-        pdf = sp.stats.norm.pdf(zs)[None, None, :]
+        zs, ws = np.polynomial.hermite_e.hermegauss(S)
         ds = (μ[:, None, None] + zs[None, None, :]*σ2[None, :, None]**.5)
-        fs = (f(ds)*pdf/pdf.sum()).sum(-1)
+        fs = 1/(2*np.pi)**.5 * (f(ds)*ws).sum(-1)
         f = sp.interpolate.RectBivariateSpline(μ, σ2, fs, kx=1, ky=1)
 
         dμs = (fs[2:, :] - fs[:-2, :])/(μ[2:] - μ[:-2])[:, None]
@@ -131,7 +128,7 @@ def solve(n, w, tol=.01, T=100):
     optim = torch.optim.LBFGS(vb.parameters())
 
     trace = []
-    with tqdm(total=T) as pbar:
+    with tqdm() as pbar:
         for i in range(T):
 
             def closure():
