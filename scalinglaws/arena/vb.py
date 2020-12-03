@@ -1,9 +1,7 @@
-from torch.distributions.transforms import SigmoidTransform
 from rebar import arrdict, dotdict
 import numpy as np
 import sympy as sym
 import scipy as sp
-import scipy.stats
 import matplotlib.pyplot as plt
 import torch
 from torch import nn
@@ -195,6 +193,20 @@ def plot(soln):
     ax = axes[3]
     ax.imshow(soln.σd)
     ax.set_title('σd')
+
+def suggest(Σ):
+    # Residual v. the first agent
+    Σ = Σ[1:, 1:] - np.outer(Σ[1:, 0], Σ[1:, 0])/Σ[0, 0]
+
+    # Trace if we conditioned I-J out
+    σ2d = np.diag(Σ)[:, None] + np.diag(Σ)[None, :] - 2*Σ
+    colerr = ((Σ[:, None, :] - Σ[None, :, :])**2).sum(-1)
+    trace = np.zeros_like(Σ)
+    np.divide(colerr, σ2d, out=trace, where=(σ2d > 0))
+
+    N = Σ.shape[0]
+    idx = trace.argmax()
+    return idx // N, idx % N
 
 def test_artificial():
     N = 5

@@ -93,50 +93,6 @@ def solve(truth, games_per=256):
 
     return i
 
-def pymc_solve(wins, games):
-    n_agents = wins.shape[0]
-    with pm.Model() as model:
-        skills = pm.math.concatenate([
-            np.zeros((1,)), 
-            pm.Normal('skills', 0, 10, shape=(n_agents-1,))])
-        
-        diffs = skills[:, None] - skills[None, :]
-        rate = pm.math.invlogit(diffs) # need to multiply by 400*log(10) to get Elos
-        
-        pm.Binomial('outcomes', n=games, p=rate, observed=wins, shape=(n_agents, n_agents))
-
-        advi = pm.FullRankADVI()
-        tracker = pm.callbacks.Tracker(
-            mean=advi.approx.mean.eval,
-            std=advi.approx.std.eval)
-        conv = pm.callbacks.CheckParametersConvergence(diff='absolute', tolerance=.01, every=1000)
-
-        approx = advi.fit(50000, callbacks=[tracker, conv])
-
-
-    return advi, approx
-
-def pymc_plot_means(trace):
-    import pandas as pd
-    import seaborn as sns
-
-    df = (pd.DataFrame(trace['skills'])
-            .rename_axis(index='sample', columns='agent')
-            .stack()
-            .reset_index()
-            .rename(columns={0: 'elo'}))
-    ax = sns.violinplot(data=df, x='agent', y='elo', inner=None, linewidth=1)
-    ax.set_xticks([])
-
-def pymc_diff_stds(advi):
-    mu = advi.approx.mean.eval()
-    cov = advi.approx.cov.eval()
-
-    mu_d = mu[:, None] - mu[None, :]
-    var_d = np.diag(cov)[:, None] + np.diag(cov)[None, :] - 2*cov
-
-    return var_d**.5
-
 def benchmark():
     counts = []
     for _ in range(100):
