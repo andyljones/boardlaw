@@ -121,7 +121,7 @@ class VB(nn.Module):
 
 class Solver():
 
-    def __init__(self, N, tol=.01, T=100):
+    def __init__(self, N, tol=.1, T=100):
         self.vb = VB(N)
         self.differ = Differ(N)
         self.tol = tol
@@ -160,8 +160,8 @@ class Solver():
 
         μd, σ2d = map(self.differ.as_square, self.differ(self.vb.μ, self.vb.Σ))
         return arrdict.arrdict(
-            μ=self.vb.μ, 
-            Σ=self.vb.Σ, 
+            μ=self.vb.μ.clone(), 
+            Σ=self.vb.Σ.clone(), 
             μd=μd,
             σd=σ2d**.5,
             trace=arrdict.stack(trace)).detach().numpy()

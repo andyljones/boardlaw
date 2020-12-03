@@ -11,6 +11,7 @@ import numpy as np
 import scipy as sp
 import scipy.stats
 import networkx as nx
+from torch._C import Value
 from rebar import arrdict
 import torch
 from torch import nn
@@ -68,11 +69,14 @@ def grad_suggest(wins, games, ranks):
     sensitivities = wins.grad.abs()
     return unravel(sensitivities.argmax(), games.shape)
 
-def solve(truth, games_per=256):
+def solve(truth, games_per=256, σbar_tol=.1):
+    n_agents = len(truth)
+    games_per = 256
     n_agents = len(truth)
     wins = torch.zeros((n_agents, n_agents))
     games = torch.zeros((n_agents, n_agents))
 
+    solns = []
     solver = vb.Solver(n_agents)
     ranks = torch.full((n_agents,), 0.)
     i = 1
@@ -87,16 +91,22 @@ def solve(truth, games_per=256):
         games[black, white] += games_per
         games[white, black] += games_per
 
-        resid_var = 1 - np.corrcoef(ranks, truth)[0, 1]**.2
-        print(resid_var)
-        if resid_var < .01:
+        soln['n'] = games.clone()
+        soln['w'] = wins.clone()
+        soln['σbar'] = (soln.σd**2).mean(-1).mean(-1)**.5
+        soln['resid_var'] = 1 - np.corrcoef(ranks, truth)[0, 1]**.2
+        solns.append(arrdict.arrdict({k: v for k, v in soln.items() if k != 'trace'}))
+        print(soln.σbar, soln.resid_var)
+        if soln.σbar < σbar_tol:
             break
-        if i > 1 and np.isnan(resid_var):
-            break
-
+        if i > 1 and np.isnan(soln.resid_var):
+            raise ValueError('Crashed')
+        
         i += 1
+        
+    solns = arrdict.stack(solns)
 
-    return i
+    return solns
 
 def fixed_benchmark():
     truth = log_ranks(10)
