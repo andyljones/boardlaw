@@ -1,3 +1,4 @@
+from torch._C import get_num_interop_threads
 from torch.distributions.transforms import SigmoidTransform
 from rebar import arrdict, dotdict
 import numpy as np
@@ -123,29 +124,40 @@ class VB(nn.Module):
     def forward(self, n, w):
         return -self.cross_entropy(n, w) + self.entropy()
 
-def solve(n, w, tol=1e-4, T=5000):
+def solve(n, w, tol=.01, T=100):
     N = n.shape[0]
 
     vb = VB(N)
-    optim = torch.optim.Adam(vb.parameters(), 1e-1)
+    optim = torch.optim.LBFGS(vb.parameters())
 
-    ls, norms = [], []
+    trace = []
     with tqdm(total=T) as pbar:
         for i in range(T):
-            l = -vb(n, w)
-            optim.zero_grad()
-            l.backward()
-            optim.step()
 
-            norm = torch.cat([p.flatten() for p in vb.parameters()]).abs().max()
+            def closure():
+                l = -vb(n, w)
+                optim.zero_grad()
+                l.backward()
+                return l
 
-            ls.append(l.detach())
-            norms.append(norm)
-            if len(ls) > 100 and max(ls[-100:]) - min(ls[-100:]) < tol*ls[-100]:
+            l = optim.step(closure)
+
+            grads = [p.grad for p in vb.parameters()]
+            paramnorm = torch.cat([p.data.flatten() for p in vb.parameters()]).pow(2).mean().pow(.5)
+            gradnorm = torch.cat([g.flatten() for g in grads]).pow(2).mean().pow(.5)
+            relnorm = gradnorm/paramnorm
+
+            trace.append(arrdict.arrdict(
+                l=l.detach(),
+                gradnorm=gradnorm,
+                relnorm=relnorm,
+                dμ=grads[0].clone(), 
+                dΣ=grads[1].clone()))
+            if relnorm < tol:
                 break
 
             pbar.update(1)
-            pbar.set_description(f'{l:5G}')
+            pbar.set_description(f'{relnorm:4f}')
         else:
             print('Didn\'t converge')
 
@@ -156,31 +168,31 @@ def solve(n, w, tol=1e-4, T=5000):
         μ=vb.μ, 
         Σ=vb.Σ, 
         μd=μd,
-        σ2d=σ2d,
-        l=torch.as_tensor(ls),
-        norms=arrdict.stack(norms)).detach().numpy()
+        σd=σ2d**.5,
+        trace=arrdict.stack(trace)).detach().numpy()
 
 def plot(soln):
     fig, axes = plt.subplots(1, 4)
     fig.set_size_inches(20, 5)
 
     ax = axes[0]
-    ax.plot(soln.l)
-    ax.set_xlim(0, len(soln.l))
+    ax.plot(soln.trace.l)
+    ax.set_xlim(0, len(soln.trace.l)-1)
     ax.set_title('loss')
 
     ax = axes[1]
-    ax.plot(soln.norms)
-    ax.set_xlim(0, len(soln.norms))
+    ax.plot(soln.trace.relnorm)
+    ax.set_xlim(0, len(soln.trace.relnorm)-1)
+    ax.set_yscale('log')
     ax.set_title('norms')
 
     ax = axes[2]
     ax.plot(soln.μ)
-    ax.set_xlim(0, len(soln.μ))
+    ax.set_xlim(0, len(soln.μ)-1)
     ax.set_title('μ')
 
     ax = axes[3]
-    ax.imshow(soln.σ2d**.5)
+    ax.imshow(soln.σd)
     ax.set_title('σd')
 
 def test_artificial():
