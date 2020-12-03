@@ -138,26 +138,30 @@ def solve(n, w, tol=.01, T=100):
                 l = -vb(n, w)
                 optim.zero_grad()
                 l.backward()
+
+                grads = [p.grad for p in vb.parameters()]
+                paramnorm = torch.cat([p.data.flatten() for p in vb.parameters()]).pow(2).mean().pow(.5)
+                gradnorm = torch.cat([g.flatten() for g in grads]).pow(2).mean().pow(.5)
+                relnorm = gradnorm/paramnorm
+
+                trace.append(arrdict.arrdict(
+                    l=l.detach(),
+                    gradnorm=gradnorm,
+                    relnorm=relnorm,
+                    dμ=grads[0].clone(), 
+                    dΣ=grads[1].clone()))
+
+                pbar.update(1)
+                pbar.set_description(f'{relnorm:4f}')
+
                 return l
 
-            l = optim.step(closure)
+            optim.step(closure)
+            closure()
 
-            grads = [p.grad for p in vb.parameters()]
-            paramnorm = torch.cat([p.data.flatten() for p in vb.parameters()]).pow(2).mean().pow(.5)
-            gradnorm = torch.cat([g.flatten() for g in grads]).pow(2).mean().pow(.5)
-            relnorm = gradnorm/paramnorm
-
-            trace.append(arrdict.arrdict(
-                l=l.detach(),
-                gradnorm=gradnorm,
-                relnorm=relnorm,
-                dμ=grads[0].clone(), 
-                dΣ=grads[1].clone()))
-            if relnorm < tol:
+            if trace[-1].relnorm < tol:
                 break
 
-            pbar.update(1)
-            pbar.set_description(f'{relnorm:4f}')
         else:
             print('Didn\'t converge')
 
