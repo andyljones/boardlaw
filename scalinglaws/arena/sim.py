@@ -76,7 +76,7 @@ def solve(truth, games_per=256, σbar_tol=.1):
     wins = torch.zeros((n_agents, n_agents))
     games = torch.zeros((n_agents, n_agents))
 
-    solns = []
+    trace = []
     solver = vb.Solver(n_agents)
     ranks = torch.full((n_agents,), 0.)
     i = 1
@@ -95,7 +95,7 @@ def solve(truth, games_per=256, σbar_tol=.1):
         soln['w'] = wins.clone()
         soln['σbar'] = (soln.σd**2).mean(-1).mean(-1)**.5
         soln['resid_var'] = 1 - np.corrcoef(ranks, truth)[0, 1]**.2
-        solns.append(arrdict.arrdict({k: v for k, v in soln.items() if k != 'trace'}))
+        trace.append(arrdict.arrdict({k: v for k, v in soln.items() if k != 'trace'}))
         print(soln.σbar, soln.resid_var)
         if soln.σbar < σbar_tol:
             break
@@ -104,9 +104,15 @@ def solve(truth, games_per=256, σbar_tol=.1):
         
         i += 1
         
-    solns = arrdict.stack(solns)
+    trace = arrdict.stack(trace)
 
-    return solns
+    return trace
+
+def plot(trace):
+    import pandas as pd
+    t = 25
+    df = pd.DataFrame({'σ': trace.σd[t, 0], 'μ': trace.μd[t, :, 0]})
+    plt.errorbar(np.arange(len(df)), df.μ, yerr=df.σ, marker='o', linestyle='', capsize=3)
 
 def fixed_benchmark():
     truth = log_ranks(10)
