@@ -15,18 +15,19 @@ from rebar import arrdict
 import torch
 from torch import nn
 from torch.distributions import Uniform, SigmoidTransform, AffineTransform, TransformedDistribution
+from . import vb
 
-def random_ranks(std=400, n_agents=10):
-    deltas = std/2*torch.randn((n_agents,))
+def random_ranks(n_agents=10):
+    deltas = torch.randn((n_agents,))/n_agents**.5
     totals = deltas.cumsum(0) 
     totals = totals - totals.min()
     return torch.sort(totals).values
 
 def log_ranks(n_agents=10):
-    return 200*torch.linspace(1, 26, n_agents).float().log()
+    return torch.linspace(1, 26, n_agents).float().log()
 
 def winrate(black, white):
-    return 1/(1 + 10**(-(black - white)/400))
+    return 1/(1 + np.exp(-(black - white)))
 
 def simulate(black, white, n_games):
     return torch.distributions.Binomial(n_games, winrate(black, white)).sample()
@@ -72,28 +73,36 @@ def solve(truth, games_per=256):
     wins = torch.zeros((n_agents, n_agents))
     games = torch.zeros((n_agents, n_agents))
 
-    ranks = torch.full((n_agents,), 1000.)
+    solver = vb.Solver(n_agents)
+    ranks = torch.full((n_agents,), 0.)
     i = 1
     while True:
-        ranks = infer(wins, games, ranks)
+        soln = solver(games, wins)
+        ranks = torch.as_tensor(soln.μ)
 
-        black, white = min_suggest(wins, games, ranks)
+        black, white = vb.suggest(soln, games_per)
         black_wins = simulate(truth[black], truth[white], games_per)
         wins[black, white] += black_wins
         wins[white, black] += games_per - black_wins
         games[black, white] += games_per
         games[white, black] += games_per
 
-        err = (ranks - ranks[0]) - (truth - truth[0])
-        ratio = err.pow(2).mean()/(truth - truth[0]).pow(2).mean()
-        if ratio < .01:
+        resid_var = 1 - np.corrcoef(ranks, truth)[0, 1]**.2
+        print(resid_var)
+        if resid_var < .01:
+            break
+        if i > 1 and np.isnan(resid_var):
             break
 
         i += 1
 
     return i
 
-def benchmark():
+def fixed_benchmark():
+    truth = log_ranks(10)
+    solve(truth)
+
+def random_benchmark():
     counts = []
     for _ in range(100):
         ranks = random_ranks(n_agents=10)

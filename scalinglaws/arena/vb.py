@@ -119,56 +119,52 @@ class VB(nn.Module):
     def forward(self, n, w):
         return -self.cross_entropy(n, w) + self.entropy()
 
-def solve(n, w, tol=.01, T=100):
-    N = n.shape[0]
+class Solver():
 
-    vb = VB(N)
-    optim = torch.optim.LBFGS(vb.parameters())
+    def __init__(self, N, tol=.01, T=100):
+        self.vb = VB(N)
+        self.differ = Differ(N)
+        self.tol = tol
+        self.T = T
 
-    trace = []
-    with tqdm() as pbar:
-        for i in range(T):
+    def __call__(self, n, w):
+        optim = torch.optim.LBFGS(self.vb.parameters())
+        trace = []
+        for t in range(self.T):
 
             def closure():
-                l = -vb(n, w)
+                l = -self.vb(n, w)
                 optim.zero_grad()
                 l.backward()
 
-                grads = [p.grad for p in vb.parameters()]
-                paramnorm = torch.cat([p.data.flatten() for p in vb.parameters()]).pow(2).mean().pow(.5)
+                grads = [p.grad for p in self.vb.parameters()]
+                paramnorm = torch.cat([p.data.flatten() for p in self.vb.parameters()]).pow(2).mean().pow(.5)
                 gradnorm = torch.cat([g.flatten() for g in grads]).pow(2).mean().pow(.5)
                 relnorm = gradnorm/paramnorm
 
                 trace.append(arrdict.arrdict(
                     l=l.detach(),
                     gradnorm=gradnorm,
-                    relnorm=relnorm,
-                    dμ=grads[0].clone(), 
-                    dΣ=grads[1].clone()))
-
-                pbar.update(1)
-                pbar.set_description(f'{relnorm:4f}')
+                    relnorm=relnorm))
 
                 return l
 
             optim.step(closure)
             closure()
 
-            if trace[-1].relnorm < tol:
+            if trace[-1].relnorm < self.tol:
                 break
 
         else:
             print('Didn\'t converge')
 
-    differ = Differ(N)
-    μd, σ2d = map(differ.as_square, differ(vb.μ, vb.Σ))
-    
-    return arrdict.arrdict(
-        μ=vb.μ, 
-        Σ=vb.Σ, 
-        μd=μd,
-        σd=σ2d**.5,
-        trace=arrdict.stack(trace)).detach().numpy()
+        μd, σ2d = map(self.differ.as_square, self.differ(self.vb.μ, self.vb.Σ))
+        return arrdict.arrdict(
+            μ=self.vb.μ, 
+            Σ=self.vb.Σ, 
+            μd=μd,
+            σd=σ2d**.5,
+            trace=arrdict.stack(trace)).detach().numpy()
 
 def plot(soln):
     fig, axes = plt.subplots(1, 4)
@@ -229,7 +225,7 @@ def test_artificial():
     d = s[:, None] - s[None, :]
     w = sp.stats.binom(n, 1/(1 + np.exp(-d))).rvs()
 
-    soln = solve(n, w)
+    soln = Solver(n.shape[0])(n, w)
 
     plt.scatter(s, soln.μ)
 
@@ -243,6 +239,6 @@ def test_organic():
 
     n, w = map(torch.as_tensor, (n, w))
 
-    soln = solve(n, w)
+    soln = Solver(n.shape[0])(n, w)
 
     plot(soln)
