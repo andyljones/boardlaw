@@ -194,9 +194,9 @@ def plot(soln):
     ax.imshow(soln.σd)
     ax.set_title('σd')
 
-def suggest(Σ):
-    # Residual v. the first agent
-    Σ = Σ[1:, 1:] - np.outer(Σ[1:, 0], Σ[1:, 0])/Σ[0, 0]
+def sensitivities(Σ):
+    # Residual v. the average agent
+    Σ = Σ - np.outer(Σ.mean(0), Σ.mean(0))/Σ.mean()
 
     # Trace if we conditioned I-J out
     σ2d = np.diag(Σ)[:, None] + np.diag(Σ)[None, :] - 2*Σ
@@ -204,9 +204,20 @@ def suggest(Σ):
     trace = np.zeros_like(Σ)
     np.divide(colerr, σ2d, out=trace, where=(σ2d > 0))
 
-    N = Σ.shape[0]
-    idx = trace.argmax()
-    return idx // N, idx % N
+    return trace
+
+def alphas(μd, σd, k):
+    dϕ = np.exp(-μd)/(1 + np.exp(-μd))**2
+
+    α = 1/(1 + k*dϕ*σd**2)
+
+    return α
+
+def suggest(soln, k):
+    improvement = (1 - alphas(soln.μd, soln.σd, k))*sensitivities(soln.Σ)
+    idx = improvement.argmax()
+    return np.unravel_index(idx, improvement.shape) 
+
 
 def test_artificial():
     N = 5
