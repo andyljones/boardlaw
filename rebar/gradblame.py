@@ -6,6 +6,15 @@ from torch.autograd import Variable
 
 Node = namedtuple('Node', ('name', 'inputs', 'attr', 'op'))
 
+def children(v):
+    if hasattr(v, 'next_functions'):
+        for (u, _) in v.next_functions:
+            if u is not None:
+                yield u
+    if hasattr(v, 'saved_tensors'):
+        for u in v.saved_tensors:
+            yield u
+
 def traverse(output):
 
     seen = set()
@@ -14,13 +23,8 @@ def traverse(output):
         v = boundary.pop()
         if v not in seen:
             seen.add(v)
-            if hasattr(v, 'next_functions'):
-                for (u, _) in v.next_functions:
-                    if u is not None:
-                        boundary.add(u)
-            if hasattr(v, 'saved_tensors'):
-                for u in v.saved_tensors:
-                    boundary.add(u)
+            for c in children(v):
+                boundary.add(c)
 
             yield v
 
@@ -51,6 +55,9 @@ def grads(l):
 
     return dotdict.dotdict(tensors=tensorgrads, ins=ingrads, outs=outgrads)
 
+def size_to_str(size):
+    return '(' + (', ').join(['%d' % v for v in size]) + ')'
+
 def resize_graph(dot, size_per_element=0.15, min_size=12):
     """Resize the graph according to how much content it contains.
     Modify the graph in place.
@@ -62,18 +69,15 @@ def resize_graph(dot, size_per_element=0.15, min_size=12):
     size_str = str(size) + "," + str(size)
     dot.graph_attr.update(size=size_str)
 
-def make_dot(var, params=None):
-    """ Produces Graphviz representation of PyTorch autograd graph.
-    Blue nodes are the Variables that require grad, orange are Tensors
-    saved for backward in torch.autograd.Function
-    Args:
-        var: output Variable
-        params: dict of (name, Variable) to add names to node that
-            require grad (TODO: make optional)
-    """
-    if params is not None:
-        assert all(isinstance(p, Variable) for p in params.values())
-        param_map = {id(v): k for k, v in params.items()}
+def graph(output, params={}):
+    if not isinstance(output, tuple):
+        output = (output,)
+    if isinstance(params, list):
+        params = dict(params)
+    assert all(isinstance(p, Variable) for p in params.values())
+
+    param_map = {id(v): k for k, v in params.items()}
+    output_nodes = {v.grad_fn for v in output}
 
     node_attr = dict(style='filled',
                      shape='box',
@@ -82,45 +86,24 @@ def make_dot(var, params=None):
                      ranksep='0.1',
                      height='0.2')
     dot = Digraph(node_attr=node_attr, graph_attr=dict(size="12,12"))
-    seen = set()
 
-    def size_to_str(size):
-        return '(' + (', ').join(['%d' % v for v in size]) + ')'
+    for v in traverse(output):
+        if torch.is_tensor(v):
+            # note: this used to show .saved_tensors in pytorch0.2, but stopped
+            # working as it was moved to ATen and Variable-Tensor merged
+            dot.node(str(id(v)), size_to_str(v.size()), fillcolor='orange')
+        elif hasattr(v, 'variable'):
+            u = v.variable
+            name = param_map.get(id(u), '') 
+            node_name = '%s\n %s' % (name, size_to_str(u.size()))
+            dot.node(str(id(v)), node_name, fillcolor='lightblue')
+        elif v in output_nodes:
+            dot.node(str(id(v)), str(type(v).__name__), fillcolor='darkolivegreen1')
+        else:
+            dot.node(str(id(v)), str(type(v).__name__))
 
-    output_nodes = (var.grad_fn,) if not isinstance(var, tuple) else tuple(v.grad_fn for v in var)
-
-    def add_nodes(var):
-        if var not in seen:
-            if torch.is_tensor(var):
-                # note: this used to show .saved_tensors in pytorch0.2, but stopped
-                # working as it was moved to ATen and Variable-Tensor merged
-                dot.node(str(id(var)), size_to_str(var.size()), fillcolor='orange')
-            elif hasattr(var, 'variable'):
-                u = var.variable
-                name = param_map[id(u)] if params is not None else ''
-                node_name = '%s\n %s' % (name, size_to_str(u.size()))
-                dot.node(str(id(var)), node_name, fillcolor='lightblue')
-            elif var in output_nodes:
-                dot.node(str(id(var)), str(type(var).__name__), fillcolor='darkolivegreen1')
-            else:
-                dot.node(str(id(var)), str(type(var).__name__))
-            seen.add(var)
-            if hasattr(var, 'next_functions'):
-                for u in var.next_functions:
-                    if u[0] is not None:
-                        dot.edge(str(id(u[0])), str(id(var)))
-                        add_nodes(u[0])
-            if hasattr(var, 'saved_tensors'):
-                for t in var.saved_tensors:
-                    dot.edge(str(id(t)), str(id(var)))
-                    add_nodes(t)
-
-    # handle multiple outputs
-    if isinstance(var, tuple):
-        for v in var:
-            add_nodes(v.grad_fn)
-    else:
-        add_nodes(var.grad_fn)
+        for c in children(v):
+            dot.edge(str(id(c)), str(id(v)))
 
     resize_graph(dot)
 
@@ -135,3 +118,5 @@ def demo():
     n = torch.zeros((N, N)).int()
     l = vb(n, w)
     grads(l)
+
+    graph(l, vb.named_parameters())
