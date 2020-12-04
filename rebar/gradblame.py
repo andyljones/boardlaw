@@ -1,9 +1,55 @@
 from collections import namedtuple
+from . import dotdict
 from graphviz import Digraph
 import torch
 from torch.autograd import Variable
 
 Node = namedtuple('Node', ('name', 'inputs', 'attr', 'op'))
+
+def traverse(output):
+
+    seen = set()
+    boundary = {v.grad_fn for v in output} if isinstance(output, tuple) else {output.grad_fn}
+    while boundary:
+        v = boundary.pop()
+        if v not in seen:
+            seen.add(v)
+            if hasattr(v, 'next_functions'):
+                for (u, _) in v.next_functions:
+                    if u is not None:
+                        boundary.add(u)
+            if hasattr(v, 'saved_tensors'):
+                for u in v.saved_tensors:
+                    boundary.add(u)
+
+            yield v
+
+def grads(l):
+
+    hooks = {}
+    tensorgrads, ingrads, outgrads = {}, {}, {}
+    def add_hook(v): 
+        
+        def tensorhook(g):
+            tensorgrads[v] = g
+            
+        def funchook(i, o):
+            ingrads[v] = i
+            outgrads[v] = o
+            
+        if isinstance(v, torch.Tensor):
+            hooks[v] = v.register_hook(tensorhook)
+        else:
+            hooks[v] = v.register_hook(funchook)
+
+    for v in traverse(l):
+        add_hook(v)
+    l.backward()
+
+    for _, h in hooks:
+        h.remove()
+
+    return dotdict.dotdict(tensors=tensorgrads, ins=ingrads, outs=outgrads)
 
 def resize_graph(dot, size_per_element=0.15, min_size=12):
     """Resize the graph according to how much content it contains.
@@ -80,3 +126,12 @@ def make_dot(var, params=None):
 
     return dot
 
+def demo():
+    from scalinglaws.arena.vb import VB
+    vb = VB(5)
+
+    N = 5
+    w = torch.zeros((N, N)).int()
+    n = torch.zeros((N, N)).int()
+    l = vb(n, w)
+    grads(l)
