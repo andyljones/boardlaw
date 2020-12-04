@@ -114,7 +114,7 @@ class VB(nn.Module):
         return -self.expected_log_likelihood(n, w).sum() - self.expected_prior().sum()
 
     def entropy(self):
-        return 1/2*torch.logdet(2*np.pi*np.e*self.Σ)
+        return 1/2*(self.N*np.log(2*np.pi*np.e) + torch.logdet(self.Σ))
 
     def forward(self, n, w):
         return -self.cross_entropy(n, w) + self.entropy()
@@ -136,6 +136,8 @@ class Solver():
                 l = -self.vb(n, w)
                 optim.zero_grad()
                 l.backward()
+                if torch.isnan(l):
+                    import aljpy; aljpy.extract()
 
                 grads = [p.grad for p in self.vb.parameters()]
                 paramnorm = torch.cat([p.data.flatten() for p in self.vb.parameters()]).pow(2).mean().pow(.5)

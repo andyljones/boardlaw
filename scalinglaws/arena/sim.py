@@ -93,7 +93,7 @@ def solve(truth, games_per=256, σbar_tol=.1):
 
         soln['n'] = games.clone()
         soln['w'] = wins.clone()
-        soln['σbar'] = (soln.σd**2).mean(-1).mean(-1)**.5
+        soln['σbar'] = (soln.σd**2).mean()**.5
         soln['resid_var'] = 1 - np.corrcoef(ranks, truth)[0, 1]**.2
         trace.append(arrdict.arrdict({k: v for k, v in soln.items() if k != 'trace'}))
         print(soln.σbar, soln.resid_var)
