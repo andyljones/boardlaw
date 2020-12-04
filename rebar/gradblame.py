@@ -1,4 +1,6 @@
 from collections import namedtuple
+
+from torch import tensor
 from . import dotdict
 from graphviz import Digraph
 import torch
@@ -35,16 +37,14 @@ def grads(l):
     def add_hook(v): 
         
         def tensorhook(g):
-            tensorgrads[v] = g
+            tensorgrads[str(id(v))] = g.clone()
             
         def funchook(i, o):
-            ingrads[v] = i
-            outgrads[v] = o
+            ingrads[str(id(v))] = i.clone()
+            outgrads[str(id(v))] = o.clone()
             
-        if isinstance(v, torch.Tensor):
-            hooks[v] = v.register_hook(tensorhook)
-        else:
-            hooks[v] = v.register_hook(funchook)
+        hook = tensorhook if isinstance(v, torch.Tensor) else funchook
+        hooks[str(id(v))] = v.register_hook(hook)
 
     for v in traverse(l):
         add_hook(v)
