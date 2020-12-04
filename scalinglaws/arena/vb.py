@@ -144,10 +144,13 @@ class Solver():
                 gradnorm = torch.cat([g.flatten() for g in grads]).pow(2).mean().pow(.5)
                 relnorm = gradnorm/paramnorm
 
+                print(list(self.vb.parameters())[1].grad.clone().pow(2).mean().pow(.5))
+
                 trace.append(arrdict.arrdict(
                     l=l.detach(),
                     gradnorm=gradnorm,
-                    relnorm=relnorm))
+                    relnorm=relnorm,
+                    Σ=self.vb.Σ.clone()))
 
                 return l
 
