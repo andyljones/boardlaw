@@ -1,3 +1,4 @@
+from functools import wraps
 from rebar import arrdict, dotdict
 import numpy as np
 import sympy as sym
@@ -11,7 +12,7 @@ from tqdm.auto import tqdm
 import geotorch
 
 μ0 = 0
-σ0 = 2
+σ0 = 1
 
 μ_lims = [-5*σ0, +5*σ0]
 σ2_lims = [-4, +2]
@@ -39,7 +40,7 @@ class Differ(nn.Module):
 def evaluate(interp, μd, σd):
     return torch.as_tensor(interp(μd.detach().numpy(), σd.detach().numpy(), grid=False)).float()
 
-class GaussianExpectation(Function):
+class NormalExpectation(Function):
 
     @staticmethod
     def auxinfo(f, K=1001, S=50):
@@ -64,7 +65,7 @@ class GaussianExpectation(Function):
             fs=fs, dμs=dμs, dσs=dσ2s)
 
     @staticmethod
-    def forward(ctx, μd, σ2d, aux):
+    def forward(ctx, aux, μd, σ2d):
         ctx.save_for_backward(μd, σ2d)
         ctx.aux = aux
         return evaluate(aux.f, μd, σ2d)
@@ -78,7 +79,7 @@ class GaussianExpectation(Function):
         dldμ = dldf*dfdμ
         dldσ2d = dldf*dfdσ2d
 
-        return dldμ, dldσ2d, None
+        return None, dldμ, dldσ2d
 
     @staticmethod
     def plot(aux):
@@ -87,7 +88,17 @@ class GaussianExpectation(Function):
         plt.imshow(np.exp(aux.fs), extent=(l, r, b, t), vmin=0, vmax=1, cmap='RdBu', aspect='auto')
         plt.colorbar()
 
-class VB(nn.Module):
+@wraps(NormalExpectation.auxinfo)
+def normal_expectation(*args, **kwargs):
+    aux = NormalExpectation.auxinfo(*args, **kwargs)
+    
+    @wraps(NormalExpectation.apply)
+    def f(*args):
+        return NormalExpectation.apply(aux, *args)
+
+    return f
+
+class ELBO(nn.Module):
     
     def __init__(self, N):
         super().__init__()
@@ -97,13 +108,13 @@ class VB(nn.Module):
         geotorch.positive_definite(self, 'Σ')
 
         self.differ = Differ(N)
-        self.aux = GaussianExpectation.auxinfo(lambda d: -np.log(1 + np.exp(-d)))
+        self.expectation = normal_expectation(lambda d: -np.log(1 + np.exp(-d)))
 
     def expected_log_likelihood(self, n, w):
         μd, σ2d = self.differ(self.μ, self.Σ)
 
-        p = GaussianExpectation.apply(μd, σ2d, self.aux)
-        q = GaussianExpectation.apply(-μd, σ2d, self.aux)
+        p = self.expectation(μd, σ2d)
+        q = self.expectation(-μd, σ2d)
 
         p = self.differ.as_square(p, .5)
         q = self.differ.as_square(q, .5)
@@ -135,41 +146,42 @@ class VB(nn.Module):
     def forward(self, n, w):
         return -self.cross_entropy(n, w) + self.entropy()
 
-class Solver():
+class Solver:
 
     def __init__(self, N, tol=.1, T=100):
-        self.vb = VB(N)
+        self.elbo = ELBO(N)
         self.differ = Differ(N)
         self.tol = tol
         self.T = T
 
     def __call__(self, n, w):
-        optim = torch.optim.LBFGS(self.vb.parameters())
+        optim = torch.optim.LBFGS(self.elbo.parameters())
         trace = []
         for t in range(self.T):
 
             def closure():
-                l = -self.vb(n, w)
+                l = -self.elbo(n, w)
                 optim.zero_grad()
                 l.backward()
                 if torch.isnan(l):
                     import aljpy; aljpy.extract()
 
-                grads = [p.grad for p in self.vb.parameters()]
-                paramnorm = torch.cat([p.data.flatten() for p in self.vb.parameters()]).pow(2).mean().pow(.5)
+                grads = [p.grad for p in self.elbo.parameters()]
+                paramnorm = torch.cat([p.data.flatten() for p in self.elbo.parameters()]).pow(2).mean().pow(.5)
                 gradnorm = torch.cat([g.flatten() for g in grads]).pow(2).mean().pow(.5)
                 relnorm = gradnorm/paramnorm
 
-                print(list(self.vb.parameters())[1].grad.clone().pow(2).mean().pow(.5))
+                print(relnorm)
 
                 trace.append(arrdict.arrdict(
                     l=l.detach(),
                     gradnorm=gradnorm,
                     relnorm=relnorm,
-                    Σ=self.vb.Σ.clone()))
+                    Σ=self.elbo.Σ.clone()))
 
                 return l
 
+            #TODO: Use LBFGS's terminate params
             optim.step(closure)
             closure()
 
@@ -179,10 +191,10 @@ class Solver():
         else:
             print('Didn\'t converge')
 
-        μd, σ2d = map(self.differ.as_square, self.differ(self.vb.μ, self.vb.Σ))
+        μd, σ2d = map(self.differ.as_square, self.differ(self.elbo.μ, self.elbo.Σ))
         return arrdict.arrdict(
-            μ=self.vb.μ.clone(), 
-            Σ=self.vb.Σ.clone(), 
+            μ=self.elbo.μ.clone(), 
+            Σ=self.elbo.Σ.clone(), 
             μd=μd,
             σd=σ2d**.5,
             trace=arrdict.stack(trace)).detach().numpy()

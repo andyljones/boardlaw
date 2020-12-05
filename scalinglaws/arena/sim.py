@@ -69,7 +69,7 @@ def grad_suggest(wins, games, ranks):
     sensitivities = wins.grad.abs()
     return unravel(sensitivities.argmax(), games.shape)
 
-def solve(truth, games_per=256, σbar_tol=.1):
+def solve(truth, games_per=256, σbar_tol=.01):
     n_agents = len(truth)
     games_per = 256
     n_agents = len(truth)
@@ -110,7 +110,7 @@ def solve(truth, games_per=256, σbar_tol=.1):
 
 def plot(trace):
     import pandas as pd
-    t = 25
+    t = -1
     df = pd.DataFrame({'σ': trace.σd[t, 0], 'μ': trace.μd[t, :, 0]})
     plt.errorbar(np.arange(len(df)), df.μ, yerr=df.σ, marker='o', linestyle='', capsize=3)
 
