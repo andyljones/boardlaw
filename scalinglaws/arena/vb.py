@@ -112,7 +112,16 @@ class ELBO(nn.Module):
         self.differ = Differ(N)
         self.expectation = normal_expectation(lambda d: -np.log(1 + np.exp(-d)), **kwargs)
 
+    def expected_prior(self):
+        # Constant isn't strictly needed, but it does help with testing
+        const = -1/2*np.log(2*np.pi) - np.log(σ0)
+
+        return const - 1/(2*σ0**2)*((self.μ - μ0)**2 + torch.diag(self.Σ))
+
     def expected_log_likelihood(self, n, w):
+        # Constant isn't strictly needed, but it does help with testing
+        const = torch.lgamma(n.float()+1) - torch.lgamma(w.float()+1) - torch.lgamma((n-w).float()+1)
+
         μd, σ2d = self.differ(self.μ, self.Σ)
 
         p = self.expectation(μd, σ2d)
@@ -121,19 +130,10 @@ class ELBO(nn.Module):
         p = self.differ.as_square(p, -np.log(2))
         q = self.differ.as_square(q, -np.log(2))
  
-        return w*p + (n - w)*q
-
-    def expected_prior(self):
-        const = -1/2*np.log(2*np.pi) - np.log(σ0)
-        # Proof:
-        # from sympy.stats import E, Normal
-        # s, μ, μ0, σ, σ0 = symbols('s μ μ_0 σ σ_0')
-        # s = Normal('s', μ, σ)
-        # 1/(2*σ0**2)*E(-(s - μ0)**2)
-        return const - 1/(2*σ0**2)*((self.μ - μ0)**2 + torch.diag(self.Σ))
+        return const + w*p + (n - w)*q
 
     def cross_entropy(self, n, w):
-        return -self.expected_log_likelihood(n, w).sum() - self.expected_prior().sum()
+        return -self.expected_prior().sum() - self.expected_log_likelihood(n, w).sum() 
 
     def entropy(self):
         return 1/2*(self.N*np.log(2*np.pi*np.e) + torch.logdet(self.Σ))
@@ -321,7 +321,7 @@ def test_elbo():
     s = torch.distributions.MultivariateNormal(elbo.μ, elbo.Σ).sample((100000,))
     d = s[:, :, None] - s[:, None, :]
     r = 1/(1 + torch.exp(-d))
-    log_likelihood = w*torch.log(r) + (n - w)*torch.log(1 - r)
+    log_likelihood = torch.distributions.Binomial(n, r).log_prob(w.float())
 
     expected = log_likelihood.mean(0)
 
