@@ -148,7 +148,7 @@ class Solver:
         self.elbo = ELBO(N)
         self.initial = {k: v.clone() for k, v in self.elbo.state_dict().items()}
         self.differ = Differ(N)
-        self.kwargs = kwargs
+        self.kwargs = {**kwargs, 'max_iter': 100}
 
     def _reset(self):
         self.elbo.load_state_dict(self.initial)
@@ -200,9 +200,10 @@ def plot(soln):
     fig.set_size_inches(20, 5)
 
     ax = axes[0]
-    ax.plot(soln.trace.l)
+    ax.plot(soln.trace.l - soln.trace.l[-1] + 1)
     ax.set_xlim(0, len(soln.trace.l)-1)
     ax.set_title('loss')
+    ax.set_yscale('log')
 
     ax = axes[1]
     ax.plot(soln.trace.relnorm)
@@ -240,10 +241,12 @@ def alphas(μd, σd, k):
 
     return α
 
+def improvement(soln, k):
+    return (1 - alphas(soln.μd, soln.σd, k))*sensitivities(soln.Σ)
+
 def suggest(soln, k):
-    improvement = (1 - alphas(soln.μd, soln.σd, k))*sensitivities(soln.Σ)
-    idx = improvement.argmax()
-    return np.unravel_index(idx, improvement.shape) 
+    idx = improvement(soln, k).argmax()
+    return np.unravel_index(idx, soln.μd.shape) 
 
 def demo_artificial():
     N = 5
@@ -325,3 +328,18 @@ def test_elbo():
     expected = log_likelihood.mean(0)
 
     torch.testing.assert_allclose(expected, elbo.expected_log_likelihood(n, w), rtol=.01, atol=.01)
+
+def test_improvement():
+    k = 10
+    n = torch.tensor([[0, k], [k, 0]])
+    w = torch.tensor([[0, k//2], [k//2, 0]])
+
+    solver = Solver(2)
+
+    first = solver(n, w)
+    second = solver(2*n, 2*n)
+
+    expected = second.σd[0, 1]/first.σd[0, 1]
+    actual = improvement(first, k)
+
+    torch.testing.assert_allclose(expected, actual)
