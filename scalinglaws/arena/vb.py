@@ -247,7 +247,6 @@ def suggest(soln, k):
     idx = improvement.argmax()
     return np.unravel_index(idx, improvement.shape) 
 
-
 def test_artificial():
     N = 5
 
@@ -275,3 +274,14 @@ def test_organic():
     soln = Solver(n.shape[0])(n, w)
 
     plot(soln)
+
+def test_normal_expectation():
+    μ = torch.tensor(1.)
+    σ = torch.tensor(2.)
+
+    expected = μ
+
+    expectation = normal_expectation(lambda x: x)
+    actual = expectation(μ, σ)
+
+    torch.testing.assert_allclose(expected, actual)
