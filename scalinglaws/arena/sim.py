@@ -71,8 +71,6 @@ def grad_suggest(wins, games, ranks):
 
 def solve(truth, games_per=256, σbar_tol=.1):
     n_agents = len(truth)
-    games_per = 256
-    n_agents = len(truth)
     wins = torch.zeros((n_agents, n_agents))
     games = torch.zeros((n_agents, n_agents))
 
@@ -108,11 +106,13 @@ def solve(truth, games_per=256, σbar_tol=.1):
 
     return trace
 
-def plot(trace):
+def plot(trace, truth=None):
     import pandas as pd
     t = -1
     df = pd.DataFrame({'σ': trace.σd[t, 0], 'μ': trace.μd[t, :, 0]})
     plt.errorbar(np.arange(len(df)), df.μ, yerr=df.σ, marker='o', linestyle='', capsize=3)
+    if truth is not None:
+        plt.plot(truth)
 
 def fixed_benchmark():
     truth = log_ranks(10)

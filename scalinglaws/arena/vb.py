@@ -10,6 +10,7 @@ from torch import nn
 from torch.autograd import Function
 from tqdm.auto import tqdm
 import geotorch
+from . import psd
 
 μ0 = 0
 σ0 = 5
@@ -143,7 +144,7 @@ class ELBO(nn.Module):
 
 class Solver:
 
-    def __init__(self, N, tol=.1, T=100):
+    def __init__(self, N, tol=.01, T=100):
         self.elbo = ELBO(N)
         self.original = {k: v.clone() for k, v in self.elbo.state_dict().items()}
         self.differ = Differ(N)
@@ -152,43 +153,40 @@ class Solver:
 
     def __call__(self, n, w):
         self.elbo.load_state_dict(self.original)
-        optim = torch.optim.LBFGS(self.elbo.parameters())
+        # The gradients around here can be a little explode-y; a line search is a bit slow but 
+        # keeps us falling up any cliffs.
+        optim = torch.optim.LBFGS(
+            self.elbo.parameters(), 
+            line_search_fn='strong_wolfe', 
+            tolerance_grad=self.tol*1e-5, 
+            tolerance_change=self.tol*1e-9)
+
         trace = []
-        for t in range(self.T):
 
-            def closure():
-                l = -self.elbo(n, w)
-                optim.zero_grad()
-                l.backward()
-                if torch.isnan(l):
-                    import aljpy; aljpy.extract()
+        def closure():
+            l = -self.elbo(n, w)
+            optim.zero_grad()
+            l.backward()
+            if torch.isnan(l):
+                import aljpy; aljpy.extract()
 
-                grads = [p.grad for p in self.elbo.parameters()]
-                paramnorm = torch.cat([p.data.flatten() for p in self.elbo.parameters()]).pow(2).mean().pow(.5)
-                gradnorm = torch.cat([g.flatten() for g in grads]).pow(2).mean().pow(.5)
-                relnorm = gradnorm/paramnorm
+            grads = [p.grad for p in self.elbo.parameters()]
+            paramnorm = torch.cat([p.data.flatten() for p in self.elbo.parameters()]).pow(2).mean().pow(.5)
+            gradnorm = torch.cat([g.flatten() for g in grads]).pow(2).mean().pow(.5)
+            relnorm = gradnorm/paramnorm
 
-                print(gradnorm)
-                # if gradnorm > 50:
-                #     import aljpy; aljpy.extract()
+            # print(gradnorm)
 
-                trace.append(arrdict.arrdict(
-                    l=l.detach(),
-                    gradnorm=gradnorm,
-                    relnorm=relnorm,
-                    Σ=self.elbo.Σ.clone()))
+            trace.append(arrdict.arrdict(
+                l=l.detach(),
+                gradnorm=gradnorm,
+                relnorm=relnorm,
+                Σ=self.elbo.Σ.clone()))
 
-                return l
+            return l
 
-            #TODO: Use LBFGS's terminate params
-            optim.step(closure)
-            closure()
-
-            if trace[-1].relnorm < self.tol:
-                break
-
-        else:
-            print('Didn\'t converge')
+        optim.step(closure)
+        closure()
 
         μd, σ2d = map(self.differ.as_square, self.differ(self.elbo.μ, self.elbo.Σ))
         return arrdict.arrdict(
@@ -214,7 +212,9 @@ def plot(soln):
     ax.set_title('norms')
 
     ax = axes[2]
-    ax.plot(soln.μ)
+    ax.errorbar(
+        np.arange(soln.μd.shape[0]), 
+        soln.μd[:, 0], yerr=soln.σd[0, :], marker='.', linestyle='')
     ax.set_xlim(0, len(soln.μ)-1)
     ax.set_title('μ')
 
