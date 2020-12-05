@@ -108,20 +108,26 @@ class VB(nn.Module):
         p = self.differ.as_square(p, .5)
         q = self.differ.as_square(q, .5)
 
+        # Don't need this for the optimization, but making this 
+        # interpretable as an actual logprob is useful for debugging
         log_n_choose_w = torch.lgamma(n.float()+1) - torch.lgamma(w.float()+1) - torch.lgamma((n-w).float()+1)
  
         return log_n_choose_w + w*p + (n - w)*q
 
     def expected_prior(self):
+        # Don't need this for the optimization, but making this 
+        # interpretable as an actual logprob is useful for debugging
+        const = -self.N/2*np.log(2*np.pi*σ0**2)
+
         # Proof:
         # from sympy.stats import E, Normal
         # s, μ, μ0, σ, σ0 = symbols('s μ μ_0 σ σ_0')
         # s = Normal('s', μ, σ)
-        # 1/(2*σ0)*E(-(s - μ0)**2)
-        return -1/(2*σ0)*((self.μ - μ0)**2 + torch.diag(self.Σ))
+        # 1/(2*σ0**2)*E(-(s - μ0)**2)
+        return const - 1/(2*σ0**2)*((self.μ - μ0)**2 + torch.diag(self.Σ))
 
     def cross_entropy(self, n, w):
-        return self.expected_log_likelihood(n, w).sum() + self.expected_prior().sum()
+        return -self.expected_log_likelihood(n, w).sum() - self.expected_prior().sum()
 
     def entropy(self):
         return 1/2*(self.N*np.log(2*np.pi*np.e) + torch.logdet(self.Σ))
