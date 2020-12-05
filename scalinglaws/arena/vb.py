@@ -2,6 +2,7 @@ from rebar import arrdict, dotdict
 import numpy as np
 import sympy as sym
 import scipy as sp
+import scipy.stats
 import matplotlib.pyplot as plt
 import torch
 from torch import nn
@@ -41,13 +42,15 @@ def evaluate(interp, μd, σd):
 class GaussianExpectation(Function):
 
     @staticmethod
-    def auxinfo(f, K=501, S=50):
+    def auxinfo(f, K=1001, S=50):
         μ = np.linspace(*μ_lims, K)
         σ2 = np.logspace(*σ2_lims, K, base=10)
 
         zs, ws = np.polynomial.hermite_e.hermegauss(S)
         ds = (μ[:, None, None] + zs[None, None, :]*σ2[None, :, None]**.5)
-        fs = 1/(2*np.pi)**.5 * (f(ds)*ws).sum(-1)
+        # Pick up a σ from the change of variables 
+        scale = σ2[None, :]**.5/(2*np.pi)**.5
+        fs = scale*(f(ds)*ws).sum(-1)
         f = sp.interpolate.RectBivariateSpline(μ, σ2, fs, kx=1, ky=1)
 
         dμs = (fs[2:, :] - fs[:-2, :])/(μ[2:] - μ[:-2])[:, None]
@@ -98,9 +101,16 @@ class VB(nn.Module):
 
     def expected_log_likelihood(self, n, w):
         μd, σ2d = self.differ(self.μ, self.Σ)
-        wins = w*self.differ.as_square(GaussianExpectation.apply(μd, σ2d, self.aux), .5)
-        losses = (n - w)*self.differ.as_square(GaussianExpectation.apply(-μd, σ2d, self.aux), .5)
-        return wins + losses
+
+        p = GaussianExpectation.apply(μd, σ2d, self.aux)
+        q = GaussianExpectation.apply(-μd, σ2d, self.aux)
+
+        p = self.differ.as_square(p, .5)
+        q = self.differ.as_square(q, .5)
+
+        log_n_choose_w = torch.lgamma(n.float()+1) - torch.lgamma(w.float()+1) - torch.lgamma((n-w).float()+1)
+ 
+        return log_n_choose_w + w*p + (n - w)*q
 
     def expected_prior(self):
         # Proof:
@@ -111,7 +121,7 @@ class VB(nn.Module):
         return -1/(2*σ0)*((self.μ - μ0)**2 + torch.diag(self.Σ))
 
     def cross_entropy(self, n, w):
-        return -self.expected_log_likelihood(n, w).sum() - self.expected_prior().sum()
+        return self.expected_log_likelihood(n, w).sum() + self.expected_prior().sum()
 
     def entropy(self):
         return 1/2*(self.N*np.log(2*np.pi*np.e) + torch.logdet(self.Σ))
@@ -223,14 +233,14 @@ def suggest(soln, k):
 def test_artificial():
     N = 5
 
-    s = np.random.randn(N)
+    s = torch.randn(N)
 
-    n = np.random.randint(1, 10, (N, N))
+    n = torch.randint(1, 10, (N, N))
 
     d = s[:, None] - s[None, :]
-    w = sp.stats.binom(n, 1/(1 + np.exp(-d))).rvs()
+    w = torch.distributions.Binomial(n, 1/(1 + np.exp(-d))).sample()
 
-    soln = Solver(n.shape[0])(n, w)
+    soln = Solver(N)(n, w)
 
     plt.scatter(s, soln.μ)
 
