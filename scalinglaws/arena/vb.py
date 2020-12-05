@@ -118,21 +118,19 @@ class ELBO(nn.Module):
         p = self.expectation(μd, σ2d)
         q = self.expectation(-μd, σ2d)
 
-        p = self.differ.as_square(p, .5)
-        q = self.differ.as_square(q, .5)
+        p = self.differ.as_square(p, -np.log(2))
+        q = self.differ.as_square(q, -np.log(2))
  
         return w*p + (n - w)*q
 
     def expected_prior(self):
-        # Constant's not necessary for the optimization, but is useful for testing
-        const = -1/2*np.log(2*np.pi*σ0**2)
-
+        const = -1/2*np.log(2*np.pi) - np.log(σ0)
         # Proof:
         # from sympy.stats import E, Normal
         # s, μ, μ0, σ, σ0 = symbols('s μ μ_0 σ σ_0')
         # s = Normal('s', μ, σ)
         # 1/(2*σ0**2)*E(-(s - μ0)**2)
-        return const + -1/(2*σ0**2)*((self.μ - μ0)**2 + torch.diag(self.Σ))
+        return const - 1/(2*σ0**2)*((self.μ - μ0)**2 + torch.diag(self.Σ))
 
     def cross_entropy(self, n, w):
         return -self.expected_log_likelihood(n, w).sum() - self.expected_prior().sum()
@@ -300,15 +298,31 @@ def test_normal_expectation():
     torch.testing.assert_allclose(expected, actual)
 
 def test_elbo():
-    elbo = ELBO(1, K=100, constrain=False)
-    elbo.μ[:] = torch.tensor([1.])
-    elbo.Σ[:] = torch.tensor([[2.]])
+    elbo = ELBO(2, constrain=False)
+    elbo.μ[:] = torch.tensor([1., 2.])
+    elbo.Σ[:] = torch.tensor([[1., .5], [.5, 2.]])
+
+    approx = torch.distributions.MultivariateNormal(elbo.μ, elbo.Σ)
+    s = approx.sample((100000,))
 
     # Test entropy
-    expected_entropy = 1/2*torch.log(2*np.pi*np.e*torch.tensor(2.))
-    torch.testing.assert_allclose(expected_entropy, elbo.entropy())
+    expected = -approx.log_prob(s).mean()
+    torch.testing.assert_allclose(expected, elbo.entropy(), rtol=.01, atol=.01)
 
     # Test prior
+    prior = torch.distributions.MultivariateNormal(torch.full((2,), μ0), σ0**2 * torch.eye(2))
+    expected = prior.log_prob(s).mean()
+    torch.testing.assert_allclose(expected, elbo.expected_prior().sum(), rtol=.01, atol=.01)
+
+    # Test likelihood
+    n = torch.tensor([[0, 3], [3, 0]])
+    w = torch.tensor([[0, 1], [1, 0]])
+
     s = torch.distributions.MultivariateNormal(elbo.μ, elbo.Σ).sample((100000,))
-    expected_prior = (-1/2*(s - μ0)**2/σ0**2).mean()
-    torch.testing.assert_allclose(expected_prior, elbo.expected_prior().sum(), rtol=.01, atol=.01)
+    d = s[:, :, None] - s[:, None, :]
+    r = 1/(1 + torch.exp(-d))
+    log_likelihood = w*torch.log(r) + (n - w)*torch.log(1 - r)
+
+    expected = log_likelihood.mean(0)
+
+    torch.testing.assert_allclose(expected, elbo.expected_log_likelihood(n, w), rtol=.01, atol=.01)
