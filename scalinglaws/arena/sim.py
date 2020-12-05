@@ -69,7 +69,7 @@ def grad_suggest(wins, games, ranks):
     sensitivities = wins.grad.abs()
     return unravel(sensitivities.argmax(), games.shape)
 
-def solve(truth, games_per=256, σbar_tol=.01):
+def solve(truth, games_per=256, σbar_tol=.1):
     n_agents = len(truth)
     games_per = 256
     n_agents = len(truth)

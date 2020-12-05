@@ -12,7 +12,7 @@ from tqdm.auto import tqdm
 import geotorch
 
 μ0 = 0
-σ0 = 1
+σ0 = 5
 
 μ_lims = [-5*σ0, +5*σ0]
 σ2_lims = [-4, +2]
@@ -50,7 +50,7 @@ class NormalExpectation(Function):
         zs, ws = np.polynomial.hermite_e.hermegauss(S)
         ds = (μ[:, None, None] + zs[None, None, :]*σ2[None, :, None]**.5)
         # Pick up a σ from the change of variables 
-        scale = σ2[None, :]**.5/(2*np.pi)**.5
+        scale = 1/(2*np.pi)**.5
         fs = scale*(f(ds)*ws).sum(-1)
         f = sp.interpolate.RectBivariateSpline(μ, σ2, fs, kx=1, ky=1)
 
@@ -100,15 +100,17 @@ def normal_expectation(*args, **kwargs):
 
 class ELBO(nn.Module):
     
-    def __init__(self, N):
+    def __init__(self, N, constrain=True, **kwargs):
         super().__init__()
         self.N = N
         self.register_parameter('μ', nn.Parameter(torch.zeros((N,)).float()))
         self.register_parameter('Σ', nn.Parameter(torch.eye(N).float()))
-        geotorch.positive_definite(self, 'Σ')
+        # Useful to be able to turn this off for testing
+        if constrain:
+            geotorch.positive_definite(self, 'Σ')
 
         self.differ = Differ(N)
-        self.expectation = normal_expectation(lambda d: -np.log(1 + np.exp(-d)))
+        self.expectation = normal_expectation(lambda d: -np.log(1 + np.exp(-d)), **kwargs)
 
     def expected_log_likelihood(self, n, w):
         μd, σ2d = self.differ(self.μ, self.Σ)
@@ -118,24 +120,19 @@ class ELBO(nn.Module):
 
         p = self.differ.as_square(p, .5)
         q = self.differ.as_square(q, .5)
-
-        # Don't need this for the optimization, but making this 
-        # interpretable as an actual logprob is useful for debugging
-        log_n_choose_w = torch.lgamma(n.float()+1) - torch.lgamma(w.float()+1) - torch.lgamma((n-w).float()+1)
  
-        return log_n_choose_w + w*p + (n - w)*q
+        return w*p + (n - w)*q
 
     def expected_prior(self):
-        # Don't need this for the optimization, but making this 
-        # interpretable as an actual logprob is useful for debugging
-        const = -self.N/2*np.log(2*np.pi*σ0**2)
+        # Constant's not necessary for the optimization, but is useful for testing
+        const = -1/2*np.log(2*np.pi*σ0**2)
 
         # Proof:
         # from sympy.stats import E, Normal
         # s, μ, μ0, σ, σ0 = symbols('s μ μ_0 σ σ_0')
         # s = Normal('s', μ, σ)
         # 1/(2*σ0**2)*E(-(s - μ0)**2)
-        return const - 1/(2*σ0**2)*((self.μ - μ0)**2 + torch.diag(self.Σ))
+        return const + -1/(2*σ0**2)*((self.μ - μ0)**2 + torch.diag(self.Σ))
 
     def cross_entropy(self, n, w):
         return -self.expected_log_likelihood(n, w).sum() - self.expected_prior().sum()
@@ -171,7 +168,9 @@ class Solver:
                 gradnorm = torch.cat([g.flatten() for g in grads]).pow(2).mean().pow(.5)
                 relnorm = gradnorm/paramnorm
 
-                print(relnorm)
+                print(gradnorm)
+                if gradnorm > 100:
+                    import aljpy; aljpy.extract()
 
                 trace.append(arrdict.arrdict(
                     l=l.detach(),
@@ -275,13 +274,41 @@ def test_organic():
 
     plot(soln)
 
+
+
 def test_normal_expectation():
+    # Test E[X]
     μ = torch.tensor(1.)
-    σ = torch.tensor(2.)
+    σ2 = torch.tensor(2.)
 
     expected = μ
 
     expectation = normal_expectation(lambda x: x)
-    actual = expectation(μ, σ)
+    actual = expectation(μ, σ2)
 
     torch.testing.assert_allclose(expected, actual)
+
+    # Test E[X**2]
+    μ = torch.tensor(1.)
+    σ2 = torch.tensor(2.)
+
+    expected = μ**2 + σ2
+
+    expectation = normal_expectation(lambda x: x**2)
+    actual = expectation(μ, σ2)
+
+    torch.testing.assert_allclose(expected, actual)
+
+def test_elbo():
+    elbo = ELBO(1, K=100, constrain=False)
+    elbo.μ[:] = torch.tensor([1.])
+    elbo.Σ[:] = torch.tensor([[2.]])
+
+    # Test entropy
+    expected_entropy = 1/2*torch.log(2*np.pi*np.e*torch.tensor(2.))
+    torch.testing.assert_allclose(expected_entropy, elbo.entropy())
+
+    # Test prior
+    s = torch.distributions.MultivariateNormal(elbo.μ, elbo.Σ).sample((100000,))
+    expected_prior = (-1/2*(s - μ0)**2/σ0**2).mean()
+    torch.testing.assert_allclose(expected_prior, elbo.expected_prior().sum(), rtol=.01, atol=.01)
