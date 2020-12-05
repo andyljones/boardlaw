@@ -144,22 +144,23 @@ class ELBO(nn.Module):
 
 class Solver:
 
-    def __init__(self, N, tol=.01, T=100):
+    def __init__(self, N, **kwargs):
         self.elbo = ELBO(N)
-        self.original = {k: v.clone() for k, v in self.elbo.state_dict().items()}
+        self.initial = {k: v.clone() for k, v in self.elbo.state_dict().items()}
         self.differ = Differ(N)
-        self.tol = tol
-        self.T = T
+        self.kwargs = kwargs
+
+    def _reset(self):
+        self.elbo.load_state_dict(self.initial)
 
     def __call__(self, n, w):
-        self.elbo.load_state_dict(self.original)
+        self._reset()
         # The gradients around here can be a little explode-y; a line search is a bit slow but 
         # keeps us falling up any cliffs.
         optim = torch.optim.LBFGS(
             self.elbo.parameters(), 
             line_search_fn='strong_wolfe', 
-            tolerance_grad=self.tol*1e-5, 
-            tolerance_change=self.tol*1e-9)
+            **self.kwargs)
 
         trace = []
 
@@ -167,8 +168,6 @@ class Solver:
             l = -self.elbo(n, w)
             optim.zero_grad()
             l.backward()
-            if torch.isnan(l):
-                import aljpy; aljpy.extract()
 
             grads = [p.grad for p in self.elbo.parameters()]
             paramnorm = torch.cat([p.data.flatten() for p in self.elbo.parameters()]).pow(2).mean().pow(.5)
@@ -273,19 +272,6 @@ def demo_organic():
     soln = Solver(n.shape[0])(n, w)
 
     plot(soln)
-
-def demo_failure():
-
-    n = torch.tensor([[0., 256.,   0.],
-        [256.,   0., 256.],
-        [0., 256.,   0.]])
-    w = torch.tensor([[0.,  66.,   0.],
-        [190.,   0.,  76.],
-        [0., 180.,   0.]])
-
-    torch.manual_seed(3)
-    solver = Solver(3)
-    solver(n, w)
 
 def test_normal_expectation():
     # Test E[X]

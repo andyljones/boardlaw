@@ -123,17 +123,3 @@ def random_benchmark():
         counts.append(solve(ranks))
     q = np.quantile(counts, .95)
     return q
-
-def example():
-    from . import database
-
-    run_name = '2020-11-27 21-32-59 az-test'
-    winrate = database.symmetric_winrate(run_name).fillna(0).values
-    games = database.symmetric_games(run_name).values
-    wins = winrate*games
-
-    advi, approx = pymc_solve(wins, games)
-
-    trace = approx.sample(5000)
-    
-    pymc_plot(trace)
