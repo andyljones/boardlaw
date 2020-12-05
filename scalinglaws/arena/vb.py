@@ -55,9 +55,9 @@ class NormalExpectation(Function):
         f = sp.interpolate.RectBivariateSpline(μ, σ2, fs, kx=1, ky=1)
 
         dμs = (fs[2:, :] - fs[:-2, :])/(μ[2:] - μ[:-2])[:, None]
-        dμ = sp.interpolate.RectBivariateSpline(μ[1:-1], σ2, dμs, kx=1, ky=1)
+        dμ = sp.interpolate.RectBivariateSpline(μ[1:-1], σ2, dμs, kx=2, ky=2)
         dσ2s = (fs[:, 2:] - fs[:, :-2])/(σ2[2:] - σ2[:-2])[None, :]
-        dσ2 = sp.interpolate.RectBivariateSpline(μ, σ2[1:-1], dσ2s, kx=1, ky=1)
+        dσ2 = sp.interpolate.RectBivariateSpline(μ, σ2[1:-1], dσ2s, kx=2, ky=2)
 
         return dotdict.dotdict(
             μ=μ, σ2=σ2, 
@@ -100,7 +100,7 @@ def normal_expectation(*args, **kwargs):
 
 class ELBO(nn.Module):
     
-    def __init__(self, N, constrain=True, **kwargs):
+    def __init__(self, N, constrain=True, expectation=None, **kwargs):
         super().__init__()
         self.N = N
         self.register_parameter('μ', nn.Parameter(torch.zeros((N,)).float()))
@@ -145,11 +145,13 @@ class Solver:
 
     def __init__(self, N, tol=.1, T=100):
         self.elbo = ELBO(N)
+        self.original = {k: v.clone() for k, v in self.elbo.state_dict().items()}
         self.differ = Differ(N)
         self.tol = tol
         self.T = T
 
     def __call__(self, n, w):
+        self.elbo.load_state_dict(self.original)
         optim = torch.optim.LBFGS(self.elbo.parameters())
         trace = []
         for t in range(self.T):
@@ -167,8 +169,8 @@ class Solver:
                 relnorm = gradnorm/paramnorm
 
                 print(gradnorm)
-                if gradnorm > 100:
-                    import aljpy; aljpy.extract()
+                # if gradnorm > 50:
+                #     import aljpy; aljpy.extract()
 
                 trace.append(arrdict.arrdict(
                     l=l.detach(),
@@ -244,7 +246,7 @@ def suggest(soln, k):
     idx = improvement.argmax()
     return np.unravel_index(idx, improvement.shape) 
 
-def test_artificial():
+def demo_artificial():
     N = 5
 
     s = torch.randn(N)
@@ -258,7 +260,7 @@ def test_artificial():
 
     plt.scatter(s, soln.μ)
 
-def test_organic():
+def demo_organic():
     from scalinglaws.arena import database
 
     run_name = '2020-11-27 21-32-59 az-test'
@@ -272,7 +274,18 @@ def test_organic():
 
     plot(soln)
 
+def demo_failure():
 
+    n = torch.tensor([[0., 256.,   0.],
+        [256.,   0., 256.],
+        [0., 256.,   0.]])
+    w = torch.tensor([[0.,  66.,   0.],
+        [190.,   0.,  76.],
+        [0., 180.,   0.]])
+
+    torch.manual_seed(3)
+    solver = Solver(3)
+    solver(n, w)
 
 def test_normal_expectation():
     # Test E[X]
