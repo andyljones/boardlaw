@@ -40,10 +40,13 @@ def latest_agent(run_name, agentfunc, **kwargs):
     sd = storing.load_latest(run_name)
     return assemble_agent(agentfunc, sd, **kwargs)
 
-def database_results(run_name, agents):
-    agents = list(agents)
-    wins = database.symmetric_wins(run_name).reindex(index=agents, columns=agents).fillna(0)
-    games = database.symmetric_games(run_name).reindex(index=agents, columns=agents).fillna(0)
+def database_results(run_name, agents=None):
+    games = database.symmetric_games(run_name)
+    wins = database.symmetric_wins(run_name)
+    if agents is not None:
+        agents = list(agents)
+        games = games.reindex(index=agents, columns=agents).fillna(0)
+        wins = wins.reindex(index=agents, columns=agents).fillna(0)
     return games.values, wins.values
 
 def run(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], canceller=None, **kwargs):
@@ -61,9 +64,9 @@ def run(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], canceller=Non
             if time.time() - last_step > 1:
                 last_step = time.time()
                 games, wins = database_results(run_name, matcher.names.values())
-                log.info(f'Loaded {games.sum()} games')
-                soln = activelo.Solver(len(matcher.agents))(torch.as_tensor(games), torch.as_tensor(wins))
-                log.info(f'Fitted a posterior, {(soln.σd**2).mean()**.5}σd')
+                log.info(f'Loaded {int(games.sum())} games')
+                soln = activelo.Solver(games.shape[0])(torch.as_tensor(games), torch.as_tensor(wins))
+                log.info(f'Fitted a posterior, {(soln.σd**2).mean()**.5:.2f}σd')
                 matchup = activelo.suggest(soln, matcher.n_envs)
                 log.info(f'Suggestion is {matchup}')
                 results = matcher.step(matchup)
@@ -102,3 +105,8 @@ def test():
     from rebar import paths
     paths.clear('test')
     run('test', worldfunc, agentfunc, ref_runs=['2020-11-27 19-40-27 az-test'])
+
+def plot(run_name):
+    games, wins = database_results(run_name)
+    log.info(f'Loaded {int(games.sum())} games')
+    soln = activelo.Solver(games.shape[0])(torch.as_tensor(games), torch.as_tensor(wins))
