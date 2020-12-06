@@ -9,15 +9,6 @@ from .monitor import monitor
 
 log = getLogger(__name__)
 
-def relative_elos(expected):
-    # https://www.remi-coulom.fr/Bayesian-Elo/#theory
-    return (400*(np.log10(expected) - np.log10(1 - expected))).round(0).astype(int)
-
-def stddev(df, n_trajs):
-    alpha = df*n_trajs + 1
-    beta = n_trajs + 1 - df*n_trajs
-    return (alpha*beta/((alpha + beta)**2 * (alpha + beta + 1)))**.5 
-
 def mohex_calibration():
     from . import mohex
 

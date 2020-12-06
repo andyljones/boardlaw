@@ -3,6 +3,7 @@ import torch
 import numpy as np
 from rebar import arrdict
 from logging import getLogger
+import activelo
 
 log = getLogger(__name__)
 
