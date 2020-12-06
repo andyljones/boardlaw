@@ -7,43 +7,12 @@ import activelo
 
 log = getLogger(__name__)
 
-def invert(d):
-    return {v: k for k, v in d.items()}
-
-def select(counts):
-    # Matchup ideals
-    # * Shouldn't use more than n_cores MoHex agents
-    # * Should concentrate PyTorch agents
-    # * Should fill out some sort of pattern before filling out uniformly
-
-    rows, cols = np.indices(counts.shape)
-
-    # Priviledge power-of-two rows/cols
-    log_rows = (np.log2(rows+1) % 1 == 0).astype(float)
-    row_weights = log_rows*rows
-    log_cols = (np.log2(cols+1) % 1 == 0).astype(float)
-    col_weights = log_cols*cols
-    level_weights = (row_weights + col_weights)/(row_weights + col_weights).sum()
-
-    # Priviledge power-of-two diagonals
-    diags = abs(rows - cols)
-    log_diags = (np.log2(diags+1) % 1 == 0).astype(float)
-    diag_weights = log_diags*diags
-    diag_weights = diag_weights/diag_weights.sum()
-
-    targets = np.full_like(counts, 1/counts.nelement())
-    targets = .5*targets + .0*diag_weights + .5*level_weights
-
-    error = targets - arrdict.numpyify(counts/counts.sum())
-    error = np.exp(error)/np.exp(error).sum()
-
-    return np.unravel_index(error.argmax(), error.shape)
-
-class AdaptiveMatcher:
+class Emcee:
 
     def __init__(self, worldfunc, n_envs=1024, device='cpu'):
         self.worldfunc = worldfunc
         self.initial = worldfunc(n_envs, device=device)
+        self.n_envs = n_envs
         self.device = device
         assert self.initial.n_seats == 2, 'Only support 2 seats for now'
 
@@ -51,17 +20,11 @@ class AdaptiveMatcher:
         self.agents = {}
         self.names = {}
 
-        self.counts = torch.empty((0, 0))
-
     def add_agent(self, name, agent):
         assert name not in self.agents
         self.names[self.next_id] = name
         self.agents[self.next_id] = agent
         self.next_id += 1
-
-        counts = torch.zeros((self.next_id, self.next_id), device=self.device)
-        counts[:-1, :-1] = self.counts
-        self.counts = counts
 
     def add_agents(self, agents):
         current = self.names.values()
@@ -69,23 +32,9 @@ class AdaptiveMatcher:
             if name not in current:
                 self.add_agent(name, agent)
 
-    def set_counts(self, dbcounts):
-        raw = (dbcounts
-            .assign(games=lambda df: df.black_wins + df.white_wins)
-            .groupby(['black_name', 'white_name'])
-            .games.sum()
-            .unstack())
-
-        agents = list(self.names.values())
-        counts = raw.reindex(index=agents, columns=agents).fillna(0)
-        self.counts = torch.as_tensor(counts.values, device=self.device, dtype=torch.int)
-
-    def step(self):
+    def step(self, matchup):
         if len(self.agents) <= 1:
             return None
-
-        matchup = select(self.counts)
-        log.info(f'Generating games for a matchup with {self.counts[matchup]} existing games')
 
         worlds = self.initial.clone()
         terminal = torch.zeros((worlds.n_envs,), dtype=torch.bool, device=self.device)
@@ -101,17 +50,16 @@ class AdaptiveMatcher:
 
             if terminal.all():
                 break
-
-        self.counts[matchup] += terminal.sum()
         
         wins = tuple(map(int, wins.sum(0)))
         result = aljpy.dotdict(
-            black_name=self.names[matchup[0]], white_name=self.names[matchup[1]], 
-            black_wins=wins[0], white_wins=wins[1],
+            black_name=self.names[matchup[0]], 
+            white_name=self.names[matchup[1]], 
+            black_wins=wins[0], 
+            white_wins=wins[1],
             games=int(terminal.sum()))
 
         return result
-
 
 def test():
     from ..validation import All, RandomAgent
@@ -119,12 +67,12 @@ def test():
     def worldfunc(n_envs, device='cpu'):
         return All.initial(n_envs, 2, device=device)
 
-    matcher = AdaptiveMatcher(worldfunc, n_envs=4)
+    mc = Emcee(worldfunc, n_envs=4)
 
-    matcher.add_agent('one', RandomAgent())
-    matcher.add_agent('two', RandomAgent())
+    mc.add_agent('one', RandomAgent())
+    mc.add_agent('two', RandomAgent())
 
-    matcher.step()
+    mc.step((0, 1))
 
 def vectorization_benchmark(n_envs=None, T=10, device=None):
     import pandas as pd

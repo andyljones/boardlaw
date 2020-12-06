@@ -54,7 +54,7 @@ def games(run_name):
     df = summary(run_name)
     return df.white_wins + df.black_wins
 
-def winrate(run_name, min_games=256):
+def wins(run_name, min_games=-1):
     df = summary(run_name)
     games = df.white_wins + df.black_wins
     games = games.where(games > min_games)
@@ -62,13 +62,12 @@ def winrate(run_name, min_games=256):
 
 def symmetric_games(run_name):
     g = games(run_name)
-    return .5*g + .5*g.T
+    return g + g.T
 
-def symmetric_winrate(run_name, min_games=256):
+def symmetric_wins(run_name, min_games=-1):
+    games = symmetric_games(run_name)
     df = summary(run_name)
-    games = df.black_wins + df.white_wins
-    games = games.where(games > min_games)
-    return .5*df.black_wins/games + .5*df.white_wins.T/games.T
+    return (df.black_wins + df.white_wins.T).where(games > min_games)
 
 def _transfer():
     old = stored()

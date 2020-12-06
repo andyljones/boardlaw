@@ -1,7 +1,8 @@
 import torch
 from rebar import storing, logging
 import pickle
-from . import database, matchups
+from . import database, emcee
+import activelo
 import time
 from logging import getLogger
 from contextlib import contextmanager
@@ -39,9 +40,15 @@ def latest_agent(run_name, agentfunc, **kwargs):
     sd = storing.load_latest(run_name)
     return assemble_agent(agentfunc, sd, **kwargs)
 
+def database_results(run_name, agents):
+    agents = list(agents)
+    wins = database.symmetric_wins(run_name).reindex(index=agents, columns=agents).fillna(0)
+    games = database.symmetric_games(run_name).reindex(index=agents, columns=agents).fillna(0)
+    return games.values, wins.values
+
 def run(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], canceller=None, **kwargs):
     with logging.via_dir(run_name):
-        matcher = matchups.AdaptiveMatcher(worldfunc, device=device, **kwargs)
+        matcher = emcee.Emcee(worldfunc, device=device, **kwargs)
         runs = ref_runs + [run_name]
         
         last_load, last_step = 0, 0
@@ -50,13 +57,12 @@ def run(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], canceller=Non
                 last_load = time.time()
                 agents = periodic_agents(runs, agentfunc, device)
                 matcher.add_agents(agents)
-                log.info(f'Loaded {len(agents)} agents')
-                matcher.set_counts(database.stored(run_name))
-                log.info(f'Set counts for {int(matcher.counts.sum())} games')
             
             if time.time() - last_step > 1:
                 last_step = time.time()
-                results = matcher.step()
+                games, wins = database_results(run_name, matcher.agents)
+                matchup = activelo.suggest(games, wins, matcher.n_envs)
+                results = matcher.step(matchup)
                 database.store(run_name, results)
                 log.info(f'Stepped, stored {results["games"]:4d} games between {results["black_name"]} and {results["white_name"]}')
 

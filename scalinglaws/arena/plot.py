@@ -20,7 +20,7 @@ def games(run_name):
         ax = plot(df, vmax=df.max().max())
 
 def black(*args, **kwargs):
-    df = database.winrate(*args, **kwargs)
+    df = database.wins(*args, **kwargs)
     with plt.style.context('seaborn-poster'):
         ax = plot(df)
         ax.set_xlabel('white')

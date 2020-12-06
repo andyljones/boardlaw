@@ -4,7 +4,7 @@ import pickle
 from rebar import storing, arrdict
 from logging import getLogger
 from IPython.display import clear_output
-from . import matchups, database
+from . import emcee, database
 from .monitor import monitor
 
 log = getLogger(__name__)
