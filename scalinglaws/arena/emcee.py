@@ -7,6 +7,19 @@ import activelo
 
 log = getLogger(__name__)
 
+def permute_seats(seats, n_seats):
+    offsets = torch.arange(len(seats), device=seats.device)
+    return (seats + offsets) % n_seats
+
+def unpermute_wins(wins, n_seats):
+    unmixed = torch.full_like(wins, -1)
+    envs = torch.arange(len(wins))
+    for i in range(n_seats):
+        seat_i = torch.full_like(envs, i)
+        permuted = permute_seats(seat_i, n_seats)
+        unmixed[envs, permuted] = wins[:, i]
+    return unmixed.int()
+
 class Emcee:
 
     def __init__(self, worldfunc, n_envs=1024, device='cpu'):
@@ -15,6 +28,7 @@ class Emcee:
         self.n_envs = n_envs
         self.device = device
         assert self.initial.n_seats == 2, 'Only support 2 seats for now'
+        assert self.n_envs % np.math.factorial(self.initial.n_seats) == 0, 'Number of envs needs to be divisible by the number of permutations of seats'
 
         self.next_id = 0
         self.agents = {}
@@ -41,7 +55,8 @@ class Emcee:
         wins = torch.zeros((worlds.n_envs, worlds.n_seats), dtype=torch.int, device=self.device)
         while True:
             for i, id in enumerate(matchup):
-                mask = (worlds.seats == i) & ~terminal
+                seats = permute_seats(worlds.seats, worlds.n_seats)
+                mask = (seats == i) & ~terminal
                 if mask.any():
                     decisions = self.agents[id](worlds[mask])
                     worlds[mask], transitions = worlds[mask].step(decisions.actions)
@@ -51,28 +66,28 @@ class Emcee:
             if terminal.all():
                 break
         
-        wins = tuple(map(int, wins.sum(0)))
+        wins = unpermute_wins(wins, worlds.n_seats).sum(0)
         result = aljpy.dotdict(
-            black_name=self.names[matchup[0]], 
-            white_name=self.names[matchup[1]], 
-            black_wins=wins[0], 
-            white_wins=wins[1],
+            names=[self.names[m] for m in matchup], 
+            wins=wins, 
             games=int(terminal.sum()))
 
         return result
 
 def test():
-    from ..validation import All, RandomAgent
+    from ..validation import WinnerLoser, RandomAgent
 
     def worldfunc(n_envs, device='cpu'):
-        return All.initial(n_envs, 2, device=device)
+        return WinnerLoser.initial(n_envs, device=device)
 
     mc = Emcee(worldfunc, n_envs=4)
 
     mc.add_agent('one', RandomAgent())
     mc.add_agent('two', RandomAgent())
 
-    mc.step((0, 1))
+    result = mc.step((0, 1))
+
+    assert result.black_wins == 4
 
 def vectorization_benchmark(n_envs=None, T=10, device=None):
     import pandas as pd
