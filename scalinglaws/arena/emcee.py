@@ -1,29 +1,31 @@
-from scalinglaws.learning import gather
 import aljpy
 import torch
 import numpy as np
-from rebar import arrdict
+from rebar import dotdict
 from logging import getLogger
 import activelo
+from itertools import permutations
 
 log = getLogger(__name__)
 
-def matchup_indices(n_envs, n_seats):
-    #TODO: Generalise this to more than 2 seats
-    assert n_seats == 2
-    offsets = torch.arange(n_envs)
-    return torch.stack([(i + offsets) % n_seats for i in range(n_seats)], -1)
+def matchup_patterns(n_seats):
+    return torch.as_tensor(list(permutations(range(n_seats))))
 
-def gather_wins(wins, names):
-    n_seats = wins.shape[-1]
-    # (env, matchup component, seat)
-    gathered = torch.full(wins.shape + (n_seats,), -1, device=wins.device, dtype=wins.dtype)
-    envs = torch.arange(len(wins))
-    for i in range(n_seats):
-        seat_i = torch.full_like(envs, i)
-        matchup_idxs = matchup_indices(seat_i, n_seats)
-        gathered[envs, matchup_idxs] = wins
-    return gathered.sum(0)
+def matchup_indices(n_envs, n_seats):
+    patterns = matchup_patterns(n_seats)
+    return patterns.repeat((n_envs//len(patterns), 1))
+
+def gather(wins, matchup_idxs, names):
+    names = np.array(names)
+    n_envs, n_seats = matchup_idxs.shape
+    results = []
+    for p in matchup_patterns(n_seats):
+        ws = wins[(matchup_idxs == p).all(-1)].sum(0) 
+        results.append(dotdict.dotdict(
+            names=tuple(names[p]),
+            wins=tuple(map(float, ws)),
+            games=float(ws.sum())))
+    return results
 
 class Emcee:
 
@@ -57,12 +59,12 @@ class Emcee:
 
         worlds = self.initial.clone()
         envs = torch.arange(worlds.n_envs, device=worlds.device)
-        terminal = torch.zeros((worlds.n_envs, worlds.n_seats), dtype=torch.bool, device=self.device)
-        wins = torch.zeros((worlds.n_envs, worlds.n_seats, worlds.n_seats), dtype=torch.int, device=self.device)
-        matchup_idxs = matchup_indices(self.n_envs, worlds.n_seats)
+        terminal = torch.zeros((worlds.n_envs,), dtype=torch.bool, device=self.device)
+        wins = torch.zeros((worlds.n_envs, worlds.n_seats), dtype=torch.int, device=self.device)
+        matchup_idxs = matchup_indices(self.n_envs, worlds.n_seats).to(self.device)
         while True:
             for i, id in enumerate(matchup):
-                mask = (matchup_idxs[envs, worlds.seats] == i) & ~terminal
+                mask = (matchup_idxs[envs, worlds.seats.long()] == i) & ~terminal
                 if mask.any():
                     decisions = self.agents[id](worlds[mask])
                     worlds[mask], transitions = worlds[mask].step(decisions.actions)
@@ -72,14 +74,9 @@ class Emcee:
             if terminal.all():
                 break
         
-        wins = gather_wins(wins)
         names = [self.names[m] for m in matchup]
-        result = aljpy.dotdict(
-            names=, 
-            wins=list(wins), 
-            games=worlds.n_seats*int(terminal.sum()))
-
-        return result
+        results = gather(wins, matchup_idxs, names)
+        return results
 
 def test():
     from ..validation import WinnerLoser, RandomAgent
@@ -94,7 +91,8 @@ def test():
 
     result = mc.step((0, 1))
 
-    assert result.black_wins == 4
+    assert result[0].black_wins == 2
+    assert result[1].black_wins == 2
 
 def vectorization_benchmark(n_envs=None, T=10, device=None):
     import pandas as pd

@@ -60,11 +60,15 @@ def run(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], canceller=Non
             
             if time.time() - last_step > 1:
                 last_step = time.time()
-                games, wins = database_results(run_name, matcher.agents)
-                matchup = activelo.suggest(games, wins, matcher.n_envs)
+                games, wins = database_results(run_name, matcher.names.values())
+                log.info(f'Loaded {games.sum()} games')
+                soln = activelo.Solver(len(matcher.agents))(torch.as_tensor(games), torch.as_tensor(wins))
+                log.info(f'Fitted a posterior, {(soln.σd**2).mean()**.5}σd')
+                matchup = activelo.suggest(soln, matcher.n_envs)
+                log.info(f'Suggestion is {matchup}')
                 results = matcher.step(matchup)
                 database.store(run_name, results)
-                log.info(f'Stepped, stored {results["games"]:4d} games between {results["black_name"]} and {results["white_name"]}')
+                log.info(f'Stepped, stored')
 
             # #TODO: Hangs occasionally, and damned if I know why.
             # if canceller and canceller.wait(.1):

@@ -18,11 +18,13 @@ def database():
         yield conn
 
 def store(run_name, result):
+    if isinstance(result, list):
+        for r in result:
+            store(run_name, r)
+        return 
     # upsert: https://stackoverflow.com/questions/2717590/sqlite-insert-on-duplicate-key-update-upsert
     with database() as conn:
-        subs = (
-            run_name, result.black_name, result.white_name, result.black_wins, result.white_wins, 
-            result.black_wins, result.white_wins)
+        subs = (run_name, *result.names, *result.wins, *result.wins)
         conn.execute('''
             insert into results 
             values (?,?,?,?,?)
@@ -40,7 +42,11 @@ def delete(run_name):
         c.execute('delete from results where run_name=?', (run_name,))
 
 def summary(run_name):
-    df = (stored(run_name)
+    raw = stored(run_name)
+    if len(raw) == 0:
+        columns = pd.MultiIndex.from_product([['black_wins', 'white_wins',], []])
+        return pd.DataFrame(columns=columns)
+    df = (raw
             .groupby(['black_name', 'white_name'])
             [['black_wins', 'white_wins']]
             .sum()
@@ -52,10 +58,14 @@ def summary(run_name):
 
 def games(run_name):
     df = summary(run_name)
+    if len(df) == 0:
+        return pd.DataFrame()
     return df.white_wins + df.black_wins
 
 def wins(run_name, min_games=-1):
     df = summary(run_name)
+    if len(df) == 0:
+        return pd.DataFrame()
     games = df.white_wins + df.black_wins
     games = games.where(games > min_games)
     return df.black_wins/games
@@ -67,6 +77,8 @@ def symmetric_games(run_name):
 def symmetric_wins(run_name, min_games=-1):
     games = symmetric_games(run_name)
     df = summary(run_name)
+    if len(df) == 0:
+        return pd.DataFrame()
     return (df.black_wins + df.white_wins.T).where(games > min_games)
 
 def _transfer():
