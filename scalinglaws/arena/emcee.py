@@ -1,3 +1,4 @@
+from scalinglaws.learning import gather
 import aljpy
 import torch
 import numpy as np
@@ -7,18 +8,22 @@ import activelo
 
 log = getLogger(__name__)
 
-def permute_seats(seats, n_seats):
-    offsets = torch.arange(len(seats), device=seats.device)
-    return (seats + offsets) % n_seats
+def matchup_indices(n_envs, n_seats):
+    #TODO: Generalise this to more than 2 seats
+    assert n_seats == 2
+    offsets = torch.arange(n_envs)
+    return torch.stack([(i + offsets) % n_seats for i in range(n_seats)], -1)
 
-def unpermute_wins(wins, n_seats):
-    unmixed = torch.full_like(wins, -1)
+def gather_wins(wins, names):
+    n_seats = wins.shape[-1]
+    # (env, matchup component, seat)
+    gathered = torch.full(wins.shape + (n_seats,), -1, device=wins.device, dtype=wins.dtype)
     envs = torch.arange(len(wins))
     for i in range(n_seats):
         seat_i = torch.full_like(envs, i)
-        permuted = permute_seats(seat_i, n_seats)
-        unmixed[envs, permuted] = wins[:, i]
-    return unmixed.int()
+        matchup_idxs = matchup_indices(seat_i, n_seats)
+        gathered[envs, matchup_idxs] = wins
+    return gathered.sum(0)
 
 class Emcee:
 
@@ -51,12 +56,13 @@ class Emcee:
             return None
 
         worlds = self.initial.clone()
-        terminal = torch.zeros((worlds.n_envs,), dtype=torch.bool, device=self.device)
-        wins = torch.zeros((worlds.n_envs, worlds.n_seats), dtype=torch.int, device=self.device)
+        envs = torch.arange(worlds.n_envs, device=worlds.device)
+        terminal = torch.zeros((worlds.n_envs, worlds.n_seats), dtype=torch.bool, device=self.device)
+        wins = torch.zeros((worlds.n_envs, worlds.n_seats, worlds.n_seats), dtype=torch.int, device=self.device)
+        matchup_idxs = matchup_indices(self.n_envs, worlds.n_seats)
         while True:
             for i, id in enumerate(matchup):
-                seats = permute_seats(worlds.seats, worlds.n_seats)
-                mask = (seats == i) & ~terminal
+                mask = (matchup_idxs[envs, worlds.seats] == i) & ~terminal
                 if mask.any():
                     decisions = self.agents[id](worlds[mask])
                     worlds[mask], transitions = worlds[mask].step(decisions.actions)
@@ -66,11 +72,12 @@ class Emcee:
             if terminal.all():
                 break
         
-        wins = unpermute_wins(wins, worlds.n_seats).sum(0)
+        wins = gather_wins(wins)
+        names = [self.names[m] for m in matchup]
         result = aljpy.dotdict(
-            names=[self.names[m] for m in matchup], 
-            wins=wins, 
-            games=int(terminal.sum()))
+            names=, 
+            wins=list(wins), 
+            games=worlds.n_seats*int(terminal.sum()))
 
         return result
 
