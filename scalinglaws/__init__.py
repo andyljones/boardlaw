@@ -106,7 +106,7 @@ def run():
     compositor = widgets.Compositor()
     paths.clear(run_name)
     with logging.via_dir(run_name, compositor), stats.via_dir(run_name, compositor), \
-            arena.monitor(run_name, worldfunc, agentfunc, n_envs=8):
+            arena.monitor(run_name, worldfunc, agentfunc, n_envs=256):
         buffer = []
         idxs = cycle(learning.batch_indices(buffer_length, n_envs, batch_size, worlds.device))
         while True:
