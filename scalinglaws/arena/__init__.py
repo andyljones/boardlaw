@@ -50,7 +50,7 @@ def database_results(run_name, agents=None):
     return games.values, wins.values
 
 def arena(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], canceller=None, **kwargs):
-    with logging.to_dir(run_name):
+    with logging.via_dir(run_name):
         matcher = emcee.Emcee(worldfunc, device=device, **kwargs)
         runs = ref_runs + [run_name]
         
@@ -63,18 +63,15 @@ def arena(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], canceller=N
             
             if time.time() - last_step > 1:
                 last_step = time.time()
-                if len(matcher.names) < 2:
-                    log.info(f'Only {len(matcher.names)} agents have been loaded')
-                else:
-                    games, wins = database_results(run_name, matcher.names.values())
-                    log.info(f'Loaded {int(games.sum())} games')
-                    soln = activelo.solve(torch.as_tensor(games), torch.as_tensor(wins))
-                    log.info(f'Fitted a posterior, {(soln.σd**2).mean()**.5:.2f}σd over {len(matcher.names)} agents')
-                    matchup = activelo.suggest(soln, matcher.n_envs)
-                    log.info(f'Suggestion is {matchup}')
-                    results = matcher.step(matchup)
-                    database.store(run_name, results)
-                    log.info('Stepped, stored')
+                games, wins = database_results(run_name, matcher.names.values())
+                log.info(f'Loaded {int(games.sum())} games')
+                soln = activelo.solve(torch.as_tensor(games), torch.as_tensor(wins))
+                log.info(f'Fitted a posterior, {(soln.σd**2).mean()**.5:.2f}σd over {len(matcher.names)} agents')
+                matchup = activelo.suggest(soln, matcher.n_envs)
+                log.info(f'Suggestion is {matchup}')
+                results = matcher.step(matchup)
+                database.store(run_name, results)
+                log.info('Stepped, stored')
 
             # #TODO: Hangs occasionally, and damned if I know why.
             # if canceller and canceller.wait(.1):
