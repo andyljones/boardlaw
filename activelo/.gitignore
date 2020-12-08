@@ -1,0 +1,16 @@
+.vscode
+output
+__pycache__
+.cache
+.~lock*
+.ipynb_checkpoints
+.*.ipynb
+workspace.code-workspace
+docs/_build
+docs/_templates
+*.egg-info
+build 
+dist
+.env
+.cubicasa-confirmed
+credentials.yml
