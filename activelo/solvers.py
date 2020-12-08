@@ -82,6 +82,8 @@ class Solver:
         self.kwargs = {'max_iter': 100, **kwargs}
 
     def __call__(self, n, w):
+        n = torch.as_tensor(n)
+        w = torch.as_tensor(w)
         elbo = ELBO(self.N, expectation=self.expectation)
 
         # The gradients around here can be a little explode-y; a line search is a bit slow but 
@@ -118,8 +120,10 @@ class Solver:
 
         μd, σ2d = map(as_square, pairwise_diffs(elbo.μ, elbo.Σ))
         return arrdict.arrdict(
-            μ=elbo.μ.clone(), 
-            Σ=elbo.Σ.clone(), 
+            n=n,
+            w=w,
+            μ=elbo.μ, 
+            Σ=elbo.Σ, 
             μd=μd,
             σd=σ2d**.5,
             trace=arrdict.stack(trace)).detach().numpy()
