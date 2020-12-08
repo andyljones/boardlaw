@@ -25,9 +25,11 @@ def store_latest(run_name, objs, throttle=0):
     log.info(f'Stored latest at "{path}"')
     return True
 
-def load_latest(run_name=-1, proc_name='MainProcess'):
+def load_latest(run_name=-1, proc_name='MainProcess', return_modtime=False):
     [ps] = list(paths.subdir(run_name, 'storing', 'latest').glob(f'{proc_name}*.pkl'))
-    return pickle.loads(ps.read_bytes())
+    modified = pd.Timestamp(ps.lstat().st_mtime, unit='s')
+    sd = pickle.loads(ps.read_bytes())
+    return (sd, modified) if return_modtime else sd
 
 def store_periodic(run_name, objs, throttle=0):
     subdir = paths.subdir(run_name, 'storing', 'periodic')

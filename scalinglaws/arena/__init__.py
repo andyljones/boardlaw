@@ -1,8 +1,9 @@
 import numpy as np
 import torch
-from rebar import storing, logging
+from rebar import storing, logging, dotdict
 import pickle
 from . import database, matchups
+from .. import mohex
 import activelo
 import time
 from logging import getLogger
@@ -18,11 +19,11 @@ def assemble_agent(agentfunc, sd, device='cpu'):
     agent.load_state_dict(sd)
     return agent
 
-def periodic_agents(run_name, agentfunc, device='cpu'):
+def periodic_agents(run_name, agentfunc, **kwargs):
     if not isinstance(run_name, (int, str)):
         agents = {}
         for r in run_name:
-            agents.update(periodic_agents(r, agentfunc, device))
+            agents.update(periodic_agents(r, agentfunc, **kwargs))
         return agents
 
     try:
@@ -34,12 +35,12 @@ def periodic_agents(run_name, agentfunc, device='cpu'):
         for _, row in stored.iterrows():
             name = row.date.strftime(r'%y%m%d-%H%M%S')
             sd = pickle.load(row.path.open('rb'))
-            agents[name] = assemble_agent(agentfunc, sd, device)
+            agents[name] = assemble_agent(agentfunc, sd, **kwargs)
         return agents
 
 def latest_agent(run_name, agentfunc, **kwargs):
-    sd = storing.load_latest(run_name)
-    return assemble_agent(agentfunc, sd, **kwargs)
+    sd, modified = storing.load_latest(run_name, return_modtime=True)
+    return {f'latest-{modified:%Y%m%d-%H%M%S}': assemble_agent(agentfunc, sd, **kwargs)}
 
 def database_results(run_name, agents=None):
     games = database.symmetric_games(run_name)
@@ -61,17 +62,25 @@ def suggest(n, w, G):
     log.info(f'Suggestion is {matchup}')
     return [n.index[s] for s in matchup]
 
-def arena(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], **kwargs):
+def choose():
+    pass
+
+def arena(run_name, worldfunc, agentfunc, device='cpu', **kwargs):
     with logging.via_dir(run_name):
-        worlds = worldfunc(device=device, **kwargs)
-        runs = ref_runs + [run_name]
+        worlds = {
+            'nn': worldfunc(device=device, n_envs=256),
+            'mohex': worldfunc(device=device, n_envs=8)}
+        mhx = mohex.MoHexAgent()
         
         agents = {}
         last_load, last_step = 0, 0
         while True:
             if time.time() - last_load > 60:
                 last_load = time.time()
-                agents = periodic_agents(runs, agentfunc, device)
+                agents = {
+                    **periodic_agents(run_name, agentfunc, device=device),
+                    **latest_agent(run_name, agentfunc, device=device),
+                    'mohex': mhx}
             
             if time.time() - last_step > 1:
                 last_step = time.time()

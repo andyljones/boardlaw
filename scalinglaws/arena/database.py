@@ -36,6 +36,12 @@ def stored(run_name=''):
     run_name = paths.resolve(run_name)
     with database() as c:
         return pd.read_sql_query('select * from results where run_name like ?', c, params=(f'{run_name}%',))
+
+def run_counts():
+    return (stored()
+                .groupby('run_name')
+                [['black_wins', 'white_wins']]
+                .sum().sum(1))
     
 def delete(run_name):
     with database() as c:
