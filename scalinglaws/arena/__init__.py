@@ -1,3 +1,4 @@
+import pandas as pd
 import numpy as np
 import torch
 from rebar import storing, logging, dotdict
@@ -33,7 +34,7 @@ def periodic_agents(run_name, agentfunc, **kwargs):
     else:
         agents = {} 
         for _, row in stored.iterrows():
-            name = row.date.strftime(r'%y%m%d-%H%M%S')
+            name = row.date.strftime(r'%y%m%d-%H%M%S-periodic')
             sd = pickle.load(row.path.open('rb'))
             agents[name] = assemble_agent(agentfunc, sd, **kwargs)
         return agents
@@ -45,7 +46,10 @@ def latest_agent(run_name, agentfunc, **kwargs):
     except ValueError:
         return {}
 
-def suggest(n, w, G):
+def suggest_periodic(n, w, G):
+    valid = n.index[n.index.str.endswith('periodic')]
+    n = n.reindex(index=valid, columns=valid)
+    w = w.reindex(index=valid, columns=valid)
     try:
         soln = activelo.solve(n.values, w.values)
         log.info(f'Fitted a posterior, {(soln.σd**2).mean()**.5:.2f}σd over {n.shape[0]} agents')
@@ -55,35 +59,63 @@ def suggest(n, w, G):
         matchup = tuple(np.random.randint(0, n.shape[0], (2,)))
     return [n.index[s] for s in matchup]
 
-def step(run_name, worlds, agents):
+def suggest_latest(n, w):
+    if n.index.endswith('latest').any() and n.index.endswith('periodic').any():
+        [latest] = n.index[n.index.endswith('latest')]
+        periodic = n.index[n.index.endswith('periodic')][-1]
+        return (latest, periodic)
+
+def suggest_mohex(n, w, G):
+    valid = n.index[n.index.str.endswith('periodic') | (n.index == 'mohex')]
+    n = n.reindex(index=valid, columns=valid)
+    w = w.reindex(index=valid, columns=valid)
+    try:
+        soln = activelo.solve(n.values, w.values)
+        log.info(f'Fitted a posterior, {(soln.σd**2).mean()**.5:.2f}σd over {n.shape[0]} agents')
+        improvement = activelo.improvement(soln, G)
+        improvement = pd.DataFrame(improvement, n.index, n.columns).loc['mohex'].drop('mohex')
+        return ('mohex', improvement.argmax())
+    except ValueError:
+        log.warn('Solver failed; making a random suggestion')
+        return ('mohex', np.random.randint(0, n.shape[0]))
+
+def step(run_name, worlds, agents, kind):
     if len(agents) < 2:
         log.info(f'Only {len(agents)} agents have been loaded')
         return 
 
+    log.info(f'Running a {kind} game')
     games, wins = database.symmetric_pandas(run_name, agents)
     log.info(f'Loaded {int(games.sum().sum())} games')
-    matchup = suggest(games, wins, 256)
-    agents = {m: agents[m] for m in matchup}
-    log.info('Playing ' + ' v. '.join(agents))
-
-    if any(m.startswith('mohex') for m in matchup):
-        log.info('Mohex matchup')
-        results = matchups.evaluate(worlds.mohex, agents)
+    if kind == 'periodic':
+        matchup = suggest_periodic(games, wins, worlds.periodic.n_envs)
+    elif kind == 'latest':
+        matchup = suggest_latest(games, wins)
+    elif kind == 'mohex':
+        matchup = suggest_mohex(games, wins, worlds.mohex.n_envs)
     else:
-        log.info('NN matchup')
-        results = matchups.evaluate(worlds.nn, agents)
+        raise ValueError(f'Kind "{kind}" is invalid')
 
-    database.store(run_name, results)
-    log.info('Stepped, stored')
+    if matchup:
+        agents = {m: agents[m] for m in matchup}
+        log.info('Playing ' + ' v. '.join(agents))
+        results = matchups.evaluate(worlds[kind], agents)
+
+        if kind in ('periodic', 'mohex'):
+            database.store(run_name, results)
+            log.info('Stored')
 
 def arena(run_name, worldfunc, agentfunc, device='cpu', **kwargs):
     with logging.via_dir(run_name):
         worlds = dotdict.dotdict(
-            nn=worldfunc(device=device, n_envs=256),
+            periodic=worldfunc(device=device, n_envs=256),
+            latest=worldfunc(device=device, n_envs=256),
             mohex=worldfunc(device=device, n_envs=8))
 
         mhx = mohex.MoHexAgent()
+        kinds = ('periodic', 'latest', 'mohex')
         
+        i = 0
         agents = {}
         last_load, last_step = 0, 0
         while True:
@@ -96,7 +128,8 @@ def arena(run_name, worldfunc, agentfunc, device='cpu', **kwargs):
             
             if time.time() - last_step > 1:
                 last_step = time.time()
-                step(run_name, worlds, agents)
+                step(run_name, worlds, agents, kinds[i % len(kinds)])
+                i += 1
 
 @wraps(arena)
 @contextmanager

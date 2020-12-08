@@ -18,9 +18,15 @@ def condition(soln, name):
     μc = μ - μ[name]
     return μc.drop(name), σ2.drop(name)**.5
 
+def drop_latest(df):
+    return df.loc[
+        ~df.index.str.endswith('latest'), 
+        ~df.columns.str.endswith('latest')]
+
 def periodic(run_name):
     run_name = paths.resolve(run_name)
     games, wins = database.symmetric_pandas(run_name)
+    games, wins = drop_latest(games), drop_latest(wins)
     soln = activelo.solve(games.values, wins.values)
 
     soln = to_pandas(soln, games)
