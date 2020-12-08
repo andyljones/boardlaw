@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import torch
-from rebar import storing, logging, dotdict
+from rebar import storing, logging, dotdict, stats
 import pickle
 from . import database, matchups
 from .. import mohex
@@ -46,64 +46,84 @@ def latest_agent(run_name, agentfunc, **kwargs):
     except ValueError:
         return {}
 
-def suggest_periodic(n, w, G):
+def step_periodic(run_name, worlds, agents):
+    n, w = database.symmetric_pandas(run_name, agents)
+    log.info(f'Loaded {int(n.sum().sum())} games')
+
     valid = n.index[n.index.str.endswith('periodic')]
     n = n.reindex(index=valid, columns=valid)
     w = w.reindex(index=valid, columns=valid)
-    try:
-        soln = activelo.solve(n.values, w.values)
-        log.info(f'Fitted a posterior, {(soln.σd**2).mean()**.5:.2f}σd over {n.shape[0]} agents')
-        matchup = activelo.suggest(soln, G)
-    except ValueError:
-        log.warn('Solver failed; making a random suggestion')
-        matchup = tuple(np.random.randint(0, n.shape[0], (2,)))
-    return [n.index[s] for s in matchup]
 
-def suggest_latest(n, w):
-    if n.index.endswith('latest').any() and n.index.endswith('periodic').any():
-        [latest] = n.index[n.index.endswith('latest')]
-        periodic = n.index[n.index.endswith('periodic')][-1]
-        return (latest, periodic)
+    soln = activelo.solve(n.values, w.values)
+    log.info(f'Fitted a posterior, {(soln.σd**2).mean()**.5:.2f}σd over {n.shape[0]} agents')
+    matchup = activelo.suggest(soln, worlds.periodic.n_envs)
+    matchup = [n.index[m] for m in matchup]
 
-def suggest_mohex(n, w, G):
+    agents = {m: agents[m] for m in matchup}
+    log.info('Playing ' + ' v. '.join(agents))
+    results = matchups.evaluate(worlds.periodic, agents)
+
+    wins, games = int(results[0].wins[0] + results[1].wins[1]), int(sum(r.games for r in results))
+    log.info(f'Storing. {wins} wins in {games} games for {list(agents)[0]} ')
+    database.store(run_name, results)
+
+def step_mohex(run_name, worlds, agents):
+    n, w = database.symmetric_pandas(run_name, agents)
+    log.info(f'Loaded {int(n.sum().sum())} games')
+
     valid = n.index[n.index.str.endswith('periodic') | (n.index == 'mohex')]
     n = n.reindex(index=valid, columns=valid)
     w = w.reindex(index=valid, columns=valid)
-    try:
-        soln = activelo.solve(n.values, w.values)
-        log.info(f'Fitted a posterior, {(soln.σd**2).mean()**.5:.2f}σd over {n.shape[0]} agents')
-        improvement = activelo.improvement(soln, G)
-        improvement = pd.DataFrame(improvement, n.index, n.columns).loc['mohex'].drop('mohex')
-        return ('mohex', improvement.argmax())
-    except ValueError:
-        log.warn('Solver failed; making a random suggestion')
-        return ('mohex', np.random.randint(0, n.shape[0]))
+
+    soln = activelo.solve(n.values, w.values)
+    log.info(f'Fitted a posterior, {(soln.σd**2).mean()**.5:.2f}σd over {n.shape[0]} agents')
+    improvement = activelo.improvement(soln, worlds.mohex.n_envs)
+    improvement = pd.DataFrame(improvement, n.index, n.columns).loc['mohex'].drop('mohex')
+    matchup = ('mohex', improvement.idxmax())
+
+    agents = {m: agents[m] for m in matchup}
+    log.info('Playing ' + ' v. '.join(agents))
+    results = matchups.evaluate(worlds.mohex, agents)
+
+    wins, games = int(results[0].wins[0] + results[1].wins[1]), int(sum(r.games for r in results))
+    log.info(f'Storing. {wins} wins in {games} games for {list(agents)[0]} ')
+    database.store(run_name, results)
+
+def step_latest(run_name, worlds, agents):
+    n, w = database.symmetric_pandas(run_name, agents)
+    log.info(f'Loaded {int(n.sum().sum())} games')
+
+    [latest] = n.index[n.index.str.endswith('latest')]
+    periodic = n.index[n.index.str.endswith('periodic')][-1]
+    matchup = (latest, periodic)
+
+    agents = {m: agents[m] for m in matchup}
+    log.info('Playing ' + ' v. '.join(agents))
+    results = matchups.evaluate(worlds.periodic, agents)
+
+    for r in results:
+        w.loc[r.names[0], r.names[1]] += r.wins[0]
+        w.loc[r.names[1], r.names[0]] += r.wins[1]
+        n.loc[r.names[0], r.names[1]] += r.games
+    
+    wins, games = int(results[0].wins[0] + results[1].wins[1]), int(sum(r.games for r in results))
+    log.info(f'Fitting posterior. {wins} wins for {list(agents)[0]} in {games} games')
+    soln = activelo.solve(n.values, w.values)
+    log.info(f'Fitted posterior, {(soln.σd**2).mean()**.5:.2f}σd over {n.shape[0]} agents')
+    μ = pd.Series(soln.μ, n.index).loc[latest]
+    log.info(f'eElo for {latest} is approximately {μ:.2f}')
+    stats.mean('elo', μ)
 
 def step(run_name, worlds, agents, kind):
     if len(agents) < 2:
         log.info(f'Only {len(agents)} agents have been loaded')
         return 
 
-    log.info(f'Running a {kind} game')
-    games, wins = database.symmetric_pandas(run_name, agents)
-    log.info(f'Loaded {int(games.sum().sum())} games')
-    if kind == 'periodic':
-        matchup = suggest_periodic(games, wins, worlds.periodic.n_envs)
-    elif kind == 'latest':
-        matchup = suggest_latest(games, wins)
-    elif kind == 'mohex':
-        matchup = suggest_mohex(games, wins, worlds.mohex.n_envs)
-    else:
-        raise ValueError(f'Kind "{kind}" is invalid')
-
-    if matchup:
-        agents = {m: agents[m] for m in matchup}
-        log.info('Playing ' + ' v. '.join(agents))
-        results = matchups.evaluate(worlds[kind], agents)
-
-        if kind in ('periodic', 'mohex'):
-            database.store(run_name, results)
-            log.info('Stored')
+    log.info(f'Running a "{kind}" step')
+    try:
+        globals()[f'step_{kind}'](run_name, worlds, agents)
+    except Exception as e:
+        log.error(f'Failed while running a "{kind}" step with a {e} error')
 
 def arena(run_name, worldfunc, agentfunc, device='cpu', **kwargs):
     with logging.via_dir(run_name):
