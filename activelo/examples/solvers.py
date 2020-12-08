@@ -4,32 +4,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import activelo
 
-def plot(soln):
-    fig, axes = plt.subplots(1, 4)
-    fig.set_size_inches(20, 5)
-
-    ax = axes[0]
-    ax.plot(soln.trace.l)
-    ax.set_xlim(0, len(soln.trace.l)-1)
-    ax.set_title('loss')
-
-    ax = axes[1]
-    ax.plot(soln.trace.relnorm)
-    ax.set_xlim(0, len(soln.trace.relnorm)-1)
-    ax.set_yscale('log')
-    ax.set_title('norms')
-
-    ax = axes[2]
-    ax.errorbar(
-        np.arange(soln.μd.shape[0]), 
-        soln.μd[:, 0], yerr=soln.σd[0, :], marker='.', linestyle='')
-    ax.set_xlim(0, len(soln.μ)-1)
-    ax.set_title('μ')
-
-    ax = axes[3]
-    ax.imshow(soln.σd)
-    ax.set_title('σd')
-
 def generated_example():
     N = 20
     truth = torch.randn(N)
@@ -40,7 +14,7 @@ def generated_example():
 
     trace = activelo.solve(n, w)
 
-    plot(trace)
+    activelo.plot(trace)
 
 def saved_example(filename):
     raw = np.load(filename)
@@ -50,7 +24,7 @@ def saved_example(filename):
 
     soln = activelo.solve(n, w)
 
-    plot(soln)
+    activelo.plot(soln)
 
     return soln
 
