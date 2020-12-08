@@ -51,6 +51,8 @@ def step_periodic(run_name, worlds, agents):
     log.info(f'Loaded {int(n.sum().sum())} games')
 
     valid = n.index[n.index.str.endswith('periodic')]
+    if len(valid) < 2:
+        raise ValueError('Need at least two periodic agents for a periodic step')
     n = n.reindex(index=valid, columns=valid)
     w = w.reindex(index=valid, columns=valid)
 
@@ -123,10 +125,10 @@ def step(run_name, worlds, agents, kind):
     try:
         globals()[f'step_{kind}'](run_name, worlds, agents)
     except Exception as e:
-        log.error(f'Failed while running a "{kind}" step with a {e} error')
+        log.error(f'Failed while running a "{kind}" step with a "{e}" error')
 
 def arena(run_name, worldfunc, agentfunc, device='cpu', **kwargs):
-    with logging.via_dir(run_name):
+    with logging.to_dir(run_name), stats.to_dir(run_name):
         worlds = dotdict.dotdict(
             periodic=worldfunc(device=device, n_envs=256),
             latest=worldfunc(device=device, n_envs=256),
