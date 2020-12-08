@@ -30,7 +30,7 @@ def saved_example(filename):
 
 def saved_examples():
     # Generated during development of my AlphaZero agent
-    saved_example('data/2020-11-27 21-32-59 az-test symmetric.npz')
+    saved_example('data/2020-12-07 21-59-18 az-test symmetric.npz')
 
     # A 100-agent problem that seems prone to either line search failures or negdef Σ.
     saved_example('data/line-search-failure.npz')

@@ -32,7 +32,7 @@ def plot(soln):
     ax.grid(True, axis='x')
 
     ax = axes[0, 2]
-    ax.imshow(np.log10(np.where(soln.n > 0, soln.n, np.nan)))
+    ax.imshow(np.log10(np.where(soln.n >= 1, soln.n, np.nan)))
     ax.set_title('log(games played)')
 
     ax = axes[1, 2]
