@@ -74,6 +74,8 @@ def step_mohex(run_name, worlds, agents):
     log.info(f'Loaded {int(n.sum().sum())} games')
 
     valid = n.index[n.index.str.endswith('periodic') | (n.index == 'mohex')]
+    if len(valid) < 2:
+        raise ValueError('Need at least two periodic agents for a periodic step')
     n = n.reindex(index=valid, columns=valid)
     w = w.reindex(index=valid, columns=valid)
 
@@ -112,15 +114,13 @@ def step_latest(run_name, worlds, agents):
     log.info(f'Fitting posterior. {wins} wins for {list(agents)[0]} in {games} games')
     soln = activelo.solve(n.values, w.values)
     log.info(f'Fitted posterior, {(soln.σd**2).mean()**.5:.2f}σd over {n.shape[0]} agents')
-    μ = pd.Series(soln.μ, n.index).loc[latest]
-    log.info(f'eElo for {latest} is approximately {μ:.2f}')
+    μ = pd.Series(soln.μ, n.index)
+    μ = μ.loc[latest] - μ[μ.index.str.endswith('periodic')].iloc[0]
+    breakpoint()
+    log.info(f'eElo for {latest} is approximately {μ:.2f} v. the first agent')
     stats.mean('elo', μ)
 
 def step(run_name, worlds, agents, kind):
-    if len(agents) < 2:
-        log.info(f'Only {len(agents)} agents have been loaded')
-        return 
-
     log.info(f'Running a "{kind}" step')
     try:
         globals()[f'step_{kind}'](run_name, worlds, agents)
