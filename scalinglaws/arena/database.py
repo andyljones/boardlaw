@@ -80,18 +80,3 @@ def symmetric_wins(run_name, min_games=-1):
     if len(df) == 0:
         return pd.DataFrame()
     return (df.black_wins + df.white_wins.T).where(games > min_games)
-
-def _transfer():
-    old = stored()
-
-    new = (old
-        .assign(black_wins=lambda df: df.black_reward == 1, white_wins=lambda df: df.white_reward == 1)
-        .groupby(['run_name', 'black_name', 'white_name'])[['black_wins', 'white_wins']].sum()
-        .reset_index())
-
-    from tqdm.auto import tqdm
-    import aljpy
-
-    for _, row in tqdm(new.iterrows(), total=len(new)):
-        database.store(row.run_name, aljpy.dotdict(row))
-        

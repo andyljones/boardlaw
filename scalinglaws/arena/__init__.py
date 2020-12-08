@@ -1,7 +1,8 @@
+import numpy as np
 import torch
 from rebar import storing, logging
 import pickle
-from . import database, emcee
+from . import database, matchups
 import activelo
 import time
 from logging import getLogger
@@ -47,29 +48,40 @@ def database_results(run_name, agents=None):
         agents = list(agents)
         games = games.reindex(index=agents, columns=agents).fillna(0)
         wins = wins.reindex(index=agents, columns=agents).fillna(0)
-    return games.values, wins.values
+    return games, wins
+
+def suggest(n, w, G):
+    try:
+        soln = activelo.solve(n.values, w.values)
+        log.info(f'Fitted a posterior, {(soln.σd**2).mean()**.5:.2f}σd over {n.shape[0]} agents')
+        matchup = activelo.suggest(soln, G)
+    except ValueError:
+        log.warn('Solver failed; making a random suggestion')
+        matchup = tuple(np.random.randint(0, n.shape[0], (2,)))
+    log.info(f'Suggestion is {matchup}')
+    return [n.index[s] for s in matchup]
 
 def arena(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], canceller=None, **kwargs):
     with logging.to_dir(run_name):
-        matcher = emcee.Emcee(worldfunc, device=device, **kwargs)
+        worlds = worldfunc(device=device, **kwargs)
         runs = ref_runs + [run_name]
         
+        agents = {}
         last_load, last_step = 0, 0
         while True:
             if time.time() - last_load > 60:
                 last_load = time.time()
                 agents = periodic_agents(runs, agentfunc, device)
-                matcher.add_agents(agents)
             
             if time.time() - last_step > 1:
                 last_step = time.time()
-                if len(matcher.agents) < 2:
-                    log.info(f'Only {len(matcher.names)} agents have been loaded')
+                if len(agents) < 2:
+                    log.info(f'Only {len(agents)} agents have been loaded')
                 else:
-                    games, wins = database_results(run_name, matcher.names.values())
+                    games, wins = database_results(run_name, agents)
                     log.info(f'Loaded {int(games.sum())} games')
-                    matchup = activelo.safe_suggest(torch.as_tensor(games), torch.as_tensor(wins), matcher.n_envs)
-                    results = matcher.step(matchup)
+                    matchup = suggest(games, wins, worlds.n_envs)
+                    results = matchups.evaluate(worlds, {m: agents[m] for m in matchup})
                     database.store(run_name, results)
                     log.info('Stepped, stored')
 
