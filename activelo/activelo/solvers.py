@@ -31,9 +31,10 @@ def as_square(xd, fill=0.):
     y[j, k] = xd
     return y
 
+_cache = {}
 class ELBO(nn.Module):
     
-    def __init__(self, N, constrain=True, expectation=None, **kwargs):
+    def __init__(self, N, constrain=True, **kwargs):
         super().__init__()
         self.N = N
         self.register_parameter('μ', nn.Parameter(torch.zeros((N,)).float()))
@@ -42,8 +43,11 @@ class ELBO(nn.Module):
         if constrain:
             geotorch.positive_definite(self, 'Σ')
 
-        # This is expensive to construct, so the parameter is so it can be passed around
-        self.expectation = expectations.normal(lambda d: -np.log(1 + np.exp(-d)), **kwargs) if expectation is None else expectation
+        # This is expensive to construct, so let's cache it
+        key = '-'.join(f'{k}:{v}' for k, v in kwargs.items())
+        if key not in _cache:
+            _cache[key] = expectations.normal(lambda d: -np.log(1 + np.exp(-d)), **kwargs) 
+        self.expectation = _cache[key]
 
     def expected_prior(self):
         # Constant isn't strictly needed, but it does help with testing
