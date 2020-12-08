@@ -118,8 +118,10 @@ class Solver:
 
         μd, σ2d = map(as_square, pairwise_diffs(elbo.μ, elbo.Σ))
         return arrdict.arrdict(
-            μ=elbo.μ.clone(), 
-            Σ=elbo.Σ.clone(), 
+            n=n,
+            w=w,
+            μ=elbo.μ, 
+            Σ=elbo.Σ, 
             μd=μd,
             σd=σ2d**.5,
             trace=arrdict.stack(trace)).detach().numpy()
