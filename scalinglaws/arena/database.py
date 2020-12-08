@@ -86,3 +86,13 @@ def symmetric_wins(run_name, min_games=-1):
     if len(df) == 0:
         return pd.DataFrame()
     return (df.black_wins + df.white_wins.T).where(games > min_games)
+
+def symmetric_pandas(run_name, agents=None):
+    games = symmetric_games(run_name)
+    wins = symmetric_wins(run_name)
+    if agents is not None:
+        agents = list(agents)
+        games = games.reindex(index=agents, columns=agents).fillna(0)
+        wins = wins.reindex(index=agents, columns=agents).fillna(0)
+    return games, wins
+

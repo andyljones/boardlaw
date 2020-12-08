@@ -39,17 +39,11 @@ def periodic_agents(run_name, agentfunc, **kwargs):
         return agents
 
 def latest_agent(run_name, agentfunc, **kwargs):
-    sd, modified = storing.load_latest(run_name, return_modtime=True)
-    return {f'{modified:%y%m%d-%H%M%S}-latest': assemble_agent(agentfunc, sd, **kwargs)}
-
-def database_results(run_name, agents=None):
-    games = database.symmetric_games(run_name)
-    wins = database.symmetric_wins(run_name)
-    if agents is not None:
-        agents = list(agents)
-        games = games.reindex(index=agents, columns=agents).fillna(0)
-        wins = wins.reindex(index=agents, columns=agents).fillna(0)
-    return games, wins
+    try:
+        sd, modified = storing.load_latest(run_name, return_modtime=True)
+        return {f'{modified:%y%m%d-%H%M%S}-latest': assemble_agent(agentfunc, sd, **kwargs)}
+    except ValueError:
+        return {}
 
 def suggest(n, w, G):
     try:
@@ -66,7 +60,7 @@ def step(run_name, worlds, agents):
         log.info(f'Only {len(agents)} agents have been loaded')
         return 
 
-    games, wins = database_results(run_name, agents)
+    games, wins = database.symmetric_pandas(run_name, agents)
     log.info(f'Loaded {int(games.sum().sum())} games')
     matchup = suggest(games, wins, 256)
     agents = {m: agents[m] for m in matchup}
@@ -127,8 +121,3 @@ def test():
     from rebar import paths
     paths.clear('test')
     arena('test', worldfunc, agentfunc, ref_runs=['2020-11-27 19-40-27 az-test'])
-
-def plot(run_name):
-    games, wins = database_results(run_name)
-    log.info(f'Loaded {int(games.sum())} games')
-    soln = activelo.Solver(games.shape[0])(torch.as_tensor(games), torch.as_tensor(wins))

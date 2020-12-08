@@ -1,36 +1,38 @@
+import activelo
+import numpy as np
+from rebar import dotdict
 import pandas as pd
 from . import database
 import seaborn as sns
 import matplotlib.pyplot as plt
 from rebar import paths
 
-def plot(df, vmin=0, vmax=1):
-    if df.size <= 525:
-        ax = sns.heatmap(df, cmap='RdBu', annot=True, vmin=vmin, vmax=vmax, annot_kws={'fontsize': 'large'}, cbar=False, square=True)
-        return ax
+def to_pandas(soln, games):
+    return dotdict.dotdict(
+        μ=pd.Series(soln.μ, games.index),
+        Σ=pd.DataFrame(soln.Σ, games.index, games.index))
+
+def condition(soln, name):
+    μ, Σ = soln.μ, soln.Σ 
+    σ2 = np.diag(Σ) + Σ.loc[name, name] - 2*Σ[name]
+    μc = μ - μ[name]
+    return μc.drop(name), σ2.drop(name)**.5
+
+def periodic(run_name):
+    run_name = paths.resolve(run_name)
+    games, wins = database.symmetric_pandas(run_name)
+    soln = activelo.solve(games.values, wins.values)
+
+    soln = to_pandas(soln, games)
+    if 'mohex' in games.index:
+        μ, σ = condition(soln, 'mohex')
+        title = f'{run_name}: eElo v. mohex'
     else:
-        im = plt.imshow(df, cmap='RdBu', vmin=vmin, vmax=vmax)
-        im.axes.set_xticks([])
-        im.axes.set_yticks([])
-        return im.axes
+        μ, σ = soln.μ, np.diag(soln.Σ)**.5
+        title = f'{run_name} eElo, raw'
 
-def games(run_name):
-    df = database.games(run_name)
-    with plt.style.context('seaborn-poster'):
-        ax = plot(df, vmax=df.max().max())
+    fig, axes = plt.subplots(1, 1, squeeze=False)
 
-def black(*args, **kwargs):
-    df = database.wins(*args, **kwargs)
-    with plt.style.context('seaborn-poster'):
-        ax = plot(df)
-        ax.set_xlabel('white')
-        ax.set_ylabel('black')
-        ax.set_title('black win rate')
-
-def symmetric(*args, **kwargs):
-    df = database.symmetric_winrate(*args, **kwargs)
-    with plt.style.context('seaborn-poster'):
-        ax = plot(df)
-        ax.set_ylabel('')
-        ax.set_title(f'symmetrized win rate')
-
+    ax = axes[0, 0]
+    ax.errorbar(np.arange(len(μ)), μ, yerr=σ, marker='.', capsize=2, linestyle='')
+    ax.set_title(title)
