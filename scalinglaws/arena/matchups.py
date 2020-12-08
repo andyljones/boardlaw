@@ -48,7 +48,7 @@ def evaluate(worlds, agents):
         if terminal.all():
             break
     
-    results = gather(wins, matchup_idxs, agents)
+    results = gather(wins, matchup_idxs, list(agents))
     return results
 
 def test():

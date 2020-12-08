@@ -61,8 +61,8 @@ def suggest(n, w, G):
     log.info(f'Suggestion is {matchup}')
     return [n.index[s] for s in matchup]
 
-def arena(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], canceller=None, **kwargs):
-    with logging.to_dir(run_name):
+def arena(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], **kwargs):
+    with logging.via_dir(run_name):
         worlds = worldfunc(device=device, **kwargs)
         runs = ref_runs + [run_name]
         
@@ -79,30 +79,21 @@ def arena(run_name, worldfunc, agentfunc, device='cpu', ref_runs=[], canceller=N
                     log.info(f'Only {len(agents)} agents have been loaded')
                 else:
                     games, wins = database_results(run_name, agents)
-                    log.info(f'Loaded {int(games.sum())} games')
+                    log.info(f'Loaded {int(games.sum().sum())} games')
                     matchup = suggest(games, wins, worlds.n_envs)
                     results = matchups.evaluate(worlds, {m: agents[m] for m in matchup})
                     database.store(run_name, results)
                     log.info('Stepped, stored')
 
-            # #TODO: Hangs occasionally, and damned if I know why.
-            # if canceller and canceller.wait(.1):
-            #     log.info('Breaking')
-            #     break
-
 @wraps(arena)
 @contextmanager
 def monitor(*args, **kwargs):
-    canceller = Event()
-    kwargs = {**kwargs, 'canceller': canceller}
     set_start_method('spawn', True)
     p = Process(target=arena, args=args, kwargs=kwargs, name='arena-monitor')
     try:
         p.start()
         yield
     finally:
-        log.info('Setting canceller')
-        canceller.set()
         for _ in range(50):
             if not p.is_alive():
                 log.info('Arena monitor dead')

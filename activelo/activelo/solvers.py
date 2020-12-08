@@ -82,6 +82,8 @@ class Solver:
         self.kwargs = {'max_iter': 100, **kwargs}
 
     def __call__(self, n, w):
+        n = torch.as_tensor(n)
+        w = torch.as_tensor(w)
         elbo = ELBO(self.N, expectation=self.expectation)
 
         # The gradients around here can be a little explode-y; a line search is a bit slow but 
