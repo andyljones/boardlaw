@@ -40,7 +40,7 @@ def periodic_agents(run_name, agentfunc, **kwargs):
 
 def latest_agent(run_name, agentfunc, **kwargs):
     sd, modified = storing.load_latest(run_name, return_modtime=True)
-    return {f'latest-{modified:%Y%m%d-%H%M%S}': assemble_agent(agentfunc, sd, **kwargs)}
+    return {f'{modified:%y%m%d-%H%M%S}-latest': assemble_agent(agentfunc, sd, **kwargs)}
 
 def database_results(run_name, agents=None):
     games = database.symmetric_games(run_name)
@@ -59,17 +59,35 @@ def suggest(n, w, G):
     except ValueError:
         log.warn('Solver failed; making a random suggestion')
         matchup = tuple(np.random.randint(0, n.shape[0], (2,)))
-    log.info(f'Suggestion is {matchup}')
     return [n.index[s] for s in matchup]
 
-def choose():
-    pass
+def step(run_name, worlds, agents):
+    if len(agents) < 2:
+        log.info(f'Only {len(agents)} agents have been loaded')
+        return 
+
+    games, wins = database_results(run_name, agents)
+    log.info(f'Loaded {int(games.sum().sum())} games')
+    matchup = suggest(games, wins, 256)
+    agents = {m: agents[m] for m in matchup}
+    log.info('Playing ' + ' v. '.join(agents))
+
+    if any(m.startswith('mohex') for m in matchup):
+        log.info('Mohex matchup')
+        results = matchups.evaluate(worlds.mohex, agents)
+    else:
+        log.info('NN matchup')
+        results = matchups.evaluate(worlds.nn, agents)
+
+    database.store(run_name, results)
+    log.info('Stepped, stored')
 
 def arena(run_name, worldfunc, agentfunc, device='cpu', **kwargs):
     with logging.via_dir(run_name):
-        worlds = {
-            'nn': worldfunc(device=device, n_envs=256),
-            'mohex': worldfunc(device=device, n_envs=8)}
+        worlds = dotdict.dotdict(
+            nn=worldfunc(device=device, n_envs=256),
+            mohex=worldfunc(device=device, n_envs=8))
+
         mhx = mohex.MoHexAgent()
         
         agents = {}
@@ -84,15 +102,7 @@ def arena(run_name, worldfunc, agentfunc, device='cpu', **kwargs):
             
             if time.time() - last_step > 1:
                 last_step = time.time()
-                if len(agents) < 2:
-                    log.info(f'Only {len(agents)} agents have been loaded')
-                else:
-                    games, wins = database_results(run_name, agents)
-                    log.info(f'Loaded {int(games.sum().sum())} games')
-                    matchup = suggest(games, wins, worlds.n_envs)
-                    results = matchups.evaluate(worlds, {m: agents[m] for m in matchup})
-                    database.store(run_name, results)
-                    log.info('Stepped, stored')
+                step(run_name, worlds, agents)
 
 @wraps(arena)
 @contextmanager
