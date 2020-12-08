@@ -1,3 +1,3 @@
 from .solvers import Solver, solve
 from .plot import plot
-from .suggestions import suggest
+from .suggestions import suggest, improvement
