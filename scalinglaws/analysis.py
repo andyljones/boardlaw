@@ -65,15 +65,15 @@ def record(world, agents, N=0, **kwargs):
 
 def test_record():
     from rebar import storing
-    from . import networks, mcts, analysis, hex
+    from scalinglaws import worldfunc, agentfunc, mohex, analysis
 
-    n_envs = 1
-    world = hex.Hex.initial(n_envs=n_envs, boardsize=5, device='cuda')
-    network = networks.Network(world.obs_space, world.action_space, width=128).to(world.device)
-    network.load_state_dict(storing.load_latest()['network'])
-    agent = mcts.MCTSAgent(network, n_nodes=16)
+    n_envs = 16
+    world = worldfunc(n_envs)
+    agent = agentfunc()
+    mhx = mohex.MoHexAgent()
+    agent.load_state_dict(storing.load_latest()['agent'])
 
-    analysis.record(world, [agent, agent], 20, N=0).notebook()
+    analysis.record(world, [agent, mhx], n_reps=1, N=0).notebook()
 
 def test_rollout():
     from . import networks, mcts, mohex
