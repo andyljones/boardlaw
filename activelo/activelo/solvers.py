@@ -31,10 +31,10 @@ def as_square(xd, fill=0.):
     y[j, k] = xd
     return y
 
-_cache = {}
+_cache = None
 class ELBO(nn.Module):
     
-    def __init__(self, N, constrain=True, **kwargs):
+    def __init__(self, N, constrain=True):
         super().__init__()
         self.N = N
         self.register_parameter('μ', nn.Parameter(torch.zeros((N,)).float()))
@@ -44,10 +44,10 @@ class ELBO(nn.Module):
             geotorch.positive_definite(self, 'Σ')
 
         # This is expensive to construct, so let's cache it
-        key = '-'.join(f'{k}:{v}' for k, v in kwargs.items())
-        if key not in _cache:
-            _cache[key] = expectations.normal(lambda d: -np.log(1 + np.exp(-d)), **kwargs) 
-        self.expectation = _cache[key]
+        global _cache
+        if _cache is None:
+            _cache = expectations.normal(lambda d: -np.log(1 + np.exp(-d))) 
+        self.expectation = _cache
 
     def expected_prior(self):
         # Constant isn't strictly needed, but it does help with testing
@@ -82,13 +82,12 @@ class Solver:
 
     def __init__(self, N, **kwargs):
         self.N = N
-        self.expectation = ELBO(N).expectation
         self.kwargs = {'max_iter': 100, **kwargs}
 
     def __call__(self, n, w):
         n = torch.as_tensor(n)
         w = torch.as_tensor(w)
-        elbo = ELBO(self.N, expectation=self.expectation)
+        elbo = ELBO(self.N)
 
         # The gradients around here can be a little explode-y; a line search is a bit slow but 
         # keeps us falling up any cliffs.
