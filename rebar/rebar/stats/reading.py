@@ -12,17 +12,6 @@ import _thread
 
 log = logging.getLogger(__name__)
 
-def format(v):
-    if isinstance(v, int):
-        return f'{v}'
-    if isinstance(v, float):
-        return f'{v:.6g}'
-    if isinstance(v, list):
-        return ', '.join(format(vv) for vv in v)
-    if isinstance(v, dict):
-        return '{' + ', '.join(f'{k}: {format(vv)}' for k, vv in v.items()) + '}'
-    return str(v)
-
 def adaptive_rule(df):
     timespan = (df.index[-1] - df.index[0]).total_seconds()
     if timespan < 600:
@@ -71,16 +60,28 @@ class Reader:
 
         results = []
         for (category, field), df in self.pandas().items():
-            func = categories.CATEGORIES[category]['resampler']
+            func = categories.CATEGORIES[category].resampler
             result = func(**{k: df[k] for k in df})(**kwargs)
             results.append(expand_columns(result, category, field))
 
         if results:
             df = pd.concat(results, 1)
+            df.columns = pd.MultiIndex.from_tuples(df.columns)
             df.index = df.index - df.index[0]
             return df
         else:
             return pd.DataFrame(index=pd.TimedeltaIndex([], name='time'))
+
+def sourceinfo(df):
+    names = df.columns.get_level_values(1)
+    tags = names.str.extract(r'^(?P<chart1>.*?)/(?P<label>.*)|(?P<chart2>.*)$')
+    tags['category'] = df.columns.get_level_values(0)
+    tags['key'] = df.columns.get_level_values(1)
+    tags['title'] = tags.chart1.combine_first(tags.chart2)
+    tags['id'] = tags['category'] + '_' + names
+    tags.index = df.columns
+    info = tags[['category', 'key', 'title', 'label', 'id']].fillna('')
+    return info
 
 def arrays(prefix='', run_name=-1):
     return Reader(run_name, prefix).arrays()
@@ -109,10 +110,11 @@ def tdformat(td):
         return f'{h:.0f}h{m:02.0f}m{s:02.0f}s'
 
 def __from_dir(canceller, run_name, out, rule, throttle=1):
+    run_name = paths.resolve(run_name)
     reader = Reader(run_name)
     start = pd.Timestamp.now()
 
-    nxt = time.time()
+    nxt = 0
     while True:
         if time.time() > nxt:
             nxt = nxt + throttle
@@ -120,12 +122,18 @@ def __from_dir(canceller, run_name, out, rule, throttle=1):
             # Base slightly into the future, else by the time the resample actually happens you're 
             # left with an almost-empty last interval.
             base = int(time.time() % 60) + 5
-            values = reader.resample(rule=rule, offset=f'{base}s')
+            df = reader.resample(rule=rule, offset=f'{base}s')
             
-            if len(values) > 0:
-                values = values.ffill(limit=1).iloc[-1].to_dict()
-                key_length = max([len(str(k)) for k in values], default=0)+1
-                content = '\n'.join(f'{{:{key_length}s}} {{}}'.format(k, format(values[k])) for k in sorted(values))
+            if len(df) > 0:
+                final = df.ffill(limit=1).iloc[-1]
+                keys, values = [], []
+                for (category, _), group in sourceinfo(df).groupby(['category', 'title']):
+                    formatter = categories.CATEGORIES[category]['formatter']
+                    ks, vs = formatter(final, group)
+                    keys.extend(ks)
+                    values.extend(vs)
+                key_length = max([len(str(k)) for k in keys], default=0)+1
+                content = '\n'.join(f'{{:{key_length}s}} {{}}'.format(k, v) for k, v in zip(keys, values))
             else:
                 content = 'No stats yet'
 

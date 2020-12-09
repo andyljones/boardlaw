@@ -1,20 +1,21 @@
+from rebar import dotdict
 import numpy as np
 import time
 import torch
 import matplotlib.pyplot as plt
 import pandas as pd
 import logging
-from . import loggers, plotters
+from . import formatters, plotters
 
 log = logging.getLogger(__name__)
 
 CATEGORIES = {}
-def category(logger=loggers.single, plotter=plotters.single):
+def category(formatter=formatters.single, plotter=plotters.single):
     def add(M):
-        CATEGORIES[M.__name__.lower()] = {
-            'resampler': M,
-            'logger': logger,
-            'plotter': plotter}
+        CATEGORIES[M.__name__.lower()] = dotdict.dotdict(
+            resampler=M,
+            formatter=formatter,
+            plotter=plotter)
         return M
     return add
 
@@ -36,12 +37,12 @@ def mean(total, count=1):
         return total.resample(**kwargs).mean()/count.resample(**kwargs).mean()
     return resample
 
-@category(loggers.confidence, plotters.confidence)
+@category(formatters.confidence, plotters.confidence)
 def mean_std(μ, σ):
     def resample(**kwargs):
         μm = (μ/σ**2).resample(**kwargs).mean()/(1/σ**2).resample(**kwargs).mean()
         σm = 1/(1/σ**2).resample(**kwargs).mean()
-        return pd.concat({'μ': μm, 'σ': σm}, 1)
+        return pd.concat({'μ': μm, 'σ': σm, 'μ-': μm - 2*σm, 'μ+': μm + 2*σm}, 1)
     return resample
 
 @category()
