@@ -15,9 +15,30 @@ __global__ void solve_policy_kernel(
     const auto A = pi.size(1);
     const int b = blockIdx.x;
 
+    const auto lambda = lambda_n[b];
+
+    float alpha = 0.f;
     for (int a = 0; a < A; a++) {
-        policy[b][a] = 1.f;
-        alpha_star[b] = 1.f;
+        float gap = fmaxf(lambda*pi[b][a], 1.e-6f);
+        alpha = fmaxf(alpha, q[b][a]);
+    }
+
+    float error = 1.f;
+    float new_error = 1.f;
+    for (int s=0; s<100; s++) {
+        float S = 0.f; 
+        float g = 0.f;
+        for (int a=0; a<A; a++) {
+            S += lambda*pi[b][a]/(alpha - q[b][a]);
+            g += -lambda*pi[b][a]/powf(alpha - q[b][a], 2);
+        }
+        new_error = S - 1;
+        if ((new_error < 1e-3f) || (error == new_error)) {
+            break;
+        } else {
+            alpha -= new_error/g;
+            error = new_error;
+        }
     }
 }
 

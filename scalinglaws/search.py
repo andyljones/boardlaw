@@ -113,6 +113,7 @@ def test_cuda():
     q = torch.ones((B, A)).cuda()
     lambda_n = torch.ones((B,)).cuda()
 
+    print('Runnign solve')
     soln = cuda.solve_policy(pi, q, lambda_n)
     print(soln.policy)
 
