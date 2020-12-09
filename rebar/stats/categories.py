@@ -31,6 +31,12 @@ def mean(total, count=1):
     return resample
 
 @category
+def mean_std(μ, σ):
+    def resample(**kwargs):
+        return (μ/σ**2).resample(**kwargs).mean()/(1/σ**2).resample(**kwargs).mean()
+    return resample
+
+@category
 def std(x):
     def resample(**kwargs):
         return x.resample(**kwargs).std()

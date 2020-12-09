@@ -133,24 +133,27 @@ def step_latest(run_name, worlds, agents):
     log.info(f'Fitted posterior, {(soln.σd**2).mean()**.5:.2f}σd over {n.shape[0]} agents')
     μ = pd.Series(soln.μ, n.index)
 
-    μ0, σ0 = difference(soln, n.index, latest, first_periodic)
-    stats.mean('elo-first/latest', μ0, 1/σ0**2)
     μm, σm = difference(soln, n.index, latest, 'mohex')
-    stats.mean('elo-mohex/latest', μm, 1/σm**2)
+    stats.mean_std('elo-mohex/latest', μm, σm)
+    μ0, σ0 = difference(soln, n.index, latest, first_periodic)
+    stats.mean_std('elo-first/latest', μ0, σ0)
     log.info(f'eElo for {latest} is {μ0:.2f}±{2*σ0:.2f} v. the first agent, {μm:.2f}±{2*σm:.2f} v. mohex')
 
-    μ0, σ0 = difference(soln, n.index, latest_periodic, first_periodic)
-    stats.mean('elo-first/periodic', μ0, 1/σ0**2)
     μm, σm = difference(soln, n.index, latest_periodic, 'mohex')
-    stats.mean('elo-mohex/periodic', μm, 1/σm**2)
-    log.info(f'eElo for {latest_periodic} is {μ0:.2f}±{2*σ0:.2f} v. the first agent, {μm:.2f}±{2*σm:.2f} v. mohex')
+    stats.mean_std('elo-mohex/periodic', μm, σm)
+    if latest_periodic != first_periodic:
+        μ0, σ0 = difference(soln, n.index, latest_periodic, first_periodic)
+        stats.mean_std('elo-first/periodic', μ0, σ0)
+        log.info(f'eElo for {latest_periodic} is {μ0:.2f}±{2*σ0:.2f} v. the first agent, {μm:.2f}±{2*σm:.2f} v. mohex')
+    else:
+        log.info(f'eElo for {latest_periodic} is {μm:.2f}±{2*σm:.2f} v. mohex')
+
 
 def step(run_name, worlds, agents, kind):
     log.info(f'Running a "{kind}" step')
     try:
         globals()[f'step_{kind}'](run_name, worlds, agents)
     except Exception as e:
-        raise
         log.error(f'Failed while running a "{kind}" step with a "{e}" error')
 
 def arena(run_name, worldfunc, agentfunc, device='cpu', **kwargs):
