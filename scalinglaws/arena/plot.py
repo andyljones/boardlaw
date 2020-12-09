@@ -42,3 +42,5 @@ def periodic(run_name):
     ax = axes[0, 0]
     ax.errorbar(np.arange(len(μ)), μ, yerr=σ, marker='.', capsize=2, linestyle='')
     ax.set_title(title)
+
+    return μ

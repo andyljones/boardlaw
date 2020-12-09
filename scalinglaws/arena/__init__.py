@@ -46,6 +46,12 @@ def latest_agent(run_name, agentfunc, **kwargs):
     except ValueError:
         return {}
 
+def difference(soln, names, first, second):
+    μ, Σ = pd.Series(soln.μ, names), pd.DataFrame(soln.Σ, names, names) 
+    μd = μ[first] - μ[second]
+    σ2d = Σ.loc[first, first] + Σ.loc[second, second] - 2*Σ.loc[first, second]
+    return μd, σ2d**.5
+
 def step_periodic(run_name, worlds, agents):
     n, w = database.symmetric_pandas(run_name, agents)
     log.info(f'Loaded {int(n.sum().sum())} games')
@@ -100,8 +106,9 @@ def step_latest(run_name, worlds, agents):
     log.info(f'Loaded {int(n.sum().sum())} games')
 
     [latest] = n.index[n.index.str.endswith('latest')]
-    periodic = n.index[n.index.str.endswith('periodic')][-1]
-    matchup = (latest, periodic)
+    first_periodic = n.index[n.index.str.endswith('periodic')][0]
+    latest_periodic = n.index[n.index.str.endswith('periodic')][-1]
+    matchup = (latest, latest_periodic)
 
     agents = {m: agents[m] for m in matchup}
     log.info('Playing ' + ' v. '.join(agents))
@@ -125,15 +132,25 @@ def step_latest(run_name, worlds, agents):
     soln = activelo.solve(n.values, w.values)
     log.info(f'Fitted posterior, {(soln.σd**2).mean()**.5:.2f}σd over {n.shape[0]} agents')
     μ = pd.Series(soln.μ, n.index)
-    μ = μ.loc[latest] - μ[μ.index.str.endswith('periodic')].iloc[0]
-    log.info(f'eElo for {latest} is approximately {μ:.2f} v. the first agent')
-    stats.mean('elo', μ)
+
+    μ0, σ0 = difference(soln, n.index, latest, first_periodic)
+    stats.mean('elo-first/latest', μ0, 1/σ0**2)
+    μm, σm = difference(soln, n.index, latest, 'mohex')
+    stats.mean('elo-mohex/latest', μm, 1/σm**2)
+    log.info(f'eElo for {latest} is {μ0:.2f}±{2*σ0:.2f} v. the first agent, {μm:.2f}±{2*σm:.2f} v. mohex')
+
+    μ0, σ0 = difference(soln, n.index, latest_periodic, first_periodic)
+    stats.mean('elo-first/periodic', μ0, 1/σ0**2)
+    μm, σm = difference(soln, n.index, latest_periodic, 'mohex')
+    stats.mean('elo-mohex/periodic', μm, 1/σm**2)
+    log.info(f'eElo for {latest_periodic} is {μ0:.2f}±{2*σ0:.2f} v. the first agent, {μm:.2f}±{2*σm:.2f} v. mohex')
 
 def step(run_name, worlds, agents, kind):
     log.info(f'Running a "{kind}" step')
     try:
         globals()[f'step_{kind}'](run_name, worlds, agents)
     except Exception as e:
+        raise
         log.error(f'Failed while running a "{kind}" step with a "{e}" error')
 
 def arena(run_name, worldfunc, agentfunc, device='cpu', **kwargs):
