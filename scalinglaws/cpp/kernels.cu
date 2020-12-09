@@ -4,6 +4,8 @@
 #include "common.h"
 #include <ATen/cuda/CUDAContext.h>
 
+const uint BLOCK = 128;
+
 at::cuda::CUDAStream stream() { 
     return at::cuda::getCurrentCUDAStream();
 }
@@ -14,14 +16,25 @@ __global__ void solve_policy_kernel(
 
     const auto B = pi.size(0);
     const auto A = pi.size(1);
-    const int b = blockIdx.x;
+    const int b = blockIdx.x*blockDim.x + threadIdx.x;
+    if (b >= B) {
+        return;
+    }
+
+    extern __shared__ float shared[];
+    float *qb = (float*)&shared[0];
+    float *pib = (float*)&shared[A];
 
     const auto lambda = lambda_n[b];
 
     float alpha = 0.f;
     for (int a = 0; a < A; a++) {
-        float gap = fmaxf(lambda*pi[b][a], 1.e-6f);
-        alpha = fmaxf(alpha, q[b][a] + gap);
+        // Copy data into shared memory
+        qb[a] = q[b][a];
+        pib[a] = pi[b][a];
+
+        float gap = fmaxf(lambda*pib[a], 1.e-6f);
+        alpha = fmaxf(alpha, qb[a] + gap);
     }
 
     float error = CUDART_INF_F;
@@ -33,18 +46,20 @@ __global__ void solve_policy_kernel(
         float S = 0.f; 
         float g = 0.f;
         for (int a=0; a<A; a++) {
-            S += lambda*pi[b][a]/(alpha - q[b][a]);
-            g += -lambda*pi[b][a]/powf(alpha - q[b][a], 2);
+            float top = lambda*pib[a];
+            float bot = alpha - qb[a];
+            S += top/bot;
+            g += -top/powf(bot, 2);
         }
         new_error = S - 1.f;
         if ((new_error < 1e-3f) || (error == new_error)) {
-            alpha_star[b] = alpha;
             break;
         } else {
             alpha -= new_error/g;
             error = new_error;
         }
     }
+    alpha_star[b] = alpha;
 }
 
 __host__ TT solve_policy(const TT pi, const TT q, const TT lambda_n) {
@@ -54,7 +69,8 @@ __host__ TT solve_policy(const TT pi, const TT q, const TT lambda_n) {
     auto alpha_star(TP1D::empty({B}));
     alpha_star.t.fill_(NAN);
 
-    solve_policy_kernel<<<{B}, {1}, 0, stream()>>>(
+    const uint n_blocks = (B + BLOCK - 1)/BLOCK;
+    solve_policy_kernel<<<{n_blocks}, {BLOCK}, 2*A*sizeof(float), stream()>>>(
         TP2D(pi).pta(), TP2D(q).pta(), TP1D(lambda_n).pta(),
         alpha_star.pta());
 

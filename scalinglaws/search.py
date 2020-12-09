@@ -132,7 +132,7 @@ def test_cuda():
 def benchmark_search(T=500):
     import aljpy
 
-    args = test_data()
+    args = [a.cuda() for a in test_data()]
 
     np.random.seed(0)
     assert T < len(args)
@@ -142,14 +142,11 @@ def benchmark_search(T=500):
     torch.cuda.synchronize()
     with aljpy.timer() as timer:
         for i, arg in enumerate(args):
-            solns.append(solve_policy(**arg))
+            solns.append(solve_policy_cuda(**arg))
         torch.cuda.synchronize()
     solns = arrdict.cat(solns)
     args = arrdict.cat(args)
     t = 1000*timer.time()
-    S = solns.steps.sum()
     print(f'{t:.0f}ms total over {T} policies')
-    print(f'{S/T:.1f} steps/policy')
-    print(f'{1000*t/S:.2f}us/step')
     print(f'{t/T:.1f}ms/policy')
 
