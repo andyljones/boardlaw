@@ -21,24 +21,6 @@ def dirichlet_noise(logits, valid, alpha=None, eps=.25):
 
     return (logits.exp()*(1 - eps) + draw*eps).log()
 
-def action_stats(children, n, w, envs, nodes):
-    children = children[envs, nodes]
-    mask = (children != -1)
-    n = n[envs[:, None].expand_as(children), children]
-    w = w[envs[:, None].expand_as(children), children]
-
-    n = n.where(mask, torch.zeros_like(n))
-    w = w.where(mask[..., None], torch.zeros_like(w))
-
-    q = w/n[..., None]
-
-    # Q scaling + pessimistic initialization
-    q[n == 0] = 0 
-    q = (q - q.min())/(q.max() - q.min() + 1e-6)
-    q[n == 0] = 0 
-
-    return q, n
-
 class MCTS:
 
     def __init__(self, world, n_nodes, c_puct=2.5, noise_eps=.05):
@@ -78,12 +60,29 @@ class MCTS:
         # Larger c_puct -> greater regularization
         self.c_puct = c_puct
 
-        compiled = torch.jit.trace(
-            action_stats, 
-            (self.tree.children, self.stats.n, self.stats.w, 
-            self.envs, torch.zeros_like(self.envs)))
-        self.action_stats = lambda envs, current: compiled(self.tree.children, self.stats.n, self.stats.w, envs, current)
+    def initialize(self, evaluator):
+        world = self.worlds[:, 0]
+        decisions = evaluator(world, value=True)
+        self.decisions.logits[:, self.sim] = dirichlet_noise(decisions.logits, world.valid, eps=self.noise_eps)
+        self.decisions.v[:, 0] = decisions.v
 
+        self.sim += 1
+
+    def action_stats(self, envs, nodes):
+        children = self.tree.children[envs, nodes]
+        mask = (children != -1)
+        stats = self.stats[envs[:, None].expand_as(children), children]
+        n = stats.n.where(mask, torch.zeros_like(stats.n))
+        w = stats.w.where(mask[..., None], torch.zeros_like(stats.w))
+
+        q = w/n[..., None]
+
+        # Q scaling + pessimistic initialization
+        q[n == 0] = 0 
+        q = (q - q.min())/(q.max() - q.min() + 1e-6)
+        q[n == 0] = 0 
+
+        return q, n
 
     def policy(self, envs, nodes):
         pi = self.decisions.logits[envs, nodes].exp()
@@ -107,15 +106,16 @@ class MCTS:
         probs = self.policy(env, nodes)
         return torch.distributions.Categorical(probs=probs).sample()
 
-    def initialize(self, evaluator):
-        world = self.worlds[:, 0]
-        decisions = evaluator(world, value=True)
-        self.decisions.logits[:, self.sim] = dirichlet_noise(decisions.logits, world.valid, eps=self.noise_eps)
-        self.decisions.v[:, 0] = decisions.v
-
-        self.sim += 1
-
     def descend(self):
+        # What does this use?
+        # * descent: envs, logits, terminal, children
+        # * policy: logits, seats, c_puct, n_actions
+        # * action_stats: children, n, w
+        # 
+        # So all together:
+        # * substantial: logits, terminal, children, seats, n, w
+        # * trivial: envs, n, w
+
         current = torch.full_like(self.envs, 0)
         actions = torch.full_like(self.envs, -1)
         parents = torch.full_like(self.envs, 0)
