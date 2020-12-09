@@ -118,9 +118,11 @@ class MCTS:
             if not active.any():
                 break
 
-            actions[active] = self.sample(self.envs[active], current[active])
-            parents[active] = current[active]
-            current[active] = self.tree.children[self.envs[active], current[active], actions[active]]
+            e, c = self.envs[active], current[active]
+            sampled = self.sample(e, c)
+            actions[active] = sampled
+            parents[active] = c
+            current[active] = self.tree.children[e, c, sampled]
 
         return parents, actions
 

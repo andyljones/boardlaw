@@ -135,6 +135,7 @@ def run():
             stats.gpu.vitals(worlds.device, throttle=15)
 
 def benchmark_experience_collection():
+    torch.manual_seed(0)
     n_envs = 1024
     worlds = worldfunc(n_envs)
     agent = agentfunc()
