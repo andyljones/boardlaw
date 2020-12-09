@@ -85,16 +85,16 @@ def optimize(network, opt, batch):
         # stats.rel_gradient_norm('rel-norm-grad', agent)
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=5, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=11, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
-    network = networks.Network(worlds.obs_space, worlds.action_space, width=32).to(worlds.device)
-    return mcts.MCTSAgent(network, n_nodes=16)
+    network = networks.Network(worlds.obs_space, worlds.action_space, width=128).to(worlds.device)
+    return mcts.MCTSAgent(network, n_nodes=32)
 
 def run():
-    buffer_length = 8
-    batch_size = 1024
+    buffer_length = 16 
+    batch_size = 8192
     n_envs = 1024
     buffer_inc = batch_size//n_envs
 
