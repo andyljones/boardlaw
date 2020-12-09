@@ -5,7 +5,8 @@ from bokeh import plotting as bop, io as boi
 from bokeh import models as bom, events as boe, layouts as bol
 from bokeh.palettes import Category10_10
 from itertools import cycle
-from . import stats, paths
+from .reading import Reader
+from .categories import CATEGORIES
 from contextlib import contextmanager
 from IPython.display import clear_output
 
@@ -171,18 +172,17 @@ def timedataframe(df):
     return _timedataframe(source, df.index.name, df.columns)
 
 def timegroups(df):
-    tags = df.columns.str.extract(r'^(?P<chart1>.*)/(?P<label>.*)|(?P<chart2>.*)$')
+    tags = df.columns.get_level_values(1).str.extract(r'^(?P<chart1>.*)/(?P<label>.*)|(?P<chart2>.*)$')
     tags['chart'] = tags.chart1.combine_first(tags.chart2)
     tags.index = df.columns
     return tags[['chart', 'label']].fillna('')
-
 
 class Stream:
 
     def __init__(self, run_name=-1, prefix=''):
         super().__init__()
 
-        self._reader = stats.Reader(run_name, prefix)
+        self._reader = Reader(run_name, prefix)
 
         self._source = bom.ColumnDataSource({'time': np.array([0])})
         self._handle = None
@@ -212,6 +212,7 @@ class Stream:
         # Drop the last row as it'll be constantly refreshed as the period occurs
         df = self._reader.resample(rule).iloc[:-1] if df is None else df
 
+        breakpoint()
         has_new_cols = not df.columns.isin(self._source.data).all()
         if has_new_cols:
             self._init(df)

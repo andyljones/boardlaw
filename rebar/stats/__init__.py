@@ -14,6 +14,7 @@ from .writing import *
 from .writing import to_dir, mean
 from .reading import from_dir, Reader
 from . import gpu
+from .plotting import view, review
 
 @contextmanager
 def via_dir(run_name, *args, **kwargs):

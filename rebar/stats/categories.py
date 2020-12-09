@@ -4,51 +4,59 @@ import torch
 import matplotlib.pyplot as plt
 import pandas as pd
 import logging
+from . import loggers, plotters
 
 log = logging.getLogger(__name__)
 
 CATEGORIES = {}
-def category(M):
-    CATEGORIES[M.__name__.lower()] = M
-    return M
+def category(logger=loggers.single, plotter=plotters.single):
+    def add(M):
+        CATEGORIES[M.__name__.lower()] = {
+            'resampler': M,
+            'logger': logger,
+            'plotter': plotter}
+        return M
+    return add
 
-@category
+@category()
 def last(x):
     def resample(**kwargs):
         return x.resample(**kwargs).last().ffill()
     return resample
 
-@category
+@category()
 def max(x):
     def resample(**kwargs):
         return x.resample(**kwargs).max()
     return resample
 
-@category
+@category()
 def mean(total, count=1):
     def resample(**kwargs):
         return total.resample(**kwargs).mean()/count.resample(**kwargs).mean()
     return resample
 
-@category
+@category(loggers.confidence, plotters.confidence)
 def mean_std(μ, σ):
     def resample(**kwargs):
-        return (μ/σ**2).resample(**kwargs).mean()/(1/σ**2).resample(**kwargs).mean()
+        μm = (μ/σ**2).resample(**kwargs).mean()/(1/σ**2).resample(**kwargs).mean()
+        σm = 1/(1/σ**2).resample(**kwargs).mean()
+        return pd.concat({'μ': μm, 'σ': σm}, 1)
     return resample
 
-@category
+@category()
 def std(x):
     def resample(**kwargs):
         return x.resample(**kwargs).std()
     return resample
 
-@category
+@category()
 def cumsum(total=1):
     def resample(**kwargs):
         return total.resample(**kwargs).sum().cumsum()
     return resample
 
-@category
+@category()
 def timeaverage(x):
     def resample(**kwargs):
         # TODO: To do this properly, I need to get individual per-device streams
@@ -57,7 +65,7 @@ def timeaverage(x):
         return (y*dt).resample(**kwargs).mean()/dt.resample(**kwargs).mean()
     return resample
 
-@category
+@category()
 def duty(duration):
     def resample(**kwargs):
         sums = duration.resample(**kwargs).sum()
@@ -65,13 +73,13 @@ def duty(duration):
         return sums/periods
     return resample
 
-@category
+@category()
 def maxrate(duration, count=1):
     def resample(**kwargs):
         return count.resample(**kwargs).mean()/duration.resample(**kwargs).mean()
     return resample
 
-@category
+@category()
 def rate(count=1):
     def resample(**kwargs):
         counts = count.resample(**kwargs).sum()
@@ -80,7 +88,7 @@ def rate(count=1):
         return counts/dt
     return resample
 
-@category
+@category()
 def period(count=1):
     def resample(**kwargs):
         counts = count.resample(**kwargs).sum()
@@ -89,11 +97,11 @@ def period(count=1):
         return dt/counts
     return resample
 
-@category
+@category()
 def dist(samples, size=10000):
     return samples
 
-@category
+@category()
 def noisescale(S, G2, B):
     def resample(**kwargs):
         return S.resample(**kwargs).mean()/G2.resample(**kwargs).mean()

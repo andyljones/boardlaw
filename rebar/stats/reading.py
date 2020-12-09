@@ -31,6 +31,14 @@ def adaptive_rule(df):
         return '1min'
     else:
         return '10min'
+
+def expand_columns(df, category, field):
+    if isinstance(df, pd.Series):
+        return pd.concat({(category, field): df}, 1)
+    else:
+        df = df.copy()
+        df.columns = [(category, f'{field}/{c}') for c in df.columns]
+        return df
     
 class Reader:
 
@@ -61,10 +69,11 @@ class Reader:
     def resample(self, rule='60s', **kwargs):
         kwargs = {'rule': rule, **kwargs}
 
-        results = {}
+        results = []
         for (category, field), df in self.pandas().items():
-            func = getattr(categories, category)
-            results[field] = func(**{k: df[k] for k in df})(**kwargs)
+            func = categories.CATEGORIES[category]['resampler']
+            result = func(**{k: df[k] for k in df})(**kwargs)
+            results.append(expand_columns(result, category, field))
 
         if results:
             df = pd.concat(results, 1)
@@ -78,6 +87,7 @@ def arrays(prefix='', run_name=-1):
 
 def pandas(name, run_name=-1):
     dfs = Reader(run_name, name).pandas()
+    assert len(dfs) == 1, f'Got more than one dataframe back for "{name}"'
     for (_, field), df in dfs.items():
         return df
     raise KeyError(f'Couldn\'t find a statistic matching {name}')
