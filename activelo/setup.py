@@ -18,6 +18,7 @@ setup(
         'torch>=1.7',
         'torchvision>=0.6',
         'geotorch>=0.1',
-        'matplotlib>=3'],
+        'matplotlib>=3',
+        'rebar @ git+https://github.com/andyljones/rebar.git@#egg=rebar'],
     package_data={'': ['data/*']}
 )
