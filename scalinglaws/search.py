@@ -6,7 +6,7 @@ from rebar import arrdict
 import sysconfig
 from pkg_resources import resource_filename
 
-DEBUG = True
+DEBUG = False
 
 def _cuda():
     [torch_libdir] = torch.utils.cpp_extension.library_paths()
@@ -119,10 +119,13 @@ def test_data(small=False):
         return pickle.load(f)
 
 def test_cuda():
-    B, A = 1, 2
-    pi = torch.ones((B, A)).cuda()/A
-    q = torch.ones((B, A)).cuda()
-    lambda_n = torch.ones((B,)).cuda()
+    pi = torch.tensor([
+        [1/3., 2/3.],
+        [3/4., 1/4.]]).cuda()
+    q = torch.tensor([
+        [.3, .1],
+        [.5, .7]]).cuda()
+    lambda_n = torch.tensor([1., 2.]).cuda()
 
     print('Runnign solve')
     soln = solve_policy_cuda(pi, q, lambda_n)
@@ -148,5 +151,6 @@ def benchmark_search(T=500):
     args = arrdict.cat(args)
     t = 1000*timer.time()
     print(f'{t:.0f}ms total over {T} policies')
-    print(f'{t/T:.1f}ms/policy')
+    print(f'{t/T:.2f}ms/policy')
+    print(f'{solns.error.abs().mean():.3f} MAD')
 

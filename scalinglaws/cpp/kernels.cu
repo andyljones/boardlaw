@@ -4,7 +4,7 @@
 #include "common.h"
 #include <ATen/cuda/CUDAContext.h>
 
-const uint BLOCK = 128;
+const uint BLOCK = 8;
 
 at::cuda::CUDAStream stream() { 
     return at::cuda::getCurrentCUDAStream();
@@ -22,17 +22,18 @@ __global__ void solve_policy_kernel(
     }
 
     extern __shared__ float shared[];
-    float *qb = (float*)&shared[0];
-    float *pib = (float*)&shared[A];
+    float *qb = (float*)&shared[threadIdx.x*2*A];
+    float *pib = (float*)&shared[threadIdx.x*2*A+A];
+    for (int a = 0; a < A; a++) {
+        qb[a] = q[b][a];
+        pib[a] = pi[b][a];
+    }
+    __syncthreads();
 
     const auto lambda = lambda_n[b];
 
     float alpha = 0.f;
     for (int a = 0; a < A; a++) {
-        // Copy data into shared memory
-        qb[a] = q[b][a];
-        pib[a] = pi[b][a];
-
         float gap = fmaxf(lambda*pib[a], 1.e-6f);
         alpha = fmaxf(alpha, qb[a] + gap);
     }
@@ -52,14 +53,15 @@ __global__ void solve_policy_kernel(
             g += -top/powf(bot, 2);
         }
         new_error = S - 1.f;
+        // printf("%d: alpha: %.2f, S: %.2f, e: %.2f, g: %.2f\n", b, alpha, S, new_error, g);
         if ((new_error < 1e-3f) || (error == new_error)) {
+            alpha_star[b] = alpha;
             break;
         } else {
             alpha -= new_error/g;
             error = new_error;
         }
     }
-    alpha_star[b] = alpha;
 }
 
 __host__ TT solve_policy(const TT pi, const TT q, const TT lambda_n) {
@@ -70,7 +72,7 @@ __host__ TT solve_policy(const TT pi, const TT q, const TT lambda_n) {
     alpha_star.t.fill_(NAN);
 
     const uint n_blocks = (B + BLOCK - 1)/BLOCK;
-    solve_policy_kernel<<<{n_blocks}, {BLOCK}, 2*A*sizeof(float), stream()>>>(
+    solve_policy_kernel<<<{n_blocks}, {BLOCK}, BLOCK*2*A*sizeof(float), stream()>>>(
         TP2D(pi).pta(), TP2D(q).pta(), TP1D(lambda_n).pta(),
         alpha_star.pta());
 
