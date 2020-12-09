@@ -132,14 +132,16 @@ class MCTS:
             if not active.any():
                 break
 
-            t = self.transitions.terminal[self.envs[active], current[active]]
-            v[self.envs[active][t]] = 0. 
-            v[active] += self.transitions.rewards[self.envs[active], current[active]]
+            e, c = self.envs[active], current[active]
+            
+            t = self.transitions.terminal[e, c]
+            v[e[t]] = 0. 
+            v[active] += self.transitions.rewards[e, c]
 
-            self.stats.n[self.envs[active], current[active]] += 1
-            self.stats.w[self.envs[active], current[active]] += v[active]
+            self.stats.n[e, c] += 1
+            self.stats.w[e, c] += v[active]
         
-            current[active] = self.tree.parents[self.envs[active], current[active]]
+            current[active] = self.tree.parents[e, c]
 
     def simulate(self, evaluator):
         if self.sim >= self.n_nodes:
