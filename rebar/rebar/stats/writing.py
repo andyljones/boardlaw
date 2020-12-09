@@ -37,7 +37,7 @@ def eager_record(category, field, *args, **kwargs):
     args = tuple(clean(a) for a in args)
     kwargs = {k: clean(v) for k, v in kwargs.items()}
 
-    func = categories.CATEGORIES[category]
+    func = categories.CATEGORIES[category].resampler
     call = inspect.getcallargs(func, *args, **kwargs)
     call = {'_time': np.datetime64('now'), **call}
 
@@ -115,7 +115,7 @@ def defer():
             args, kwargs = getter(collection)
             args = tuple(clean(a) for a in args)
             kwargs = {k: clean(v) for k, v in kwargs.items()}
-            func = categories.CATEGORIES[category]
+            func = categories.CATEGORIES[category].resampler
             call = inspect.getcallargs(func, *args, **kwargs)
             call = {'_time': np.datetime64('now'), **call}
 
