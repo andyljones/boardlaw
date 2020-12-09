@@ -171,11 +171,12 @@ def timedataframe(df):
     source = bom.ColumnDataSource(df.reset_index())
     return _timedataframe(source, df.index.name, df.columns)
 
-def timegroups(df):
+def plotgroups(df):
     tags = df.columns.get_level_values(1).str.extract(r'^(?P<chart1>.*)/(?P<label>.*)|(?P<chart2>.*)$')
-    tags['chart'] = tags.chart1.combine_first(tags.chart2)
+    tags['category'] = df.columns.get_level_values(0)
+    tags['title'] = tags.chart1.combine_first(tags.chart2)
     tags.index = df.columns
-    return tags[['chart', 'label']].fillna('')
+    return tags[['category', 'title', 'label']].fillna('')
 
 class Stream:
 
@@ -184,43 +185,28 @@ class Stream:
 
         self._reader = Reader(run_name, prefix)
 
-        self._source = bom.ColumnDataSource({'time': np.array([0])})
         self._handle = None
 
     def _new_grid(self, children):
         return bol.gridplot(children, ncols=4, plot_width=350, plot_height=300, merge_tools=False)
 
-    def _init(self, df):
-        self._source = bom.ColumnDataSource(df.reset_index())
+    def update(self, rule='60s', df=None):
+        # Drop the last row as it'll be constantly refreshed as the period occurs
+        df = self._reader.resample(rule).iloc[:-1] if df is None else df
+
+        source = bom.ColumnDataSource(df.reset_index())
 
         children = []
-        for name, group in timegroups(df).groupby('chart'):
-            if group.label.eq('').all():
-                assert len(group) == 1
-                f = _timeseries(self._source, 'time', group.index[0])
-                f.title = bom.Title(text=name)
-            else:
-                f = _timedataframe(self._source, 'time', group.index)
-                f.title = bom.Title(text=name)
+        for (category, title), group in plotgroups(df).groupby(['category', 'title']):
+            plotter = CATEGORIES[category]['plotter']
+            f = plotter(source, group.index)
+            f.title = bom.Title(text=title)
             children.append(f)
         self._grid = self._new_grid(children)
         ## TODO: Not wild about this
         clear_output(wait=True)
         self._handle = bop.show(self._grid, notebook_handle=True)
 
-    def update(self, rule='60s', df=None):
-        # Drop the last row as it'll be constantly refreshed as the period occurs
-        df = self._reader.resample(rule).iloc[:-1] if df is None else df
-
-        breakpoint()
-        has_new_cols = not df.columns.isin(self._source.data).all()
-        if has_new_cols:
-            self._init(df)
-        else:
-            threshold = len(self._source.data['time'])
-            new = df.iloc[threshold:]
-            self._source.stream(new.reset_index())
-        
         boi.push_notebook(handle=self._handle)
 
 def view(run_name=-1, prefix='', rule='60s'):

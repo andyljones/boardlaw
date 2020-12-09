@@ -1,5 +1,5 @@
 
-def single():
+def single(source, names, title):
     pass
 
 def confidence():
