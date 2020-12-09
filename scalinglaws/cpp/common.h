@@ -49,13 +49,13 @@ using TP1D = TensorProxy<float, 1>;
 using TP2D = TensorProxy<float, 2>;
 
 struct Solution {
-    const TP1D policy;
+    const TP2D policy;
     const TP1D alpha_min;
     const TP1D alpha_star;
     const TP1D error;
 
-    Solution(const uint B) : 
-        policy(TP1D::empty({B})),
+    Solution(const uint B, const uint A) : 
+        policy(TP2D::empty({B, A})),
         alpha_min(TP1D::empty({B})),
         alpha_star(TP1D::empty({B})),
         error(TP1D::empty({B})) {

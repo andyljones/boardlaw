@@ -1,3 +1,4 @@
+import pickle
 import numpy as np
 import torch
 import torch.utils.cpp_extension
@@ -5,7 +6,7 @@ from rebar import arrdict
 import sysconfig
 from pkg_resources import resource_filename
 
-DEBUG = False
+DEBUG = True
 
 def _cuda():
     [torch_libdir] = torch.utils.cpp_extension.library_paths()
@@ -100,13 +101,27 @@ def test_policy():
     lambda_n = torch.tensor([[.5]])
     soln = solve_policy(pi, q, lambda_n)
     torch.testing.assert_allclose(soln.alpha_star, torch.tensor([[1.205]]), rtol=.001, atol=.001)
+
+def test_data(small=False):
+    fn = 'output/search/benchmark.pkl' if small else 'output/search/extra-benchmark.pkl' 
+    with open(fn, 'rb') as f:
+        return pickle.load(f)
+
+def test_cuda():
+    B, A = 3, 2
+    pi = torch.ones((B, A)).cuda()/A
+    q = torch.ones((B, A)).cuda()
+    lambda_n = torch.ones((B,)).cuda()
+
+    soln = cuda.solve_policy(pi, q, lambda_n)
+    print(soln.policy)
+
+    return soln
     
 def benchmark_search(T=500):
     import aljpy
-    import pickle 
 
-    with open('output/search/extra-benchmark.pkl', 'rb') as f:
-        args = pickle.load(f)
+    args = test_data()
 
     np.random.seed(0)
     assert T < len(args)
