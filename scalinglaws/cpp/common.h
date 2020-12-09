@@ -1,7 +1,6 @@
 #include <ATen/ATen.h>
 #include <variant>
 #include <exception>
-#include <iostream>
 #include <pybind11/pybind11.h>
 
 namespace py = pybind11;
@@ -48,18 +47,4 @@ struct TensorProxy {
 using TP1D = TensorProxy<float, 1>;
 using TP2D = TensorProxy<float, 2>;
 
-struct Solution {
-    const TP2D policy;
-    const TP1D alpha_min;
-    const TP1D alpha_star;
-    const TP1D error;
-
-    Solution(const uint B, const uint A) : 
-        policy(TP2D::empty({B, A})),
-        alpha_min(TP1D::empty({B})),
-        alpha_star(TP1D::empty({B})),
-        error(TP1D::empty({B})) {
-    } 
-};
-
-Solution solve_policy(const TT pi, const TT q, const TT lambda_n);
+TT solve_policy(const TT pi, const TT q, const TT lambda_n);

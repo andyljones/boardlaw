@@ -1,4 +1,4 @@
-#include <math_constants.h>
+#include <math.h>
 #include <ATen/ATen.h>
 #include "common.h"
 #include <ATen/cuda/CUDAContext.h>
@@ -9,7 +9,7 @@ at::cuda::CUDAStream stream() {
 
 __global__ void solve_policy_kernel(
     TP2D::PTA pi, TP2D::PTA q, TP1D::PTA lambda_n,
-    TP2D::PTA policy, TP1D::PTA alpha_star) {
+    TP1D::PTA alpha_star) {
 
     const auto B = pi.size(0);
     const auto A = pi.size(1);
@@ -34,6 +34,7 @@ __global__ void solve_policy_kernel(
         }
         new_error = S - 1;
         if ((new_error < 1e-3f) || (error == new_error)) {
+            alpha_star[b] = alpha;
             break;
         } else {
             alpha -= new_error/g;
@@ -42,15 +43,16 @@ __global__ void solve_policy_kernel(
     }
 }
 
-__host__ Solution solve_policy(const TT pi, const TT q, const TT lambda_n) {
+__host__ TT solve_policy(const TT pi, const TT q, const TT lambda_n) {
     const uint B = pi.size(0);
     const uint A = pi.size(1);
 
-    Solution soln(B, A);
+    auto alpha_star(TP1D::empty({B}));
+    alpha_star.t.fill_(NAN);
 
     solve_policy_kernel<<<{B}, {1}, 0, stream()>>>(
         TP2D(pi).pta(), TP2D(q).pta(), TP1D(lambda_n).pta(),
-        TP2D(soln.policy).pta(), TP1D(soln.alpha_star).pta());
+        alpha_star.pta());
 
-    return soln;
+    return alpha_star.t;
 }

@@ -114,10 +114,10 @@ def test_cuda():
     lambda_n = torch.ones((B,)).cuda()
 
     print('Runnign solve')
-    soln = cuda.solve_policy(pi, q, lambda_n)
-    print(soln.policy)
+    alpha_star = cuda.solve_policy(pi, q, lambda_n)
+    print(alpha_star)
 
-    return soln
+    return alpha_star
     
 def benchmark_search(T=500):
     import aljpy
