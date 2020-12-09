@@ -35,10 +35,6 @@ struct TensorProxy {
         AT_ASSERT(t.ndimension() == D);
     }
 
-    static TensorProxy<T, D> empty(at::IntArrayRef size) { return TensorProxy(at::empty(size, at::device(at::kCUDA).dtype(dtype<T>()))); }
-    static TensorProxy<T, D> zeros(at::IntArrayRef size) { return TensorProxy(at::zeros(size, at::device(at::kCUDA).dtype(dtype<T>()))); }
-    static TensorProxy<T, D> ones(at::IntArrayRef size) { return TensorProxy(at::ones(size, at::device(at::kCUDA).dtype(dtype<T>()))); }
-
     PTA pta() const { return t.packed_accessor32<T, D, RestrictPtrTraits>(); }
 
     size_t size(const size_t i) const { return t.size(i); }

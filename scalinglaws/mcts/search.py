@@ -83,7 +83,8 @@ def solve_policy_old(pi, q, lambda_n):
 def solve_policy(pi, q, lambda_n):
     assert (lambda_n > 0).all(), 'Don\'t currently support zero lambda_n'
 
-    alpha_star = cuda.solve_policy(pi, q, lambda_n)
+    with torch.cuda.device(pi.device):
+        alpha_star = cuda.solve_policy(pi, q, lambda_n)
     p = lambda_n[:, None]*pi/(alpha_star[:, None] - q)
 
     return arrdict.arrdict(

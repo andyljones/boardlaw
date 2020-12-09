@@ -287,7 +287,7 @@ class MCTSAgent:
         return {**evaluator, **kwargs}
 
 
-from . import validation, analysis
+from .. import validation, analysis
 
 #TODO: The 'v' all need to be rewritten to test something else.
 def test_trivial():

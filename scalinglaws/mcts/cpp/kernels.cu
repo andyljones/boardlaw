@@ -68,7 +68,7 @@ __host__ TT solve_policy(const TT pi, const TT q, const TT lambda_n) {
     const uint B = pi.size(0);
     const uint A = pi.size(1);
 
-    auto alpha_star(TP1D::empty({B}));
+    TP1D alpha_star(pi.new_empty({B}));
     alpha_star.t.fill_(NAN);
 
     //TODO: Replace this with a hardware dependent test
