@@ -38,7 +38,13 @@ def newton_search(f, grad, x0, tol=1e-3):
 
         x[~done] = (x - y/grad(x))[~done]
 
+CACHE = []
+from rebar import arrdict
+
 def solve_policy(pi, q, lambda_n):
+    CACHE.append(arrdict.arrdict(
+        pi=pi, q=q, lambda_n=lambda_n).clone())
+
     assert (lambda_n > 0).all(), 'Don\'t currently support zero lambda_n'
 
     # Need alpha_min to be at least 2eps greater than the asymptote, else we'll risk an infinite gradient

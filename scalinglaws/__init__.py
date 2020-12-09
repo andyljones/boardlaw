@@ -133,3 +133,13 @@ def run():
             storing.store_periodic(run_name, {'agent': agent, 'opt': opt}, throttle=900)
             stats.gpu.memory(worlds.device)
             stats.gpu.vitals(worlds.device, throttle=15)
+
+def benchmark_experience_collection():
+    n_envs = 1024
+    worlds = worldfunc(n_envs)
+    agent = agentfunc()
+
+    for i in range(10):
+        decisions = agent(worlds, value=True)
+        new_worlds, transition = worlds.step(decisions.actions)
+        worlds = new_worlds
