@@ -80,6 +80,17 @@ def solve_policy(pi, q, lambda_n):
         alpha_star=alpha_star,
         error=p.sum(-1) - 1)
 
+def solve_policy_cuda(pi, q, lambda_n):
+    assert (lambda_n > 0).all(), 'Don\'t currently support zero lambda_n'
+
+    alpha_star = cuda.solve_policy(pi, q, lambda_n)
+    p = lambda_n[:, None]*pi/(alpha_star[:, None] - q)
+
+    return arrdict.arrdict(
+        policy=p,
+        alpha_star=alpha_star,
+        error=p.sum(-1) - 1)
+
 def test_policy():
     # Case when the root is at the lower bound
     pi = torch.tensor([[.999, .001]])
@@ -108,16 +119,15 @@ def test_data(small=False):
         return pickle.load(f)
 
 def test_cuda():
-    B, A = 3, 2
+    B, A = 1, 2
     pi = torch.ones((B, A)).cuda()/A
     q = torch.ones((B, A)).cuda()
     lambda_n = torch.ones((B,)).cuda()
 
     print('Runnign solve')
-    alpha_star = cuda.solve_policy(pi, q, lambda_n)
-    print(alpha_star)
+    soln = solve_policy_cuda(pi, q, lambda_n)
 
-    return alpha_star
+    return soln
     
 def benchmark_search(T=500):
     import aljpy

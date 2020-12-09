@@ -1,4 +1,5 @@
 #include <math.h>
+#include <math_constants.h>
 #include <ATen/ATen.h>
 #include "common.h"
 #include <ATen/cuda/CUDAContext.h>
@@ -20,11 +21,14 @@ __global__ void solve_policy_kernel(
     float alpha = 0.f;
     for (int a = 0; a < A; a++) {
         float gap = fmaxf(lambda*pi[b][a], 1.e-6f);
-        alpha = fmaxf(alpha, q[b][a]);
+        alpha = fmaxf(alpha, q[b][a] + gap);
     }
 
-    float error = 1.f;
-    float new_error = 1.f;
+    float error = CUDART_INF_F;
+    float new_error = CUDART_INF_F;
+    // Typical problems converge in 10 steps. Hypothetically 100 might be 
+    // hit sometimes, but it's worth risking it for how utterly awful it'd 
+    // be debugging an infinite loop in the kernel.
     for (int s=0; s<100; s++) {
         float S = 0.f; 
         float g = 0.f;
@@ -32,7 +36,7 @@ __global__ void solve_policy_kernel(
             S += lambda*pi[b][a]/(alpha - q[b][a]);
             g += -lambda*pi[b][a]/powf(alpha - q[b][a], 2);
         }
-        new_error = S - 1;
+        new_error = S - 1.f;
         if ((new_error < 1e-3f) || (error == new_error)) {
             alpha_star[b] = alpha;
             break;
