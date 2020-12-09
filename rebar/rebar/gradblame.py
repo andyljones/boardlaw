@@ -1,3 +1,5 @@
+"""TODO: Actually hook up the grads collection and the plotting"""
+
 from collections import namedtuple
 
 from torch import tensor
