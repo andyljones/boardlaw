@@ -57,7 +57,7 @@ def newton_search(f, grad, x0, tol=1e-3):
         x[~done] = (x - y/grad(x))[~done]
         steps += 1
 
-def solve_policy(pi, q, lambda_n):
+def solve_policy_old(pi, q, lambda_n):
     assert (lambda_n > 0).all(), 'Don\'t currently support zero lambda_n'
 
     # Need alpha_min to be at least 2eps greater than the asymptote, else we'll risk an infinite gradient
@@ -80,7 +80,7 @@ def solve_policy(pi, q, lambda_n):
         alpha_star=alpha_star,
         error=p.sum(-1) - 1)
 
-def solve_policy_cuda(pi, q, lambda_n):
+def solve_policy(pi, q, lambda_n):
     assert (lambda_n > 0).all(), 'Don\'t currently support zero lambda_n'
 
     alpha_star = cuda.solve_policy(pi, q, lambda_n)
@@ -128,7 +128,7 @@ def test_cuda():
     lambda_n = torch.tensor([1., 2.]).cuda()
 
     print('Runnign solve')
-    soln = solve_policy_cuda(pi, q, lambda_n)
+    soln = solve_policy(pi, q, lambda_n)
 
     return soln
     
@@ -145,7 +145,7 @@ def benchmark_search(T=500):
     torch.cuda.synchronize()
     with aljpy.timer() as timer:
         for i, arg in enumerate(args):
-            solns.append(solve_policy_cuda(**arg))
+            solns.append(solve_policy(**arg))
         torch.cuda.synchronize()
     solns = arrdict.cat(solns)
     args = arrdict.cat(args)

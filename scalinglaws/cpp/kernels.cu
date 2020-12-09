@@ -71,6 +71,9 @@ __host__ TT solve_policy(const TT pi, const TT q, const TT lambda_n) {
     auto alpha_star(TP1D::empty({B}));
     alpha_star.t.fill_(NAN);
 
+    //TODO: Replace this with a hardware dependent test
+    assert (BLOCK*2*A*sizeof(float) < 64*1024);
+
     const uint n_blocks = (B + BLOCK - 1)/BLOCK;
     solve_policy_kernel<<<{n_blocks}, {BLOCK}, BLOCK*2*A*sizeof(float), stream()>>>(
         TP2D(pi).pta(), TP2D(q).pta(), TP1D(lambda_n).pta(),
