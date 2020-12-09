@@ -120,6 +120,16 @@ def styling(f):
     timedelta_xaxis(f)
     suffix_yaxis(f)
 
+def legend(f):
+    f.legend.label_text_font_size = '8pt'
+    f.legend.margin = 7
+    f.legend.padding = 0
+    f.legend.spacing = 0
+    f.legend.background_fill_alpha = 0.3
+    f.legend.border_line_alpha = 0.
+    f.legend.location = 'top_left'
+
+
 def timeseries(source, info):
     y = info.id.iloc[0]
     #TODO: Work out how to apply the axes formatters to the tooltips
@@ -140,14 +150,7 @@ def timedataframe(source, info):
     default_tools(f)
     x_zeroline(f)
     styling(f)
-
-    f.legend.label_text_font_size = '8pt'
-    f.legend.margin = 7
-    f.legend.padding = 0
-    f.legend.spacing = 0
-    f.legend.background_fill_alpha = 0.3
-    f.legend.border_line_alpha = 0.
-    f.legend.location = 'top_left'
+    legend(f)
 
     return f
 
@@ -158,7 +161,6 @@ def single(source, info):
     else:
         return timedataframe(source, info)
 
-
 def confidence(source, info):
     f = bop.figure(x_range=bom.DataRange1d(start=0, follow='end'), tooltips=[('', '$data_y')])
 
@@ -166,19 +168,12 @@ def confidence(source, info):
 
     for (seq, i), color in zip(info.groupby('seq'), cycle(Category10_10)):
         i = i.set_index('stat')['id']
-        f.varea(x='time_', y1=i['μ-'], y2=i['μ+'], legend_label=seq, color=color, alpha=.5, source=source)
+        f.varea(x='time_', y1=i['μ-'], y2=i['μ+'], legend_label=seq, color=color, alpha=.2, source=source)
         f.line(x='time_', y=i['μ'], legend_label=seq, color=color, source=source)
 
     default_tools(f)
     x_zeroline(f)
     styling(f)
-
-    f.legend.label_text_font_size = '8pt'
-    f.legend.margin = 7
-    f.legend.padding = 0
-    f.legend.spacing = 0
-    f.legend.background_fill_alpha = 0.3
-    f.legend.border_line_alpha = 0.
-    f.legend.location = 'top_left'
+    legend(f)
 
     return f
