@@ -6,7 +6,7 @@ from rebar import arrdict
 import sysconfig
 from pkg_resources import resource_filename
 
-DEBUG = False
+DEBUG = True
 
 def _cuda():
     [torch_libdir] = torch.utils.cpp_extension.library_paths()
@@ -131,7 +131,7 @@ def test_cuda():
     print('Runnign solve')
     soln = solve_policy(pi, q, lambda_n)
 
-    return soln
+    return print(soln.error)
     
 def benchmark_search(T=500):
     import aljpy
