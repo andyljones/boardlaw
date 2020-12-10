@@ -174,11 +174,11 @@ class All(arrdict.namedarrtuple(fields=('history', 'count'))):
         # Planted values for validation use
         self.logits = uniform_logits(self.valid)
 
-        correct_so_far = (self.history == 1).sum(-1) == self.count[..., None]
-        correct_to_go = 2**((self.history == 1).sum(-1) - self.length).float()
+        correct_so_far = (self.history == 1).sum(-2) == self.count[..., None]
+        correct_to_go = 2**((self.history == 1).sum(-2) - self.length).float()
 
         v = correct_so_far.float()*correct_to_go
-        self.v = v[..., None]
+        self.v = v
 
     def step(self, actions):
         history = self.history.clone()
