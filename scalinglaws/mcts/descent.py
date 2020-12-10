@@ -68,7 +68,7 @@ def descend(logits, seats, terminal, children, n, w, c_puct):
 
     return parents, actions
 
-def descend_single(logits, seats, terminal, children, n, w, qmin, qmax, c_puct):
+def descend_single(logits, seats, terminal, children, n, w, c_puct):
     # T: num nodes, A: num actions, S: num seats
     # logits: (T, A)
     # seats: (T,)
@@ -78,17 +78,19 @@ def descend_single(logits, seats, terminal, children, n, w, qmin, qmax, c_puct):
     # w: (T, S)
 
     A = logits.shape[1]
+    q = w/(n[:, None] + 1e-6)
+    qmin, qmax = q.min(), q.max()
 
     t = 0
     parent, action = 0, -1
     while True:
-        exterior = ~torch.isnan(logits[t]).any()
+        exterior = torch.isnan(logits[t]).any()
         if exterior or terminal[t]:
             return parent, action
 
         N = 0
         seat = seats[t]
-        q = torch.zeros((A,))
+        q = torch.zeros((A,), device=w.device)
         pi = logits[t].exp()
         for i in range(A):
             child = children[t, i]
@@ -96,9 +98,11 @@ def descend_single(logits, seats, terminal, children, n, w, qmin, qmax, c_puct):
             if (child > -1):
                 qchild = w[child, seat]/(n[child] + 1e-6)
                 qchild = (qchild - qmin)/(qmax - qmin + 1e-6)
-                q[i] = q
+                q[i] = qchild
 
                 N += n[child]
+            else:
+                N += 1
 
         lambda_n = c_puct*N/(A + N)
 
@@ -112,7 +116,9 @@ def test():
     import pickle
     with open('output/descent/benchmark.pkl', 'rb') as f:
         data = pickle.load(f)
+        data['c_puct'] = torch.repeat_interleave(data.c_puct[:, None], data.logits.shape[1], 1)
 
-    descend(**data[0], c_puct=2.5)
+    d = data[30, 0]
+    descend_single(**d)
 
     
