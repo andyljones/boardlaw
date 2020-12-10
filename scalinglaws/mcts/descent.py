@@ -36,14 +36,13 @@ def policy(logits, seats, qc, nc, c_puct):
     return soln.policy
 
 def descend(logits, seats, terminal, children, n, w, c_puct):
-    # What does this use?
-    # * descent: envs, logits, terminal, children
-    # * policy: logits, seats, c_puct, n_actions
-    # * action_stats: children, n, w
-    # 
-    # So all together:
-    # * substantial: logits, terminal, children, seats, n, w
-    # * trivial: envs, n, w
+    # E: num envs, T: num nodes, A: num actions, S: num seats
+    # logits: (E, T, A)
+    # seats: (E,)
+    # terminal: (E,)
+    # children: (E, T, A)
+    # n: (E, T)
+    # w: (E, T, S)
 
     envs = torch.arange(logits.shape[0], device=logits.device)
     current = torch.full_like(envs, 0)
@@ -68,3 +67,43 @@ def descend(logits, seats, terminal, children, n, w, c_puct):
         current[active] = children[e, c, sampled]
 
     return parents, actions
+
+def descend_single(logits, seats, terminal, children, n, w, qmin, qmax, c_puct):
+    # T: num nodes, A: num actions, S: num seats
+    # logits: (T, A)
+    # seats: (T,)
+    # terminal: ()
+    # children: (T, A)
+    # n: (T)
+    # w: (T, S)
+
+    A = logits.shape[1]
+
+    t = 0
+    parent, action = 0, -1
+    while True:
+        exterior = ~torch.isnan(logits[t]).any()
+        if exterior or terminal[t]:
+            return parent, action
+
+        N = 0
+        seat = seats[t]
+        q = torch.zeros((A,))
+        pi = logits[t].exp()
+        for i in range(A):
+            child = children[t, i]
+
+            if (child > -1):
+                qchild = w[child, seat]/(n[child] + 1e-6)
+                qchild = (qchild - qmin)/(qmax - qmin + 1e-6)
+                q[i] = q
+
+                N += n[child]
+
+        lambda_n = c_puct*N/(A + N)
+
+        probs = search.solve_policy(pi[None], q[None], lambda_n[None]).policy[0]
+        action = torch.distributions.Categorical(probs=probs).sample()
+
+        parent = t
+        t = children[t, action]
