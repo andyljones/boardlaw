@@ -21,6 +21,8 @@ def dirichlet_noise(logits, valid, alpha=None, eps=.25):
 
     return (logits.exp()*(1 - eps) + draw*eps).log()
 
+CACHE = []
+
 class MCTS:
 
     def __init__(self, world, n_nodes, c_puct=2.5, noise_eps=.05):
@@ -115,6 +117,16 @@ class MCTS:
         # So all together:
         # * substantial: logits, terminal, children, seats, n, w
         # * trivial: envs, n, w
+        state = arrdict.arrdict(
+            logits=self.decisions.logits,
+            seats=self.worlds.seats,
+            terminal=self.transitions.terminal,
+            children=self.tree.children,
+            w=self.stats.w,
+            n=self.stats.n,
+            c_puct=torch.as_tensor(self.c_puct))
+
+        CACHE.append(state.clone().detach().cpu())
 
         current = torch.full_like(self.envs, 0)
         actions = torch.full_like(self.envs, -1)

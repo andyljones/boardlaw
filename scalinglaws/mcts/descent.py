@@ -107,3 +107,12 @@ def descend_single(logits, seats, terminal, children, n, w, qmin, qmax, c_puct):
 
         parent = t
         t = children[t, action]
+
+def test():
+    import pickle
+    with open('output/descent/benchmark.pkl', 'rb') as f:
+        data = pickle.load(f)
+
+    descend(**data[0], c_puct=2.5)
+
+    
