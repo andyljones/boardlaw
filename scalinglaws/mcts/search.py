@@ -6,7 +6,7 @@ from rebar import arrdict
 import sysconfig
 from pkg_resources import resource_filename
 
-DEBUG = True
+DEBUG = False
 
 def _cuda():
     [torch_libdir] = torch.utils.cpp_extension.library_paths()
