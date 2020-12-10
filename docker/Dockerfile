@@ -1,10 +1,12 @@
 # Build image
-FROM nvidia/cuda:10.2-cudnn7-devel-ubuntu18.04 as build
+FROM nvidia/cuda:11.1-cudnn8-devel-ubuntu18.04 as build
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         # Needed for conda
-        curl ca-certificates bzip2 procps  
+        curl ca-certificates bzip2 procps \
+        # Needed for profiling
+        nsight-compute-2020.2.1 nsight-systems-2020.3.4
 
 # Set up conda
 RUN curl -o ~/miniconda.sh -O https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
