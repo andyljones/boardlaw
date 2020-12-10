@@ -13,7 +13,7 @@ RUN curl -o ~/miniconda.sh -O https://repo.anaconda.com/miniconda/Miniconda3-lat
     chmod +x ~/miniconda.sh && \
     ~/miniconda.sh -b -p/opt/conda && \
     rm ~/miniconda.sh 
-ENV PATH /opt/conda/bin:$PATH
+ENV PATH /opt/conda/bin:/opt/nvidia/nsight-compute/2020.2.1/:/opt/nvidia/nsight-systems/2020.3.4/bin/:$PATH
 
 WORKDIR /code
 
@@ -41,8 +41,6 @@ RUN git config --global user.name "Andrew Jones" && \
 RUN pip install  \
         # Core reqs
         numpy torch torchvision tqdm matplotlib beautifulsoup4 shapely rasterio psutil ninja \ 
-        # Sampling libs
-        pystan pymc3 
         # Things I find useful
         pandas jupyter seaborn bokeh setproctitle wurlitzer ipython==7.5 av flake8 rope gitpython networkx \ 
         # Docs
