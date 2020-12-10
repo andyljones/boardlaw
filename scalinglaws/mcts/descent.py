@@ -78,8 +78,9 @@ def descend_single(logits, seats, terminal, children, n, w, c_puct):
     # w: (T, S)
 
     A = logits.shape[1]
-    q = w/(n[:, None] + 1e-6)
-    qmin, qmax = q.min(), q.max()
+    q = w[n > 0]/(n[n > 0, None] + 1e-6)
+    qmin, qmax = (q.min(), q.max()) if q.nelement() > 0 else (0., 1.)
+    qmin, qmax = qmin - 1e-6, qmax + 1e-6
 
     t = 0
     parent, action = 0, -1
@@ -96,8 +97,8 @@ def descend_single(logits, seats, terminal, children, n, w, c_puct):
             child = children[t, i]
 
             if (child > -1):
-                qchild = w[child, seat]/(n[child] + 1e-6)
-                qchild = (qchild - qmin)/(qmax - qmin + 1e-6)
+                qchild = w[child, seat]/n[child]
+                qchild = (qchild - qmin)/(qmax - qmin)
                 q[i] = qchild
 
                 N += n[child]
@@ -114,11 +115,14 @@ def descend_single(logits, seats, terminal, children, n, w, c_puct):
 
 def test():
     import pickle
-    with open('output/descent/benchmark.pkl', 'rb') as f:
+    with open('output/descent/all.pkl', 'rb') as f:
         data = pickle.load(f)
         data['c_puct'] = torch.repeat_interleave(data.c_puct[:, None], data.logits.shape[1], 1)
 
-    d = data[30, 0]
-    descend_single(**d)
-
-    
+    d = data[10, 0]
+    results = []
+    for _ in range(100):
+        results.append(descend_single(**d.cuda()))
+    parents = torch.as_tensor(results)[:, 0]
+    actions = torch.as_tensor(results)[:, 1]
+        
