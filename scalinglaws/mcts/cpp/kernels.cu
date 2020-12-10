@@ -4,7 +4,7 @@
 #include "common.h"
 #include <ATen/cuda/CUDAContext.h>
 
-const uint BLOCK = 32;
+const uint BLOCK = 8;
 
 at::cuda::CUDAStream stream() { 
     return at::cuda::getCurrentCUDAStream();
@@ -21,15 +21,14 @@ __global__ void solve_policy_kernel(
         return;
     }
 
-    // extern __shared__ float shared[];
-    // float *qb = (float*)&shared[threadIdx.x*2*A];
-    // float *pib = (float*)&shared[threadIdx.x*2*A+A];
-    float qb[128];
-    float pib[128];
+    extern __shared__ float shared[];
+    float *qb = (float*)&shared[threadIdx.x*2*A];
+    float *pib = (float*)&shared[threadIdx.x*2*A+A];
     for (int a = 0; a < A; a++) {
         qb[a] = q[b][a];
         pib[a] = pi[b][a];
     }
+    __syncthreads();
 
     const auto lambda = lambda_n[b];
 
@@ -76,7 +75,7 @@ __host__ TT solve_policy(const TT pi, const TT q, const TT lambda_n) {
     assert (BLOCK*2*A*sizeof(float) < 64*1024);
 
     const uint n_blocks = (B + BLOCK - 1)/BLOCK;
-    solve_policy_kernel<<<{n_blocks}, {BLOCK}, 0, stream()>>>(
+    solve_policy_kernel<<<{n_blocks}, {BLOCK}, BLOCK*2*A*sizeof(float), stream()>>>(
         TP2D(pi).pta(), TP2D(q).pta(), TP1D(lambda_n).pta(),
         alpha_star.pta());
 
