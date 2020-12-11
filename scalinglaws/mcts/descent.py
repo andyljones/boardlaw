@@ -5,7 +5,8 @@ from rebar import arrdict
 import aljpy
 
 def descend_cuda(logits, w, n, c_puct, seats, terminal, children):
-    result = cuda.descend(logits, w, n.int(), c_puct, seats.int(), terminal, children.int())
+    with torch.cuda.device(logits.device):
+        result = cuda.descend(logits, w, n.int(), c_puct, seats.int(), terminal, children.int())
     return arrdict.arrdict(
         parents=result.parents, 
         actions=result.actions)
