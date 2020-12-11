@@ -105,8 +105,9 @@ def run():
     opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-3, amsgrad=True)
 
     run_name = paths.timestamp('az-test')
+    compositor = widgets.Compositor()
     paths.clear(run_name)
-    with logging.via_dir(run_name), stats.to_dir(run_name), \
+    with logging.via_dir(run_name, compositor), stats.via_dir(run_name, compositor), \
             arena.monitor(run_name, worldfunc, agentfunc):
         buffer = []
         idxs = cycle(learning.batch_indices(buffer_length, n_envs, batch_size, worlds.device))
@@ -134,15 +135,6 @@ def run():
             storing.store_periodic(run_name, {'agent': agent.cpu(), 'opt': opt.cpu()}, throttle=900)
             stats.gpu.memory(worlds.device)
             stats.gpu.vitals(worlds.device, throttle=15)
-
-def watch(run_name):
-    compositor = widgets.Compositor()
-    with logging.from_dir(run_name, compositor), stats.from_dir(run_name, compositor):
-        while True:
-            time.sleep(1)
-            
-
-
 
 def benchmark_experience_collection():
 
