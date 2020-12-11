@@ -136,57 +136,14 @@ def run():
             stats.gpu.vitals(worlds.device, throttle=15)
 
 def benchmark_experience_collection():
-    from scalinglaws import mcts
-    import pickle
 
     torch.manual_seed(0)
     n_envs = 1024
     worlds = worldfunc(n_envs)
     agent = agentfunc()
-    agent.load_state_dict(storing.load_latest('2020-12-08 23-00-06 az-test')['agent'])
 
-    for i in range(30):
-        print('step')
-        if i == 29:
-            mcts.CACHE = []
+    for _ in range(16):
         decisions = agent(worlds, value=True)
         new_worlds, transition = worlds.step(decisions.actions)
         worlds = new_worlds
-
-    with open('output/descent/hex-trained.pkl', 'wb+') as f:
-        pickle.save(arrdict.stack(mcts.CACHE).cpu(), f)
-
-def slow_stats():
-    import aljpy
-
-    buffer_length = 8 
-    batch_size = 8192
-    n_envs = 1024
-    buffer_inc = batch_size//n_envs
-
-    worlds = worldfunc(n_envs)
-    agent = agentfunc()
-
-    run_name = 'test'
-    compositor = widgets.Compositor()
-    paths.clear(run_name)
-    with logging.via_dir(run_name, compositor), stats.via_dir(run_name, compositor):
-        for _ in range(5):
-            
-            buffer = []
-            with aljpy.timer() as timer:
-                while len(buffer) < buffer_length:
-                    decisions = agent(worlds, value=True)
-                    new_worlds, transition = worlds.step(decisions.actions)
-                    buffer.append(arrdict.arrdict(
-                        worlds=worlds,
-                        decisions=decisions,
-                        transitions=transition).detach())
-                    worlds = new_worlds
-                    log.info('actor stepped')
-            log.info(f'{timer.time()/len(buffer):.2f}s/step')
-                
-            chunk = arrdict.stack(buffer)
-            chunk_stats(chunk, buffer_inc)
-            
-            buffer = buffer[buffer_inc:]
+        log.info('actor stepped')
