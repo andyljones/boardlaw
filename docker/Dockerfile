@@ -97,7 +97,7 @@ RUN apt-get install libdb-dev libboost-all-dev -y --no-install-recommends && \
     cd mohex/build && \
     cmake ../ && \
     make -j4 && \
-    ln -s src/mohex/mohex /bin/mohex
+    ln -s /mohex/build/src/mohex/mohex /bin/mohex
 
 # Only commit the input cells of notebooks
 # https://stackoverflow.com/questions/18734739/using-ipython-notebooks-under-version-control

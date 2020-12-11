@@ -154,9 +154,10 @@ def step(run_name, worlds, agents, kind):
     try:
         globals()[f'step_{kind}'](run_name, worlds, agents)
     except Exception as e:
+        raise
         log.error(f'Failed while running a "{kind}" step with a "{e}" error')
 
-def arena(run_name, worldfunc, agentfunc, device='cuda:1', **kwargs):
+def arena(run_name, worldfunc, agentfunc, device='cuda:1'):
     with logging.to_dir(run_name), stats.to_dir(run_name):
         worlds = dotdict.dotdict(
             periodic=worldfunc(device=device, n_envs=256),
@@ -164,7 +165,7 @@ def arena(run_name, worldfunc, agentfunc, device='cuda:1', **kwargs):
             mohex=worldfunc(device=device, n_envs=8))
 
         mhx = mohex.MoHexAgent()
-        kinds = ('periodic', 'latest', 'mohex')
+        kinds = list(worlds)
         
         i = 0
         agents = {}
