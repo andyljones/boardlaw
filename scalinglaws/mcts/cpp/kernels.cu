@@ -134,7 +134,7 @@ __global__ void descend_kernel(
     F2D::PTA rands, I1D::PTA parents, I1D::PTA actions) {
 
     const uint B = pi.size(0);
-    const uint A = pi.size(1);
+    const uint A = pi.size(2);
     const int b = blockIdx.x*blockDim.x + threadIdx.x;
 
     if (b >= B) return;
@@ -155,10 +155,9 @@ __global__ void descend_kernel(
         int N = 0;
         auto seat = seats[b][t];
         for (int a=0; a<A; a++) {
-            // printf("%d, %d, %d\n", b, t, a);
             auto child = children[b][t][a];
             if (child > -1) {
-                qs[a] = q[b][child][a];
+                qs[a] = q[b][child][seat];
                 pis[a] = pi[b][t][a];
                 N += n[b][child];
             } else {
@@ -195,7 +194,7 @@ __host__ DescentResult descend(
     const TT seats, const TT terminal, const TT children) {
 
     const uint B = logits.size(0);
-    const uint A = logits.size(1);
+    const uint A = logits.size(2);
 
     auto q = w/(n.unsqueeze(-1) + 1e-6);
     q = (q - q.min())/(q.max() - q.min() + 1e-6);

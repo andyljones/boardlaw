@@ -3,7 +3,7 @@ from multiprocessing import Value
 import numpy as np
 import torch
 from rebar import arrdict
-from . import search
+from . import search, descent
 import logging
 
 log = logging.getLogger(__name__)
@@ -61,7 +61,7 @@ class MCTS:
 
         # https://github.com/LeelaChessZero/lc0/issues/694
         # Larger c_puct -> greater regularization
-        self.c_puct = c_puct
+        self.c_puct = torch.full((world.n_envs,), c_puct, device=self.device)
 
     def initialize(self, evaluator):
         world = self.worlds[:, 0]
@@ -105,53 +105,17 @@ class MCTS:
 
         return soln.policy
 
-    def sample(self, env, nodes):
-        probs = self.policy(env, nodes)
-        return torch.distributions.Categorical(probs=probs).sample()
-
-    def _descend_state_collect(self):
-        if CACHE is not None:
-            state = arrdict.arrdict(
-                logits=self.decisions.logits,
-                seats=self.worlds.seats,
-                terminal=self.transitions.terminal,
-                children=self.tree.children,
-                w=self.stats.w,
-                n=self.stats.n,
-                c_puct=torch.as_tensor(self.c_puct))
-
-            CACHE.append(state.clone().detach().cpu())
-
     def descend(self):
-        # What does this use?
-        # * descent: envs, logits, terminal, children
-        # * policy: logits, seats, c_puct, n_actions
-        # * action_stats: children, n, w
-        # 
-        # So all together:
-        # * substantial: logits, terminal, children, seats, n, w
-        # * trivial: envs, n, w
+        result = descent.descend_cuda(
+            self.decisions.logits, 
+            self.stats.w, 
+            self.stats.n, 
+            self.c_puct, 
+            self.worlds.seats, 
+            self.transitions.terminal, 
+            self.tree.children)
 
-        self._descend_state_collect()
-
-        current = torch.full_like(self.envs, 0)
-        actions = torch.full_like(self.envs, -1)
-        parents = torch.full_like(self.envs, 0)
-
-        while True:
-            interior = ~torch.isnan(self.decisions.logits[self.envs, current]).any(-1)
-            terminal = self.transitions.terminal[self.envs, current]
-            active = interior & ~terminal
-            if not active.any():
-                break
-
-            e, c = self.envs[active], current[active]
-            sampled = self.sample(e, c)
-            actions[active] = sampled
-            parents[active] = c
-            current[active] = self.tree.children[e, c, sampled]
-
-        return parents, actions
+        return result.parents.long(), result.actions.long()
 
     def backup(self, leaves):
         current = leaves.clone()
@@ -204,7 +168,6 @@ class MCTS:
 
     def root(self):
         root = torch.zeros_like(self.envs)
-        q, n = self.action_stats(self.envs, root)
         p = self.policy(self.envs, root)
 
         return arrdict.arrdict(
