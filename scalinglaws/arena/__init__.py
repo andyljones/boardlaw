@@ -154,7 +154,6 @@ def step(run_name, worlds, agents, kind):
     try:
         globals()[f'step_{kind}'](run_name, worlds, agents)
     except Exception as e:
-        raise
         log.error(f'Failed while running a "{kind}" step with a "{e}" error')
 
 def arena(run_name, worldfunc, agentfunc, device='cuda:1'):
