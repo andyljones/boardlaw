@@ -173,9 +173,10 @@ __global__ void descend_kernel(
 
         float rand = rands[b][t];
         float total = 0.f;
-        action = A-1; // handles numerical imprecision
+        action = -1; // handles numerical imprecision
         for (int a=0; a<A; a++) {
-            total += lambda_n*pis[a]/(alpha - qs[a]);
+            float prob = lambda_n*pis[a]/(alpha - qs[a]);
+            total += prob;
             if (total >= rand) {
                 action = a;
                 break;

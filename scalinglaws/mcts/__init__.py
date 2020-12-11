@@ -247,13 +247,9 @@ class MCTSAgent:
             n_leaves=m.n_leaves(),
             v=r.v,
             actions=torch.distributions.Categorical(logits=r.logits).sample())
-
-    @contextmanager
-    def no_noise(self):
-        kwargs = self.kwargs
-        self.kwargs = {**kwargs, 'noise_eps': 0.}
-        yield
-        self.kwargs = kwargs
+    
+    def cpu(self):
+        return MCTSAgent(self, self.evaluator.cpu(), **self.kwargs)
 
     def load_state_dict(self, sd):
         #TODO: Systematize this

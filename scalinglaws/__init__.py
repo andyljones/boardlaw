@@ -130,8 +130,8 @@ def run():
             
             buffer = buffer[buffer_inc:]
 
-            storing.store_latest(run_name, {'agent': agent, 'opt': opt}, throttle=60)
-            storing.store_periodic(run_name, {'agent': agent, 'opt': opt}, throttle=900)
+            storing.store_latest(run_name, {'agent': agent.cpu(), 'opt': opt.cpu()}, throttle=60)
+            storing.store_periodic(run_name, {'agent': agent.cpu(), 'opt': opt.cpu()}, throttle=900)
             stats.gpu.memory(worlds.device)
             stats.gpu.vitals(worlds.device, throttle=15)
 
