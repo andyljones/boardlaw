@@ -8,6 +8,7 @@ from itertools import cycle
 
 log = getLogger(__name__)
 
+@torch.no_grad()
 def chunk_stats(chunk, n_new):
     with stats.defer():
         tail = chunk[-n_new:]
@@ -154,3 +155,38 @@ def benchmark_experience_collection():
 
     with open('output/descent/hex-trained.pkl', 'wb+') as f:
         pickle.save(arrdict.stack(mcts.CACHE).cpu(), f)
+
+def slow_stats():
+    import aljpy
+
+    buffer_length = 8 
+    batch_size = 8192
+    n_envs = 1024
+    buffer_inc = batch_size//n_envs
+
+    worlds = worldfunc(n_envs)
+    agent = agentfunc()
+
+    run_name = 'test'
+    compositor = widgets.Compositor()
+    paths.clear(run_name)
+    with logging.via_dir(run_name, compositor), stats.via_dir(run_name, compositor):
+        for _ in range(5):
+            
+            buffer = []
+            with aljpy.timer() as timer:
+                while len(buffer) < buffer_length:
+                    decisions = agent(worlds, value=True)
+                    new_worlds, transition = worlds.step(decisions.actions)
+                    buffer.append(arrdict.arrdict(
+                        worlds=worlds,
+                        decisions=decisions,
+                        transitions=transition).detach())
+                    worlds = new_worlds
+                    log.info('actor stepped')
+            log.info(f'{timer.time()/len(buffer):.2f}s/step')
+                
+            chunk = arrdict.stack(buffer)
+            chunk_stats(chunk, buffer_inc)
+            
+            buffer = buffer[buffer_inc:]

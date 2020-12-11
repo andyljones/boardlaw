@@ -118,7 +118,7 @@ def descend_single(logits, seats, terminal, children, n, w, c_puct):
 
 def test():
     import pickle
-    with open('output/descent/hex-trained.pkl', 'rb') as f:
+    with open('output/descent/hex.pkl', 'rb') as f:
         data = pickle.load(f)
         data['c_puct'] = torch.repeat_interleave(data.c_puct[:, None], data.logits.shape[1], 1)
         data = data.cuda()
