@@ -1,6 +1,6 @@
 import torch
 import torch.distributions
-from . import search
+from . import search, cuda
 from rebar import arrdict
 import aljpy
 
@@ -41,7 +41,7 @@ def descend(logits, seats, terminal, children, n, w, c_puct):
     # E: num envs, T: num nodes, A: num actions, S: num seats
     # logits: (E, T, A)
     # seats: (E,)
-    # terminal: (E,)
+    # terminal: (E, T)
     # children: (E, T, A)
     # n: (E, T)
     # w: (E, T, S)
@@ -81,9 +81,9 @@ def descend_single(logits, seats, terminal, children, n, w, c_puct):
     # w: (T, S)
 
     A = logits.shape[1]
-    q = w[n > 0]/(n[n > 0, None] + 1e-6)
+    q = w/(n[:, None] + 1e-6)
     qmin, qmax = (q.min(), q.max()) if q.nelement() > 0 else (0., 1.)
-    qmin, qmax = qmin - 1e-6, qmax + 1e-6
+    q = (q - qmin)/(qmax - qmin + 1e-6)
 
     t = 0
     parent, action = 0, -1
@@ -94,16 +94,13 @@ def descend_single(logits, seats, terminal, children, n, w, c_puct):
 
         N = 0
         seat = seats[t]
-        q = torch.zeros((A,), device=w.device)
+        qchildren = torch.zeros((A,), device=w.device)
         pi = logits[t].exp()
         for i in range(A):
             child = children[t, i]
 
             if (child > -1):
-                qchild = w[child, seat]/n[child]
-                qchild = (qchild - qmin)/(qmax - qmin)
-                q[i] = qchild
-
+                qchildren[i] = q[child, seat]
                 N += n[child]
             else:
                 N += 1
@@ -116,6 +113,12 @@ def descend_single(logits, seats, terminal, children, n, w, c_puct):
         parent = t
         t = children[t, action]
 
+def descend_cuda(logits, w, n, c_puct, seats, terminal, children):
+    result = cuda.descend(logits, w, n.int(), c_puct, seats.int(), terminal, children.int())
+    return arrdict.arrdict(
+        parents=result.parents, 
+        actions=result.actions)
+
 def test():
     import pickle
     with open('output/descent/hex.pkl', 'rb') as f:
@@ -127,7 +130,7 @@ def test():
     with aljpy.timer() as timer:
         torch.cuda.synchronize()
         for t in range(data.logits.shape[0]):
-            results.append(descend(**data[t]))
+            results.append(descend_cuda(**data[t]))
         torch.cuda.synchronize()
     results = arrdict.stack(results)
     time = timer.time()

@@ -8,8 +8,8 @@ using namespace pybind11::literals;
 
 using TT = at::Tensor;
 
-#define CHECK_CUDA(x) AT_ASSERTM(x.is_cuda(), #x " must be a CUDA tensor")
-#define CHECK_CONTIGUOUS(x) AT_ASSERTM(x.is_contiguous(), #x " must be contiguous")
+#define CHECK_CUDA(x) TORCH_CHECK(x.is_cuda(), #x " must be a CUDA tensor")
+#define CHECK_CONTIGUOUS(x) TORCH_CHECK(x.is_contiguous(), #x " must be contiguous")
 #define CHECK_INPUT(x) CHECK_CUDA(x); CHECK_CONTIGUOUS(x)
 
 // Define our own copy of RestrictPtrTraits here, as the at::RestrictPtrTraits is 
@@ -31,8 +31,8 @@ struct TensorProxy {
 
     TensorProxy(const at::Tensor t) : t(t) {
         CHECK_INPUT(t);
-        AT_ASSERT(t.scalar_type() == dtype<T>());
-        AT_ASSERT(t.ndimension() == D);
+        TORCH_CHECK_TYPE(t.scalar_type() == dtype<T>(), "expected ", toString(dtype<T>()), " got ", toString(t.scalar_type()));
+        TORCH_CHECK(t.ndimension() == D, "expected ", typeid(D).name(), " got ", "t.ndimension()");
     }
 
     PTA pta() const { return t.packed_accessor32<T, D, RestrictPtrTraits>(); }
@@ -40,7 +40,12 @@ struct TensorProxy {
     size_t size(const size_t i) const { return t.size(i); }
 };
 
-using TP1D = TensorProxy<float, 1>;
-using TP2D = TensorProxy<float, 2>;
+struct DescentResult {
+  const TT parents;
+  const TT actions;
+};
 
 TT solve_policy(const TT pi, const TT q, const TT lambda_n);
+DescentResult descend(
+    const TT logits, const TT w, const TT n, const TT c_puct,
+    const TT seats, const TT terminal, const TT children);

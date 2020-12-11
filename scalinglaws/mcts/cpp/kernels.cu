@@ -6,13 +6,22 @@
 
 const uint BLOCK = 8;
 
+using F1D = TensorProxy<float, 1>;
+using F2D = TensorProxy<float, 2>;
+using F3D = TensorProxy<float, 3>;
+using I1D = TensorProxy<int, 1>;
+using I2D = TensorProxy<int, 2>;
+using I3D = TensorProxy<int, 3>;
+using B1D = TensorProxy<bool, 1>;
+using B2D = TensorProxy<bool, 2>;
+
 at::cuda::CUDAStream stream() { 
     return at::cuda::getCurrentCUDAStream();
 }
 
 __global__ void solve_policy_kernel(
-    TP2D::PTA pi, TP2D::PTA q, TP1D::PTA lambda_n,
-    TP1D::PTA alpha_star) {
+    F2D::PTA pi, F2D::PTA q, F1D::PTA lambda_n,
+    F1D::PTA alpha_star) {
 
     const auto B = pi.size(0);
     const auto A = pi.size(1);
@@ -21,6 +30,7 @@ __global__ void solve_policy_kernel(
         return;
     }
 
+    // Copy data into shared memory
     extern __shared__ float shared[];
     float *qb = (float*)&shared[threadIdx.x*2*A];
     float *pib = (float*)&shared[threadIdx.x*2*A+A];
@@ -32,6 +42,7 @@ __global__ void solve_policy_kernel(
 
     const auto lambda = lambda_n[b];
 
+    // Find the initial alpha
     float alpha = 0.f;
     for (int a = 0; a < A; a++) {
         float gap = fmaxf(lambda*pib[a], 1.e-6f);
@@ -68,7 +79,7 @@ __host__ TT solve_policy(const TT pi, const TT q, const TT lambda_n) {
     const uint B = pi.size(0);
     const uint A = pi.size(1);
 
-    TP1D alpha_star(pi.new_empty({B}));
+    F1D alpha_star(pi.new_empty({B}));
     alpha_star.t.fill_(NAN);
 
     //TODO: Replace this with a hardware dependent test
@@ -76,8 +87,35 @@ __host__ TT solve_policy(const TT pi, const TT q, const TT lambda_n) {
 
     const uint n_blocks = (B + BLOCK - 1)/BLOCK;
     solve_policy_kernel<<<{n_blocks}, {BLOCK}, BLOCK*2*A*sizeof(float), stream()>>>(
-        TP2D(pi).pta(), TP2D(q).pta(), TP1D(lambda_n).pta(),
+        F2D(pi).pta(), F2D(q).pta(), F1D(lambda_n).pta(),
         alpha_star.pta());
 
     return alpha_star.t;
+}
+
+__global__ void descend_kernel(
+    F3D::PTA logits, F3D::PTA w, I2D::PTA n, F1D::PTA c_puct,
+    I2D::PTA seats, B2D::PTA terminal, I3D::PTA children,
+    I1D::PTA parents, I1D::PTA actions) {
+
+    const auto b = blockIdx.x;
+
+    parents[b] = b;
+    actions[b] = b;
+}
+
+__host__ DescentResult descend(
+    const TT logits, const TT w, const TT n, const TT c_puct,
+    const TT seats, const TT terminal, const TT children) {
+
+    const uint B = logits.size(0);
+
+    auto parents = seats.new_empty({B});
+    auto actions = seats.new_empty({B});
+    descend_kernel<<<{B}, {1}, 0, stream()>>>(
+        F3D(logits).pta(), F3D(w).pta(), I2D(n).pta(), F1D(c_puct).pta(),
+        I2D(seats).pta(), B2D(terminal).pta(), I3D(children).pta(),
+        I1D(parents).pta(), I1D(actions).pta());
+
+    return {parents, actions};
 }
