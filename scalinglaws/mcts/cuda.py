@@ -3,7 +3,7 @@ import sysconfig
 from pkg_resources import resource_filename
 import torch.utils.cpp_extension
 
-DEBUG = True
+DEBUG = False
 
 def _cuda():
     [torch_libdir] = torch.utils.cpp_extension.library_paths()

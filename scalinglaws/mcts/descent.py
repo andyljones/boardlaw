@@ -119,7 +119,7 @@ def descend_cuda(logits, w, n, c_puct, seats, terminal, children):
         parents=result.parents, 
         actions=result.actions)
 
-def test():
+def benchmark():
     import pickle
     with open('output/descent/hex.pkl', 'rb') as f:
         data = pickle.load(f)
@@ -135,4 +135,14 @@ def test():
     results = arrdict.stack(results)
     time = timer.time()
     samples = results.parents.nelement()
-    print(f'{1000*time:.0f}ms total, {1e6*time/samples:.0f}us/descent')
+    print(f'{1000*time:.0f}ms total, {1e9*time/samples:.0f}ns/descent')
+
+def test():
+    import pickle
+    with open('output/descent/all.pkl', 'rb') as f:
+        data = pickle.load(f)
+        data['c_puct'] = torch.repeat_interleave(data.c_puct[:, None], data.logits.shape[1], 1)
+        data = data.cuda()
+
+    result = descend_cuda(**data[0, [0]])
+    print(result.parents)
