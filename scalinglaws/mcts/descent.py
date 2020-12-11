@@ -1,6 +1,8 @@
 import torch
 import torch.distributions
 from . import search
+from rebar import arrdict
+import aljpy
 
 def action_stats(envs, children, n, w):
     mask = (children != -1)
@@ -51,22 +53,23 @@ def descend(logits, seats, terminal, children, n, w, c_puct):
 
     while True:
         interior = ~torch.isnan(logits[envs, current]).any(-1)
-        terminal = terminal[envs, current]
-        active = interior & ~terminal
+        active = interior & ~terminal[envs, current]
         if not active.any():
             break
 
         e, c = envs[active], current[active]
 
-        qc, nc = action_stats(e, children[e, c], n[e, c], w[e, c])
-        probs = policy(logits[e, c], seats[e, c], qc, nc, c_puct)
+        qc, nc = action_stats(e, children[e, c], n, w)
+        probs = policy(logits[e, c], seats[e, c], qc, nc, c_puct[e])
         sampled = torch.distributions.Categorical(probs=probs).sample()
 
         actions[active] = sampled
         parents[active] = c
         current[active] = children[e, c, sampled]
 
-    return parents, actions
+    return arrdict.arrdict(
+        parents=parents, 
+        actions=actions)
 
 def descend_single(logits, seats, terminal, children, n, w, c_puct):
     # T: num nodes, A: num actions, S: num seats
@@ -115,14 +118,18 @@ def descend_single(logits, seats, terminal, children, n, w, c_puct):
 
 def test():
     import pickle
-    with open('output/descent/all.pkl', 'rb') as f:
+    with open('output/descent/hex-trained.pkl', 'rb') as f:
         data = pickle.load(f)
         data['c_puct'] = torch.repeat_interleave(data.c_puct[:, None], data.logits.shape[1], 1)
+        data = data.cuda()
 
-    d = data[10, 0]
     results = []
-    for _ in range(100):
-        results.append(descend_single(**d.cuda()))
-    parents = torch.as_tensor(results)[:, 0]
-    actions = torch.as_tensor(results)[:, 1]
-        
+    with aljpy.timer() as timer:
+        torch.cuda.synchronize()
+        for t in range(data.logits.shape[0]):
+            results.append(descend(**data[t]))
+        torch.cuda.synchronize()
+    results = arrdict.stack(results)
+    time = timer.time()
+    samples = results.parents.nelement()
+    print(f'{1000*time:.0f}ms total, {1e6*time/samples:.0f}us/descent')

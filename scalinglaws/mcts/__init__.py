@@ -21,7 +21,8 @@ def dirichlet_noise(logits, valid, alpha=None, eps=.25):
 
     return (logits.exp()*(1 - eps) + draw*eps).log()
 
-# CACHE = []
+
+CACHE = None
 
 class MCTS:
 
@@ -108,6 +109,20 @@ class MCTS:
         probs = self.policy(env, nodes)
         return torch.distributions.Categorical(probs=probs).sample()
 
+    def _descend_state_collect(self):
+        print(CACHE)
+        if CACHE is not None:
+            state = arrdict.arrdict(
+                logits=self.decisions.logits,
+                seats=self.worlds.seats,
+                terminal=self.transitions.terminal,
+                children=self.tree.children,
+                w=self.stats.w,
+                n=self.stats.n,
+                c_puct=torch.as_tensor(self.c_puct))
+
+            CACHE.append(state.clone().detach().cpu())
+
     def descend(self):
         # What does this use?
         # * descent: envs, logits, terminal, children
@@ -118,16 +133,7 @@ class MCTS:
         # * substantial: logits, terminal, children, seats, n, w
         # * trivial: envs, n, w
 
-        # state = arrdict.arrdict(
-        #     logits=self.decisions.logits,
-        #     seats=self.worlds.seats,
-        #     terminal=self.transitions.terminal,
-        #     children=self.tree.children,
-        #     w=self.stats.w,
-        #     n=self.stats.n,
-        #     c_puct=torch.as_tensor(self.c_puct))
-
-        CACHE.append(state.clone().detach().cpu())
+        self._descend_state_collect()
 
         current = torch.full_like(self.envs, 0)
         actions = torch.full_like(self.envs, -1)

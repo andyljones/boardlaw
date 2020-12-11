@@ -85,12 +85,12 @@ def optimize(network, opt, batch):
         # stats.rel_gradient_norm('rel-norm-grad', agent)
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=11, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=5, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
-    network = networks.Network(worlds.obs_space, worlds.action_space, width=128).to(worlds.device)
-    return mcts.MCTSAgent(network, n_nodes=32)
+    network = networks.Network(worlds.obs_space, worlds.action_space, width=32).to(worlds.device)
+    return mcts.MCTSAgent(network, n_nodes=16)
 
 def run():
     buffer_length = 16 
@@ -135,12 +135,22 @@ def run():
             stats.gpu.vitals(worlds.device, throttle=15)
 
 def benchmark_experience_collection():
+    from scalinglaws import mcts
+    import pickle
+
     torch.manual_seed(0)
     n_envs = 1024
     worlds = worldfunc(n_envs)
     agent = agentfunc()
+    agent.load_state_dict(storing.load_latest('2020-12-08 23-00-06 az-test')['agent'])
 
-    for i in range(10):
+    for i in range(30):
+        print('step')
+        if i == 29:
+            mcts.CACHE = []
         decisions = agent(worlds, value=True)
         new_worlds, transition = worlds.step(decisions.actions)
         worlds = new_worlds
+
+    with open('output/descent/hex-trained.pkl', 'wb+') as f:
+        pickle.save(arrdict.stack(mcts.CACHE).cpu(), f)
