@@ -148,6 +148,7 @@ __global__ void descend_kernel(
     int t = 0;
     int parent = 0;
     int action = -1;
+    int valid = -1;
     while (true) {
         if (terminal[b][t]) break;
         if (t == -1) break;
@@ -173,13 +174,20 @@ __global__ void descend_kernel(
 
         float rand = rands[b][t];
         float total = 0.f;
-        action = -1; // handles numerical imprecision
+        // This is a bit of a mess. Intent is to handle the edge 
+        // case of rand being 1, and the probabilities not summing
+        // to that. Then we need to fall back to a 'valid' value, 
+        // ie one that has a positive probability.
+        action = -1; 
+        valid = -1;
         for (int a=0; a<A; a++) {
             float prob = lambda_n*pis[a]/(alpha - qs[a]);
             total += prob;
-            if (total >= rand) {
+            if ((prob > 0) && (total >= rand)) {
                 action = a;
                 break;
+            } else if (prob > 0) {
+                valid = a;
             }
         }
         parent = t;
@@ -187,7 +195,7 @@ __global__ void descend_kernel(
     }
 
     parents[b] = parent;
-    actions[b] = action;
+    actions[b] = (action >= 0)? action : valid;
 }
 
 __host__ DescentResult descend(
