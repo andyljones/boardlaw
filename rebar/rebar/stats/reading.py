@@ -144,7 +144,7 @@ def __from_dir(canceller, run_name, out, rule, throttle=1):
         if canceller.is_set():
             break
 
-        time.sleep(.1)
+        time.sleep(1.)
 
 def _from_dir(*args, **kwargs):
     try:
