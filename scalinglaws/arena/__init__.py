@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import torch
-from rebar import storing, logging, dotdict, stats
+from rebar import storing, logging, dotdict, stats, paths
 import pickle
 from . import database, matchups
 from .. import mohex
@@ -157,6 +157,7 @@ def step(run_name, worlds, agents, kind):
         log.error(f'Failed while running a "{kind}" step with a "{e}" error')
 
 def arena(run_name, worldfunc, agentfunc, device='cuda:1'):
+    run_name = paths.resolve(run_name)
     with logging.to_dir(run_name), stats.to_dir(run_name):
         worlds = dotdict.dotdict(
             periodic=worldfunc(device=device, n_envs=256),
