@@ -129,18 +129,20 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seat'))):
         self.obs_space = heads.Tensor((self.boardsize, self.boardsize, 2))
         self.action_space = heads.Masked(self.boardsize*self.boardsize)
 
+        self._obs = None
+
     @property
     def obs(self):
-        ords = _cell_ords(self.device)
-        black_view = torch.stack([
-            torch.stack([self.board == ords[s] for s in 'b^vB']).any(0),
-            torch.stack([self.board == ords[s] for s in 'w<>W']).any(0)], -1).float()
+        if self._obs is None:
+            ords = _cell_ords(self.device)
+            black_view = torch.stack([
+                torch.stack([self.board == ords[s] for s in 'b^vB']).any(0),
+                torch.stack([self.board == ords[s] for s in 'w<>W']).any(0)], -1).float()
 
-        # White player sees a transposed board
-        white_view = black_view.transpose(-3, -2).flip(-1)
-        obs = black_view.where(self.seat[..., None, None, None] == 0, white_view)
-
-        return obs
+            # White player sees a transposed board
+            white_view = black_view.transpose(-3, -2).flip(-1)
+            self._obs = black_view.where(self.seat[..., None, None, None] == 0, white_view)
+        return self._obs
 
     @property
     def valid(self):
