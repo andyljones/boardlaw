@@ -8,14 +8,31 @@ import time
 
 log = getLogger(__name__)
 
+def collapse(state_dicts):
+    collapsed = {}
+    for prefix, d in state_dicts.items():
+        for k, v in d.items():
+            collapsed[f'{prefix}.{k}'] = v
+    return collapsed
+
+def expand_once(state_dicts):
+    d = {}
+    for k, v in state_dicts.items():
+        parts = k.split('.')
+        [head] = parts[:1]
+        tail = '.'.join(parts[1:])
+        d.setdefault(head, {})[tail] = v
+    return d
+
 def _store(path, objs):
-    state_dicts = {k: v.state_dict() for k, v in objs.items()}
-    bs = pickle.dumps(state_dicts)
+    state_dict = collapse({k: v.state_dict() for k, v in objs.items()})
+    state_dict = {k: v.cpu() for k, v in state_dict.items()}
+    bs = pickle.dumps(state_dict)
     path.parent.mkdir(exist_ok=True, parents=True)
     path.with_suffix('.tmp').write_bytes(bs)
     path.with_suffix('.tmp').rename(path)
 
-def store_latest(run_name, objs, throttle=0):
+def store_latest(run_name, throttle=0, **objs):
     path = paths.process_path(run_name, 'storing', 'latest').with_suffix('.pkl')
     if path.exists():
         if (time.time() - path.lstat().st_mtime) < throttle:
@@ -31,7 +48,7 @@ def load_latest(run_name=-1, proc_name='MainProcess', return_modtime=False):
     sd = pickle.loads(ps.read_bytes())
     return (sd, modified) if return_modtime else sd
 
-def store_periodic(run_name, objs, throttle=0):
+def store_periodic(run_name, throttle=0, **objs):
     subdir = paths.subdir(run_name, 'storing', 'periodic')
     subdir.mkdir(exist_ok=True, parents=True)
 

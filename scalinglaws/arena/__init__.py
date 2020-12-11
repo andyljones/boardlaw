@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from rebar.storing import expand_once
 import torch
 from rebar import storing, logging, dotdict, stats, paths
 import pickle
@@ -16,7 +17,8 @@ log = getLogger(__name__)
 
 def assemble_agent(agentfunc, sd, device='cpu'):
     agent = agentfunc(device=device)
-    sd = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in sd['agent'].items()}
+    sd = storing.expand_once(sd)['agent']
+    sd = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in sd.items()}
     agent.load_state_dict(sd)
     return agent
 
@@ -171,7 +173,7 @@ def arena(run_name, worldfunc, agentfunc, device='cuda:1'):
         agents = {}
         last_load, last_step = 0, 0
         while True:
-            if time.time() - last_load > 60:
+            if time.time() - last_load > 15:
                 last_load = time.time()
                 agents = {
                     **periodic_agents(run_name, agentfunc, device=device),

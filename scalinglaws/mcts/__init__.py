@@ -247,9 +247,6 @@ class MCTSAgent:
             n_leaves=m.n_leaves(),
             v=r.v,
             actions=torch.distributions.Categorical(logits=r.logits).sample())
-    
-    def cpu(self):
-        return MCTSAgent(self.evaluator.cpu(), **self.kwargs)
 
     def load_state_dict(self, sd):
         #TODO: Systematize this
