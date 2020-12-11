@@ -110,7 +110,6 @@ class MCTS:
         return torch.distributions.Categorical(probs=probs).sample()
 
     def _descend_state_collect(self):
-        print(CACHE)
         if CACHE is not None:
             state = arrdict.arrdict(
                 logits=self.decisions.logits,
