@@ -1,3 +1,5 @@
+import torch
+from scalinglaws.heads import Tensor
 from time import strptime
 import pandas as pd
 import pickle
@@ -5,6 +7,7 @@ from logging import getLogger
 from pandas._libs.tslibs import Timestamp
 from . import paths
 import time
+from io import BytesIO
 
 log = getLogger(__name__)
 
@@ -26,10 +29,11 @@ def expand_once(state_dicts):
 
 def _store(path, objs):
     state_dict = collapse({k: v.state_dict() for k, v in objs.items()})
-    state_dict = {k: v.cpu() for k, v in state_dict.items()}
-    bs = pickle.dumps(state_dict)
+    #TODO: Is there a better way to do this?
+    bs = BytesIO()
+    torch.save(state_dict, bs)
     path.parent.mkdir(exist_ok=True, parents=True)
-    path.with_suffix('.tmp').write_bytes(bs)
+    path.with_suffix('.tmp').write_bytes(bs.getvalue())
     path.with_suffix('.tmp').rename(path)
 
 def store_latest(run_name, throttle=0, **objs):
@@ -42,10 +46,10 @@ def store_latest(run_name, throttle=0, **objs):
     log.info(f'Stored latest at "{path}"')
     return True
 
-def load_latest(run_name=-1, proc_name='MainProcess', return_modtime=False):
+def load_latest(run_name=-1, proc_name='MainProcess', return_modtime=False, device='cpu'):
     [ps] = list(paths.subdir(run_name, 'storing', 'latest').glob(f'{proc_name}*.pkl'))
     modified = pd.Timestamp(ps.lstat().st_mtime, unit='s')
-    sd = pickle.loads(ps.read_bytes())
+    sd = torch.load(ps, map_location=device)
     return (sd, modified) if return_modtime else sd
 
 def store_periodic(run_name, throttle=0, **objs):

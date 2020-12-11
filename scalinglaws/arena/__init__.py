@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-from rebar.storing import expand_once
 import torch
 from rebar import storing, logging, dotdict, stats, paths
 import pickle
@@ -18,15 +17,14 @@ log = getLogger(__name__)
 def assemble_agent(agentfunc, sd, device='cpu'):
     agent = agentfunc(device=device)
     sd = storing.expand_once(sd)['agent']
-    sd = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in sd.items()}
     agent.load_state_dict(sd)
     return agent
 
-def periodic_agents(run_name, agentfunc, **kwargs):
+def periodic_agents(run_name, agentfunc, device='cpu', **kwargs):
     if not isinstance(run_name, (int, str)):
         agents = {}
         for r in run_name:
-            agents.update(periodic_agents(r, agentfunc, **kwargs))
+            agents.update(periodic_agents(r, agentfunc, device=device, **kwargs))
         return agents
 
     try:
@@ -37,14 +35,14 @@ def periodic_agents(run_name, agentfunc, **kwargs):
         agents = {} 
         for _, row in stored.iterrows():
             name = row.date.strftime(r'%y%m%d-%H%M%S-periodic')
-            sd = pickle.load(row.path.open('rb'))
-            agents[name] = assemble_agent(agentfunc, sd, **kwargs)
+            sd = torch.load(row.path.open('rb'), map_location=device)
+            agents[name] = assemble_agent(agentfunc, sd, device=device, **kwargs)
         return agents
 
-def latest_agent(run_name, agentfunc, **kwargs):
+def latest_agent(run_name, agentfunc, device='cpu', **kwargs):
     try:
-        sd, modified = storing.load_latest(run_name, return_modtime=True)
-        return {f'{modified:%y%m%d-%H%M%S}-latest': assemble_agent(agentfunc, sd, **kwargs)}
+        sd, modified = storing.load_latest(run_name, device=device, return_modtime=True)
+        return {f'{modified:%y%m%d-%H%M%S}-latest': assemble_agent(agentfunc, sd, device=device, **kwargs)}
     except ValueError:
         return {}
 
