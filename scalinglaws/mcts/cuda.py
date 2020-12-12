@@ -19,4 +19,4 @@ def mcts(logits, w, n, c_puct, seats, terminal, children):
     assert (c_puct > 0.).all(), 'Zero c_puct not supported; will lead to an infinite loop in the kernel'
 
     with torch.cuda.device(logits.device):
-        return cuda.MCTS(logits, w, n.int(), c_puct, seats.int(), terminal, children.int())
+        return loaded.MCTS(logits, w, n.int(), c_puct, seats.int(), terminal, children.int())
