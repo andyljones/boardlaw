@@ -190,12 +190,15 @@ def test_backup():
     data = arrdict.arrdict(
         v=torch.tensor([[1.], [2.]]),
         w=torch.tensor([[0.], [0.]]),
-        n=torch.tensor([0, 0]),
-        rewards=torch.tensor([[0.], [1.]]),
-        parents=torch.tensor([-1, 0]),
-        terminal=torch.tensor([False, False])
-    )
-    bk = cuda.Backup(**data[None])
+        n=torch.tensor([0, 0]).int(),
+        rewards=torch.tensor([[0.], [0.]]),
+        parents=torch.tensor([-1, 0]).int(),
+        terminal=torch.tensor([False, False]))[None].cuda()
+    bk = cuda.Backup(**data)
+
+    leaves = torch.tensor([1]).int().cuda()
+    cuda.backup(bk, leaves)
+
 
 ### MCTS TESTS
 

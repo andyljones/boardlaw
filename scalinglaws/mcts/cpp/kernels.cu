@@ -205,13 +205,12 @@ __host__ Descent descend(MCTS m) {
     return descent;
 }
 
-__device__ void copy(F1D::PTA source, float* dest) {
-    const uint S = source.size(0);
-}
-
 __global__ void backup_kernel(BackupPTA bk, I1D::PTA leaves) {
+    const uint B = bk.v.size(0);
     const uint S = bk.v.size(2);
     const int b = blockIdx.x*blockDim.x + threadIdx.x;
+
+    if (b >= B) return;
 
     extern __shared__ float shared[];
     float* v = (float*)&shared[threadIdx.x*S];
@@ -223,6 +222,8 @@ __global__ void backup_kernel(BackupPTA bk, I1D::PTA leaves) {
     while (true) {
         if (current == -1) break;
 
+        //TODO: Should invert this loop for memory locality buuuuut
+        // it's not gonna be the bottleneck anyway. 
         for (int s=0; s<S; s++) {
             if (bk.terminal[b][current]) {
                 v[s] = 0.f;
@@ -243,6 +244,6 @@ __host__ void backup(Backup b, TT leaves) {
     const uint S = b.v.size(2);
 
     const uint n_blocks = (B + BLOCK - 1)/BLOCK;
-    root_kernel<<<{n_blocks}, {BLOCK}, BLOCK*S*sizeof(float), stream()>>>(
+    backup_kernel<<<{n_blocks}, {BLOCK}, BLOCK*S*sizeof(float), stream()>>>(
         b.pta(), I1D(leaves).pta());
 }

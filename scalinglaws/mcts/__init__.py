@@ -41,7 +41,7 @@ class MCTS:
         self.tree = arrdict.arrdict(
             children=self.envs.new_full((world.n_envs, self.n_nodes, self.n_actions), -1),
             parents=self.envs.new_full((world.n_envs, self.n_nodes), -1),
-            relation=self.envs.new_full((world.n_envs, self.n_nodes), -1))
+            relation=self.envs.new_full((world.n_envs, self.n_nodes), -1)).int()
 
         self.worlds = arrdict.stack([world for _ in range(self.n_nodes)], 1)
         
@@ -87,23 +87,14 @@ class MCTS:
         return result.parents.long(), result.actions.long()
 
     def backup(self, leaves):
-        current = leaves.clone()
-        v = self.decisions.v[self.envs, leaves]
-        while True:
-            active = (current != -1)
-            if not active.any():
-                break
-
-            e, c = self.envs[active], current[active]
-            
-            t = self.transitions.terminal[e, c]
-            v[e[t]] = 0. 
-            v[active] += self.transitions.rewards[e, c]
-
-            self.stats.n[e, c] += 1
-            self.stats.w[e, c] += v[active]
-        
-            current[active] = self.tree.parents[e, c]
+        bk = cuda.Backup(
+            v=self.decisions.v,
+            w=self.stats.w,
+            n=self.stats.n,
+            rewards=self.transitions.rewards,
+            parents=self.tree.parents,
+            terminal=self.transitions.terminal)
+        cuda.backup(bk, leaves.int())
 
     def simulate(self, evaluator):
         if self.sim >= self.n_nodes:
@@ -113,12 +104,12 @@ class MCTS:
 
         # If the transition is terminal - and so we stopped our descent early
         # we don't want to end up creating a new node. 
-        leaves = self.tree.children[self.envs, parents, actions]
+        leaves = self.tree.children[self.envs, parents, actions].long()
         leaves[leaves == -1] = self.sim
 
-        self.tree.children[self.envs, parents, actions] = leaves
-        self.tree.parents[self.envs, leaves] = parents
-        self.tree.relation[self.envs, leaves] = actions
+        self.tree.children[self.envs, parents, actions] = leaves.int()
+        self.tree.parents[self.envs, leaves] = parents.int()
+        self.tree.relation[self.envs, leaves] = actions.int()
 
         old_world = self.worlds[self.envs, parents]
         world, transition = old_world.step(actions)
