@@ -1,4 +1,5 @@
 import torch
+import torch.testing
 import torch.distributions
 from . import search, cuda
 from rebar import arrdict
@@ -8,7 +9,7 @@ def assert_shape(x, s):
     assert (x.ndim == len(s)) and x.shape == s, f'Expected {s}, got {x.shape}'
     assert x.device.type == 'cuda', f'Expected CUDA tensor, got {x.device.type}'
 
-def descend(logits, w, n, c_puct, seats, terminal, children):
+def mcts(logits, w, n, c_puct, seats, terminal, children):
     B, T, A = logits.shape
     S = w.shape[-1]
     assert_shape(w, (B, T, S))
@@ -20,11 +21,39 @@ def descend(logits, w, n, c_puct, seats, terminal, children):
     assert (c_puct > 0.).all(), 'Zero c_puct not supported; will lead to an infinite loop in the kernel'
 
     with torch.cuda.device(logits.device):
-        mcts = cuda.MCTS(logits, w, n.int(), c_puct, seats.int(), terminal, children.int())
-        result = cuda.descend(mcts)
+        return cuda.MCTS(logits, w, n.int(), c_puct, seats.int(), terminal, children.int())
+
+def root(logits, *args, **kwargs):
+    with torch.cuda.device(logits.device):
+        m = mcts(logits, *args, **kwargs)
+        return cuda.root(m)
+
+def descend(logits, *args, **kwargs):
+    with torch.cuda.device(logits.device):
+        m = mcts(logits, *args, **kwargs)
+        result = cuda.descend(m)
     return arrdict.arrdict(
         parents=result.parents, 
         actions=result.actions)
+
+
+### ROOT TESTS
+
+def test_root_one_node():
+    data = arrdict.arrdict(
+        logits=torch.tensor([[1/3, 2/3]]).log(),
+        w=torch.tensor([[0.]]),
+        n=torch.tensor([0]),
+        c_puct=torch.tensor(1.),
+        seats=torch.tensor([0]),
+        terminal=torch.tensor([False]),
+        children=torch.tensor([[-1, -1]]))
+    
+    expected = torch.tensor([1/3, 2/3]).cuda(), 
+    actual = root(**data.cuda()[None])
+    torch.testing.assert_allclose(expected, actual, rtol=1e-3, atol=1e-3)
+
+### DESCEND TESTS
 
 def assert_distribution(xs, freqs):
     for i, freq in enumerate(freqs):

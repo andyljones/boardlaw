@@ -49,6 +49,7 @@ using I3D = TensorProxy<int, 3>;
 using B1D = TensorProxy<bool, 1>;
 using B2D = TensorProxy<bool, 2>;
 
+//TODO: Can I template-ize these classes?
 struct MCTSPTA {
   const F3D::PTA logits;
   const F3D::PTA w; 
@@ -96,4 +97,5 @@ struct Descent {
   }
 };
 
-Descent descend(MCTS state);
+Descent descend(MCTS m);
+TT root(MCTS m);

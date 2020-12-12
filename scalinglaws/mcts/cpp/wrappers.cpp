@@ -8,7 +8,6 @@ using namespace pybind11::literals;
 using namespace std::string_literals;
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-    m.def("descend", &descend, "state"_a, py::call_guard<py::gil_scoped_release>());
 
     py::class_<Descent>(m, "Descent", py::module_local())
         .def_property_readonly("parents", [](Descent r) { return r.parents.t; })
@@ -24,4 +23,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         .def_property_readonly("seats", [](MCTS s)  { return s.seats.t; })
         .def_property_readonly("terminal", [](MCTS s)  { return s.terminal.t; })
         .def_property_readonly("children", [](MCTS s)  { return s.children.t; });
+
+    m.def("descend", &descend, "m"_a, py::call_guard<py::gil_scoped_release>());
+    m.def("root", &root, "m"_a, py::call_guard<py::gil_scoped_release>());
 }
