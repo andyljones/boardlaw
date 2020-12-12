@@ -5,7 +5,7 @@ from rebar import arrdict
 import aljpy
 
 def assert_shape(x, s):
-    assert x.shape == s, f'Expected {s}, got {x.shape}'
+    assert (x.ndim == len(s)) and x.shape == s, f'Expected {s}, got {x.shape}'
     assert x.device.type == 'cuda', f'Expected CUDA tensor, got {x.device.type}'
 
 def descend(logits, w, n, c_puct, seats, terminal, children):
@@ -24,37 +24,6 @@ def descend(logits, w, n, c_puct, seats, terminal, children):
     return arrdict.arrdict(
         parents=result.parents, 
         actions=result.actions)
-
-def benchmark():
-    import pickle
-    with open('output/descent/hex.pkl', 'rb') as f:
-        data = pickle.load(f)
-        data['c_puct'] = torch.repeat_interleave(data.c_puct[:, None], data.logits.shape[1], 1)
-        data = data.cuda()
-
-    results = []
-    with aljpy.timer() as timer:
-        torch.cuda.synchronize()
-        for t in range(data.logits.shape[0]):
-            results.append(descend(**data[t]))
-        torch.cuda.synchronize()
-    results = arrdict.stack(results)
-    time = timer.time()
-    samples = results.parents.nelement()
-    print(f'{1000*time:.0f}ms total, {1e9*time/samples:.0f}ns/descent')
-
-    return results
-
-def test():
-    import pickle
-    with open('output/descent/hex.pkl', 'rb') as f:
-        data = pickle.load(f)
-        data['c_puct'] = torch.repeat_interleave(data.c_puct[:, None], data.logits.shape[1], 1)
-        data = data.cuda()
-
-    torch.manual_seed(2)
-    result = descend(**data[-1,:3])
-    print(result.parents, result.actions)
 
 def assert_distribution(xs, freqs):
     for i, freq in enumerate(freqs):
@@ -76,15 +45,16 @@ def test_one_node():
     assert_distribution(result.parents, [1])
     assert_distribution(result.actions, [1/3, 2/3])
 
-def test_three_node():
+def test_high_cpuct():
+    # Ignore the high-q path, stay close to the prior
     data = arrdict.arrdict(
         logits=torch.tensor([
             [1/3, 2/3],
             [1/4, 3/4],
             [1/5, 4/5]]).log(),
-        w=torch.tensor([[0.], [0.], [0.,]]),
+        w=torch.tensor([[0.], [0.], [1.,]]),
         n=torch.tensor([2, 1, 1]),
-        c_puct=torch.tensor(1.),
+        c_puct=torch.tensor(1000.),
         seats=torch.tensor([0, 0, 0]),
         terminal=torch.tensor([False, False, False]),
         children=torch.tensor([
@@ -96,3 +66,78 @@ def test_three_node():
 
     assert_distribution(result.parents, [0, 1/3, 2/3])
     assert_distribution(result.actions, [1/3*1/4 + 2/3*1/5, 1/3*3/4 + 2/3*4/5])
+
+def test_low_cpuct():
+    # Concentrate on the high-q path
+    data = arrdict.arrdict(
+        logits=torch.tensor([
+            [1/3, 2/3],
+            [1/4, 3/4],
+            [1/5, 4/5]]).log(),
+        w=torch.tensor([[0.], [0.], [1.,]]),
+        n=torch.tensor([2, 1, 1]),
+        c_puct=torch.tensor(.001),
+        seats=torch.tensor([0, 0, 0]),
+        terminal=torch.tensor([False, False, False]),
+        children=torch.tensor([
+            [1, 2], 
+            [-1, -1], 
+            [-1, -1]]))
+
+    result = descend(**data.cuda()[None].repeat_interleave(1024, 0))
+
+    assert_distribution(result.parents, [0, 0, 1])
+    assert_distribution(result.actions, [1/5, 4/5])
+
+def test_terminal():
+    # High cpuct, transition to node #1 is terminal
+    data = arrdict.arrdict(
+        logits=torch.tensor([
+            [1/3, 2/3],
+            [1/4, 3/4],
+            [1/5, 4/5]]).log(),
+        w=torch.tensor([[0.], [0.], [1.,]]),
+        n=torch.tensor([2, 1, 1]),
+        c_puct=torch.tensor(1000.),
+        seats=torch.tensor([0, 0, 0]),
+        terminal=torch.tensor([False, True, False]),
+        children=torch.tensor([
+            [1, 2], 
+            [-1, -1], 
+            [-1, -1]]))
+
+    result = descend(**data.cuda()[None].repeat_interleave(1024, 0))
+
+    assert_distribution(result.parents, [1/3, 0, 2/3])
+    assert_distribution(result.actions, [1/3 + 2/3*1/5, 2/3*4/5])
+
+def test_real():
+    import pickle
+    with open('output/descent/hex.pkl', 'rb') as f:
+        data = pickle.load(f)
+        data['c_puct'] = torch.repeat_interleave(data.c_puct[:, None], data.logits.shape[1], 1)
+        data = data.cuda()
+
+    for t in range(data.logits.shape[0]):
+        result = descend(**data[t])
+
+def benchmark():
+    import pickle
+    with open('output/descent/hex.pkl', 'rb') as f:
+        data = pickle.load(f)
+        data['c_puct'] = torch.repeat_interleave(data.c_puct[:, None], data.logits.shape[1], 1)
+        data = data.cuda()
+
+    results = []
+    with aljpy.timer() as timer:
+        torch.cuda.synchronize()
+        for t in range(data.logits.shape[0]):
+            results.append(descend(**data[t]))
+        torch.cuda.synchronize()
+    results = arrdict.stack(results)
+    time = timer.time()
+    samples = results.parents.nelement()
+    print(f'{1000*time:.0f}ms total, {1e9*time/samples:.0f}ns/descent')
+
+    return results
+
