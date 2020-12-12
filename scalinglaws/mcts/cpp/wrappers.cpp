@@ -8,10 +8,20 @@ using namespace pybind11::literals;
 using namespace std::string_literals;
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-    m.def("solve_policy", &solve_policy, "pi"_a, "q"_a, "lambda_n"_a, py::call_guard<py::gil_scoped_release>());
-    m.def("descend", &descend, "logits"_a, "w"_a, "n"_a, "c_puct"_a, "seats"_a, "terminal"_a, "children"_a, py::call_guard<py::gil_scoped_release>());
+    m.def("descend", &descend, "state"_a, py::call_guard<py::gil_scoped_release>());
 
-    py::class_<DescentResult>(m, "DescentResult", py::module_local())
-        .def_property_readonly("parents", [](DescentResult r) { return r.parents; })
-        .def_property_readonly("actions", [](DescentResult r) { return r.actions; });
+    py::class_<Descent>(m, "Descent", py::module_local())
+        .def_property_readonly("parents", [](Descent r) { return r.parents.t; })
+        .def_property_readonly("actions", [](Descent r) { return r.actions.t; });
+    
+    py::class_<MCTS>(m, "MCTS", py::module_local())
+        .def(py::init<TT, TT, TT, TT, TT, TT, TT>(), 
+            "logits"_a, "w"_a, "n"_a, "c_puct"_a, "seats"_a, "terminal"_a, "children"_a)
+        .def_property_readonly("logits", [](MCTS s)  { return s.logits.t; })
+        .def_property_readonly("w", [](MCTS s)  { return s.w.t; })
+        .def_property_readonly("n", [](MCTS s)  { return s.n.t; })
+        .def_property_readonly("c_puct", [](MCTS s)  { return s.c_puct.t; })
+        .def_property_readonly("seats", [](MCTS s)  { return s.seats.t; })
+        .def_property_readonly("terminal", [](MCTS s)  { return s.terminal.t; })
+        .def_property_readonly("children", [](MCTS s)  { return s.children.t; });
 }

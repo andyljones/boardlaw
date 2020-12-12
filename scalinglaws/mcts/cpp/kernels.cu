@@ -6,14 +6,6 @@
 
 const uint BLOCK = 8;
 
-using F1D = TensorProxy<float, 1>;
-using F2D = TensorProxy<float, 2>;
-using F3D = TensorProxy<float, 3>;
-using I1D = TensorProxy<int, 1>;
-using I2D = TensorProxy<int, 2>;
-using I3D = TensorProxy<int, 3>;
-using B1D = TensorProxy<bool, 1>;
-using B2D = TensorProxy<bool, 2>;
 
 at::cuda::CUDAStream stream() { 
     return at::cuda::getCurrentCUDAStream();
@@ -54,54 +46,8 @@ __device__ float newton_search(float* pi, float* q, int A, float lambda_n) {
     return alpha;
 }
 
-__global__ void solve_policy_kernel(
-    F2D::PTA pi, F2D::PTA q, F1D::PTA lambda_n,
-    F1D::PTA alpha_star) {
-
-    const auto B = pi.size(0);
-    const auto A = pi.size(1);
-    const int b = blockIdx.x*blockDim.x + threadIdx.x;
-    if (b >= B) {
-        return;
-    }
-
-    // Copy data into shared memory
-    extern __shared__ float shared[];
-    float *qs = (float*)&shared[threadIdx.x*2*A];
-    float *pis = (float*)&shared[threadIdx.x*2*A+A];
-    for (int a = 0; a < A; a++) {
-        qs[a] = q[b][a];
-        pis[a] = pi[b][a];
-    }
-    __syncthreads();
-
-    alpha_star[b] = newton_search(pis, qs, A, lambda_n[b]);
-}
-
-__host__ TT solve_policy(const TT pi, const TT q, const TT lambda_n) {
-    const uint B = pi.size(0);
-    const uint A = pi.size(1);
-
-    F1D alpha_star(pi.new_empty({B}));
-    alpha_star.t.fill_(NAN);
-
-    //TODO: Replace this with a hardware dependent test
-    assert (BLOCK*2*A*sizeof(float) < 64*1024);
-
-    const uint n_blocks = (B + BLOCK - 1)/BLOCK;
-    solve_policy_kernel<<<{n_blocks}, {BLOCK}, BLOCK*2*A*sizeof(float), stream()>>>(
-        F2D(pi).pta(), F2D(q).pta(), F1D(lambda_n).pta(),
-        alpha_star.pta());
-
-    return alpha_star.t;
-}
-
-
-
 __global__ void descend_kernel(
-    F3D::PTA pi, F3D::PTA q, I2D::PTA n, F1D::PTA c_puct,
-    I2D::PTA seats, B2D::PTA terminal, I3D::PTA children,
-    F2D::PTA rands, I1D::PTA parents, I1D::PTA actions) {
+    MCTSPTA s, F3D::PTA pi, F3D::PTA q, F2D::PTA rands, DescentPTA descent) {
 
     const uint B = pi.size(0);
     const uint A = pi.size(2);
@@ -113,24 +59,24 @@ __global__ void descend_kernel(
     float *pis = (float*)&shared[threadIdx.x*2*A];
     float *qs = (float*)&shared[threadIdx.x*2*A+A];
 
-    float c = c_puct[b];
+    float c = s.c_puct[b];
 
     int t = 0;
     int parent = 0;
     int action = -1;
     int valid = -1;
     while (true) {
-        if (terminal[b][t]) break;
+        if (s.terminal[b][t]) break;
         if (t == -1) break;
 
         int N = 0;
-        auto seat = seats[b][t];
+        auto seat = s.seats[b][t];
         for (int a=0; a<A; a++) {
-            auto child = children[b][t][a];
+            auto child = s.children[b][t][a];
             if (child > -1) {
                 qs[a] = q[b][child][seat];
                 pis[a] = pi[b][t][a];
-                N += n[b][child];
+                N += s.n[b][child];
             } else {
                 qs[a] = 0.f;
                 pis[a] = pi[b][t][a];
@@ -161,34 +107,30 @@ __global__ void descend_kernel(
             }
         }
         parent = t;
-        t = children[b][t][action];
+        t = s.children[b][t][action];
     }
 
-    parents[b] = parent;
-    actions[b] = (action >= 0)? action : valid;
+    descent.parents[b] = parent;
+    descent.actions[b] = (action >= 0)? action : valid;
 }
 
-__host__ DescentResult descend(
-    const TT logits, const TT w, const TT n, const TT c_puct,
-    const TT seats, const TT terminal, const TT children) {
+__host__ Descent descend(MCTS s) {
+    const uint B = s.logits.size(0);
+    const uint A = s.logits.size(2);
 
-    const uint B = logits.size(0);
-    const uint A = logits.size(2);
-
-    auto q = w/(n.unsqueeze(-1) + 1e-6);
+    auto q = s.w.t/(s.n.t.unsqueeze(-1) + 1e-6);
     q = (q - q.min())/(q.max() - q.min() + 1e-6);
 
-    auto pi = logits.exp();
+    auto pi = s.logits.t.exp();
 
-    auto rands = at::rand_like(logits.select(2, 0));
+    auto rands = at::rand_like(s.logits.t.select(2, 0));
 
-    auto parents = seats.new_empty({B});
-    auto actions = seats.new_empty({B});
+    Descent descent{
+        s.seats.t.new_empty({B}),
+        s.seats.t.new_empty({B})};
     const uint n_blocks = (B + BLOCK - 1)/BLOCK;
     descend_kernel<<<{n_blocks}, {BLOCK}, BLOCK*2*A*sizeof(float), stream()>>>(
-        F3D(pi).pta(), F3D(q).pta(), I2D(n).pta(), F1D(c_puct).pta(),
-        I2D(seats).pta(), B2D(terminal).pta(), I3D(children).pta(), 
-        F2D(rands).pta(), I1D(parents).pta(), I1D(actions).pta());
+        s.pta(), F3D(pi).pta(), F3D(q).pta(), F2D(rands).pta(), descent.pta());
 
-    return {parents, actions};
+    return descent;
 }

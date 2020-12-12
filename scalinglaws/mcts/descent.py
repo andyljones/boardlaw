@@ -20,7 +20,8 @@ def descend(logits, w, n, c_puct, seats, terminal, children):
     assert (c_puct > 0.).all(), 'Zero c_puct not supported; will lead to an infinite loop in the kernel'
 
     with torch.cuda.device(logits.device):
-        result = cuda.descend(logits, w, n.int(), c_puct, seats.int(), terminal, children.int())
+        mcts = cuda.MCTS(logits, w, n.int(), c_puct, seats.int(), terminal, children.int())
+        result = cuda.descend(mcts)
     return arrdict.arrdict(
         parents=result.parents, 
         actions=result.actions)
@@ -36,7 +37,7 @@ def test_one_node():
         logits=torch.tensor([[1/3, 2/3]]).log(),
         w=torch.tensor([[0.]]),
         n=torch.tensor([0]),
-        c_puct=torch.tensor(.0),
+        c_puct=torch.tensor(1.),
         seats=torch.tensor([0]),
         terminal=torch.tensor([False]),
         children=torch.tensor([[-1, -1]]))
@@ -122,7 +123,6 @@ def test_balanced_cpuct():
     alpha = alphas.mean()
     unity = (lambda_n*pi/(alpha - q)).sum()
 
-    print(unity)
     # This is particularly imprescise at low c_puct
     assert abs(unity - 1) < .05
     

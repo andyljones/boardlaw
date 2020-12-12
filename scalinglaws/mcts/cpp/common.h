@@ -40,12 +40,60 @@ struct TensorProxy {
     size_t size(const size_t i) const { return t.size(i); }
 };
 
-struct DescentResult {
-  const TT parents;
-  const TT actions;
+using F1D = TensorProxy<float, 1>;
+using F2D = TensorProxy<float, 2>;
+using F3D = TensorProxy<float, 3>;
+using I1D = TensorProxy<int, 1>;
+using I2D = TensorProxy<int, 2>;
+using I3D = TensorProxy<int, 3>;
+using B1D = TensorProxy<bool, 1>;
+using B2D = TensorProxy<bool, 2>;
+
+struct MCTSPTA {
+  const F3D::PTA logits;
+  const F3D::PTA w; 
+  const I2D::PTA n; 
+  const F1D::PTA c_puct;
+  const I2D::PTA seats; 
+  const B2D::PTA terminal; 
+  const I3D::PTA children;
 };
 
-TT solve_policy(const TT pi, const TT q, const TT lambda_n);
-DescentResult descend(
-    const TT logits, const TT w, const TT n, const TT c_puct,
-    const TT seats, const TT terminal, const TT children);
+struct MCTS {
+  const F3D logits;
+  const F3D w; 
+  const I2D n; 
+  const F1D c_puct;
+  const I2D seats; 
+  const B2D terminal; 
+  const I3D children;
+
+  MCTSPTA pta() {
+    return MCTSPTA{
+      logits.pta(), 
+      w.pta(),
+      n.pta(),
+      c_puct.pta(),
+      seats.pta(),
+      terminal.pta(),
+      children.pta()};
+  }
+};
+
+struct DescentPTA {
+  I1D::PTA parents;
+  I1D::PTA actions; 
+};
+
+struct Descent {
+  I1D parents;
+  I1D actions;
+
+  DescentPTA pta() {
+    return DescentPTA{
+      parents.pta(),
+      actions.pta()};
+  }
+};
+
+Descent descend(MCTS state);
