@@ -183,6 +183,20 @@ def benchmark():
 
 #TODO: Test other seats, test empty children
 
+
+### BACKUP TESTS
+
+def test_backup():
+    data = arrdict.arrdict(
+        v=torch.tensor([[1.], [2.]]),
+        w=torch.tensor([[0.], [0.]]),
+        n=torch.tensor([0, 0]),
+        rewards=torch.tensor([[0.], [1.]]),
+        parents=torch.tensor([-1, 0]),
+        terminal=torch.tensor([False, False])
+    )
+    bk = cuda.Backup(**data[None])
+
 ### MCTS TESTS
 
 from .. import validation, analysis

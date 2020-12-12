@@ -204,3 +204,45 @@ __host__ Descent descend(MCTS m) {
 
     return descent;
 }
+
+__device__ void copy(F1D::PTA source, float* dest) {
+    const uint S = source.size(0);
+}
+
+__global__ void backup_kernel(BackupPTA bk, I1D::PTA leaves) {
+    const uint S = bk.v.size(2);
+    const int b = blockIdx.x*blockDim.x + threadIdx.x;
+
+    extern __shared__ float shared[];
+    float* v = (float*)&shared[threadIdx.x*S];
+
+    int current = leaves[b];
+    for (int s=0; s<S; s++) {
+        v[s] = bk.v[b][current][s];
+    }
+    while (true) {
+        if (current == -1) break;
+
+        for (int s=0; s<S; s++) {
+            if (bk.terminal[b][current]) {
+                v[s] = 0.f;
+            }
+
+            v[s] += bk.rewards[b][current][s];
+
+            bk.n[b][current] += 1;
+            bk.w[b][current][s] += v[s];
+        }
+
+        current = bk.parents[b][current]; 
+    }
+}
+
+__host__ void backup(Backup b, TT leaves) {
+    const uint B = b.v.size(0);
+    const uint S = b.v.size(2);
+
+    const uint n_blocks = (B + BLOCK - 1)/BLOCK;
+    root_kernel<<<{n_blocks}, {BLOCK}, BLOCK*S*sizeof(float), stream()>>>(
+        b.pta(), I1D(leaves).pta());
+}

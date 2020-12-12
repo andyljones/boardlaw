@@ -23,7 +23,12 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         .def_property_readonly("seats", [](MCTS s)  { return s.seats.t; })
         .def_property_readonly("terminal", [](MCTS s)  { return s.terminal.t; })
         .def_property_readonly("children", [](MCTS s)  { return s.children.t; });
+    
+    py::class_<Backup>(m, "Backup", py::module_local())
+        .def(py::init<TT, TT, TT, TT, TT, TT>(),
+            "v"_a, "w"_a, "n"_a, "rewards"_a, "parents"_a, "terminal"_a);
 
     m.def("descend", &descend, "m"_a, py::call_guard<py::gil_scoped_release>());
     m.def("root", &root, "m"_a, py::call_guard<py::gil_scoped_release>());
+    m.def("backup", &backup, "b"_a, "leaves"_a, py::call_guard<py::gil_scoped_release>());
 }

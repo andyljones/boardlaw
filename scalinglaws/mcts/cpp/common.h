@@ -51,23 +51,23 @@ using B2D = TensorProxy<bool, 2>;
 
 //TODO: Can I template-ize these classes?
 struct MCTSPTA {
-  const F3D::PTA logits;
-  const F3D::PTA w; 
-  const I2D::PTA n; 
-  const F1D::PTA c_puct;
-  const I2D::PTA seats; 
-  const B2D::PTA terminal; 
-  const I3D::PTA children;
+  F3D::PTA logits;
+  F3D::PTA w; 
+  I2D::PTA n; 
+  F1D::PTA c_puct;
+  I2D::PTA seats; 
+  B2D::PTA terminal; 
+  I3D::PTA children;
 };
 
 struct MCTS {
-  const F3D logits;
-  const F3D w; 
-  const I2D n; 
-  const F1D c_puct;
-  const I2D seats; 
-  const B2D terminal; 
-  const I3D children;
+  F3D logits;
+  F3D w; 
+  I2D n; 
+  F1D c_puct;
+  I2D seats; 
+  B2D terminal; 
+  I3D children;
 
   MCTSPTA pta() {
     return MCTSPTA{
@@ -97,5 +97,34 @@ struct Descent {
   }
 };
 
+struct BackupPTA {
+  F3D::PTA v;
+  F3D::PTA w;
+  I2D::PTA n;
+  F3D::PTA rewards;
+  I2D::PTA parents;
+  B2D::PTA terminal;
+};
+
+struct Backup {
+  F3D v;
+  F3D w;
+  I2D n;
+  F3D rewards;
+  I2D parents;
+  B2D terminal;
+
+  BackupPTA pta() {
+    return BackupPTA{
+      v.pta(),
+      w.pta(),
+      n.pta(),
+      rewards.pta(),
+      parents.pta(),
+      terminal.pta()};
+  }
+};
+
 Descent descend(MCTS m);
 TT root(MCTS m);
+void backup(Backup m, TT leaves);
