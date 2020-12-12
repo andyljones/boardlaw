@@ -228,40 +228,35 @@ def test_multienv():
     expected = torch.tensor([[1/8.], [1/8.]], device=world.device)
     torch.testing.assert_allclose(m.root().v, expected)
 
-def full_game_mcts(s, n_nodes, n_rollouts, **kwargs):
+def full_game_mcts(s, n_nodes, **kwargs):
     from .. import hex
     world = hex.from_string(s, device='cuda')
-    agent = validation.MonteCarloAgent(n_rollouts)
+    agent = validation.RandomAgent()
     return mcts(world, agent, n_nodes=n_nodes, **kwargs)
 
 def test_planted_game():
-    black_wins = """
-    bwb
-    wbw
-    ...
-    """
-    m = full_game_mcts(black_wins, 17, 1)
-    expected = torch.tensor([[+1., -1.]], device=m.device)
-    torch.testing.assert_allclose(m.root().v, expected)
+    # black_wins = """
+    # bwb
+    # wbw
+    # ...
+    # """
+    # m = full_game_mcts(black_wins, 17)
 
-    white_wins = """
-    wb.
-    bw.
-    wbb
-    """
-    m = full_game_mcts(white_wins, 4, 1)
-    expected = torch.tensor([[-1., +1.]], device=m.device)
-    torch.testing.assert_allclose(m.root().v, expected)
+    # white_wins = """
+    # wb.
+    # bw.
+    # wbb
+    # """
+    # m = full_game_mcts(white_wins, 4)
 
-    # Hard to validate the logits
     competitive = """
     wb.
     bw.
     wb.
     """
-    m = full_game_mcts(competitive, 31, 4, c_puct=100.)
-    expected = torch.tensor([[-1/3., +1/3.]], device=m.device)
-    # assert ((m.root().v - expected).abs() < 1/3).all()
+    m = full_game_mcts(competitive, 63, c_puct=1.)
+    probs = m.root().logits.exp()[0]
+    assert (probs[2] > probs[8]) and (probs[5] > probs[7])
 
 @pytest.mark.skip('Takes too long, inconclusive')
 def test_full_game():
