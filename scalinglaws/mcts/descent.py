@@ -17,8 +17,9 @@ def test_root_one_node():
         terminal=torch.tensor([False]),
         children=torch.tensor([[-1, -1]]))
     
-    expected = torch.tensor([1/3, 2/3]).cuda(), 
-    actual = root(**data.cuda()[None])
+    expected = torch.tensor([[1/3, 2/3]]).cuda() 
+    m = cuda.mcts(**data.cuda()[None])
+    actual = cuda.root(m)
     torch.testing.assert_allclose(expected, actual, rtol=1e-3, atol=1e-3)
 
 ### DESCEND TESTS
@@ -39,7 +40,8 @@ def test_one_node():
         terminal=torch.tensor([False]),
         children=torch.tensor([[-1, -1]]))
     
-    result = descend(**data.cuda()[None].repeat_interleave(1024, 0))
+    m = cuda.mcts(**data.cuda()[None].repeat_interleave(1024, 0))
+    result = cuda.descend(m)
     assert_distribution(result.parents, [1])
     assert_distribution(result.actions, [1/3, 2/3])
 
@@ -60,8 +62,8 @@ def test_high_cpuct():
             [-1, -1], 
             [-1, -1]]))
 
-    result = descend(**data.cuda()[None].repeat_interleave(1024, 0))
-
+    m = cuda.mcts(**data.cuda()[None].repeat_interleave(1024, 0))
+    result = cuda.descend(m)
     assert_distribution(result.parents, [0, 1/3, 2/3])
     assert_distribution(result.actions, [1/3*1/4 + 2/3*1/5, 1/3*3/4 + 2/3*4/5])
 
@@ -82,8 +84,8 @@ def test_low_cpuct():
             [-1, -1], 
             [-1, -1]]))
 
-    result = descend(**data.cuda()[None].repeat_interleave(1024, 0))
-
+    m = cuda.mcts(**data.cuda()[None].repeat_interleave(1024, 0))
+    result = cuda.descend(m)
     assert_distribution(result.parents, [0, 0, 1])
     assert_distribution(result.actions, [1/5, 4/5])
 
@@ -104,7 +106,8 @@ def test_balanced_cpuct():
             [-1, -1], 
             [-1, -1]]))
 
-    result = descend(**data.cuda()[None].repeat_interleave(8092, 0))
+    m = cuda.mcts(**data.cuda()[None].repeat_interleave(1024, 0))
+    result = cuda.descend(m)
 
     # Reconstruct the alpha and check it satisfies the constraint
     dist = torch.histc(result.parents, 3, 0, 2)[1:].cpu()
@@ -140,8 +143,8 @@ def test_terminal():
             [-1, -1], 
             [-1, -1]]))
 
-    result = descend(**data.cuda()[None].repeat_interleave(1024, 0))
-
+    m = cuda.mcts(**data.cuda()[None].repeat_interleave(1024, 0))
+    result = cuda.descend(m)
     assert_distribution(result.parents, [1/3, 0, 2/3])
     assert_distribution(result.actions, [1/3 + 2/3*1/5, 2/3*4/5])
 
@@ -153,7 +156,8 @@ def test_real():
         data = data.cuda()
 
     for t in range(data.logits.shape[0]):
-        result = descend(**data[t])
+        m = cuda.mcts(**data[t])
+        result = cuda.descend(m)
 
 def benchmark():
     import pickle
@@ -166,7 +170,8 @@ def benchmark():
     with aljpy.timer() as timer:
         torch.cuda.synchronize()
         for t in range(data.logits.shape[0]):
-            results.append(descend(**data[t]))
+            m = cuda.mcts(**data[t])
+            results.append(cuda.descend(m))
         torch.cuda.synchronize()
     results = arrdict.stack(results)
     time = timer.time()
