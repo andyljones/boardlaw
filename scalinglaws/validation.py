@@ -72,7 +72,7 @@ class MonteCarloAgent:
         return arrdict.arrdict(
             logits=logits,
             actions=torch.distributions.Categorical(logits=logits).sample(),
-            v=(logits.exp()[..., None]*means).sum(-2))
+            v=totals.sum(-2).div(counts.sum(-2)))
 
 
 def uniform_logits(valid):

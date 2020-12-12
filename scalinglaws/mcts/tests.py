@@ -1,6 +1,7 @@
 import torch
 import torch.testing
 import torch.distributions
+import pytest
 from . import search, cuda
 from rebar import arrdict
 import aljpy
@@ -124,7 +125,7 @@ def test_balanced_cpuct():
     unity = (lambda_n*pi/(alpha - q)).sum()
 
     # This is particularly imprescise at low c_puct
-    assert abs(unity - 1) < .05
+    assert abs(unity - 1) < .1
     
 def test_terminal():
     # High cpuct, transition to node #1 is terminal
@@ -228,7 +229,7 @@ def test_multienv():
     torch.testing.assert_allclose(m.root().v, expected)
 
 def full_game_mcts(s, n_nodes, n_rollouts, **kwargs):
-    from . import hex
+    from .. import hex
     world = hex.from_string(s, device='cuda')
     agent = validation.MonteCarloAgent(n_rollouts)
     return mcts(world, agent, n_nodes=n_nodes, **kwargs)
@@ -262,19 +263,23 @@ def test_planted_game():
     expected = torch.tensor([[-1/3., +1/3.]], device=m.device)
     assert ((m.root().v - expected).abs() < 1/3).all()
 
+@pytest.mark.skip('Takes too long, inconclusive')
 def test_full_game():
-    from . import hex
-    world = hex.Hex.initial(1, boardsize=3, device='cuda')
-    black = MCTSAgent(validation.RandomRolloutAgent(4), n_nodes=16, c_puct=.5)
+    from .. import hex
+    worlds = hex.Hex.initial(128, boardsize=3, device='cuda')
+    black = MCTSAgent(validation.RandomAgent(), n_nodes=32, c_puct=.5)
     white = validation.RandomAgent()
-    trace = analysis.rollout(world, [black, white], 128)
-    winrates = trace.trans.rewards.sum(0).sum(0)/trace.trans.terminal.sum(0).sum(0)
+    trace = analysis.rollout(worlds, [black, white], n_reps=1)
+
+    wins = (trace.transitions.rewards == 1).sum(0).sum(0)
+    rates = wins/wins.sum()
+    assert rates[0] > rates[1]
 
 def benchmark_mcts(T=16):
     import pandas as pd
     import aljpy
     import matplotlib.pyplot as plt
-    from . import hex
+    from .. import hex
 
     results = []
     for n in np.logspace(0, 14, 15, base=2, dtype=int):

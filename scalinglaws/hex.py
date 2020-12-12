@@ -303,12 +303,15 @@ class Random(Solitaire):
 
 ## TESTS ##
 
+def strip(s):
+    return '\n'.join(l.strip() for l in s.splitlines() if l.strip())
+
 def board_size(s):
-    return len(s.strip().splitlines())
+    return len(strip(s).splitlines())
 
 def board_actions(s):
     size = board_size(s)
-    board = (np.frombuffer((s.strip() + '\n').encode(), dtype='S1')
+    board = (np.frombuffer((strip(s) + '\n').encode(), dtype='S1')
                  .reshape(size, size+1)
                  [:, :-1])
     indices = np.indices(board.shape)
@@ -338,10 +341,10 @@ def from_string(s, **kwargs):
     '''
     
     """
-    state = Hex.initial(n_envs=1, boardsize=board_size(s), **kwargs)
-    for a in board_actions(s):
-        state, trans = state.step(a[None])
-    return state
+    worlds = Hex.initial(n_envs=1, boardsize=board_size(s), **kwargs)
+    for a in board_actions(s).to(worlds.device):
+        worlds, trans = worlds.step(a[None])
+    return worlds
 
 def test_basic():
     s = Hex.initial(1, 3, device='cpu')
