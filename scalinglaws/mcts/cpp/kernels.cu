@@ -2,7 +2,6 @@
 #include <math_constants.h>
 #include <ATen/ATen.h>
 #include "common.h"
-#include <tuple>
 #include <ATen/cuda/CUDAContext.h>
 
 const uint BLOCK = 8;

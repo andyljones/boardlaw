@@ -39,3 +39,12 @@ struct TensorProxy {
 
     size_t size(const size_t i) const { return t.size(i); }
 };
+
+using F1D = TensorProxy<float, 1>;
+using F2D = TensorProxy<float, 2>;
+using F3D = TensorProxy<float, 3>;
+using I1D = TensorProxy<int, 1>;
+using I2D = TensorProxy<int, 2>;
+using I3D = TensorProxy<int, 3>;
+using B1D = TensorProxy<bool, 1>;
+using B2D = TensorProxy<bool, 2>;
