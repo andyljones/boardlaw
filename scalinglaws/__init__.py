@@ -135,6 +135,12 @@ def run():
             stats.gpu.memory(worlds.device)
             stats.gpu.vitals(worlds.device, throttle=15)
 
+def watch(run_name):
+    compositor = widgets.Compositor()
+    with logging.from_dir(run_name, compositor), stats.from_dir(run_name, compositor):
+        while True:
+            time.sleep(1)
+
 def benchmark_experience_collection():
     # Make sure to init cuda before running this 
 
