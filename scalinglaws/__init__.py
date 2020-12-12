@@ -143,7 +143,7 @@ def benchmark_experience_collection():
     worlds = worldfunc(n_envs)
     agent = agentfunc()
 
-    with timer.timer() as t:
+    with timer.timer(cuda=True) as t:
         for _ in range(16):
             decisions = agent(worlds, value=True)
             new_worlds, transition = worlds.step(decisions.actions)
