@@ -1,7 +1,7 @@
 import time
 import numpy as np
 import torch
-from rebar import paths, widgets, logging, stats, arrdict, storing
+from rebar import paths, widgets, logging, stats, arrdict, storing, timer
 from . import hex, mcts, networks, learning, validation, analysis, arena
 from torch.nn import functional as F
 from logging import getLogger
@@ -142,8 +142,10 @@ def benchmark_experience_collection():
     worlds = worldfunc(n_envs)
     agent = agentfunc()
 
-    for _ in range(16):
-        decisions = agent(worlds, value=True)
-        new_worlds, transition = worlds.step(decisions.actions)
-        worlds = new_worlds
-        log.info('actor stepped')
+    with timer.timer() as t:
+        for _ in range(16):
+            decisions = agent(worlds, value=True)
+            new_worlds, transition = worlds.step(decisions.actions)
+            worlds = new_worlds
+            log.info('actor stepped')
+    print(f'{t/(16*n_envs)}/sample')

@@ -42,8 +42,11 @@ class Timer:
 
     def __truediv__(self, c):
         return self*(1/c)
-    
+
     def __repr__(self):
+        return f'{type(self).__name__}({str(self)})'
+    
+    def __str__(self):
         return format_time(self.time(), self._unit)
 
     
