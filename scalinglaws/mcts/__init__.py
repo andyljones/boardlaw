@@ -3,7 +3,7 @@ from multiprocessing import Value
 import numpy as np
 import torch
 from rebar import arrdict
-from . import search, descent
+from . import search, cuda
 import logging
 
 log = logging.getLogger(__name__)
@@ -68,42 +68,8 @@ class MCTS:
 
         self.sim += 1
 
-    def action_stats(self, envs, nodes):
-        children = self.tree.children[envs, nodes]
-        mask = (children != -1)
-        stats = self.stats[envs[:, None].expand_as(children), children]
-        n = stats.n.where(mask, torch.zeros_like(stats.n))
-        w = stats.w.where(mask[..., None], torch.zeros_like(stats.w))
-
-        q = w/n[..., None]
-
-        # Q scaling + pessimistic initialization
-        q[n == 0] = 0 
-        q = (q - q.min())/(q.max() - q.min() + 1e-6)
-        q[n == 0] = 0 
-
-        return q, n
-
-    def policy(self, envs, nodes):
-        pi = self.decisions.logits[envs, nodes].exp()
-
-        # https://arxiv.org/pdf/2007.12509.pdf
-        worlds = self.worlds[envs, nodes]
-        q, n = self.action_stats(envs, nodes)
-
-        seats = worlds.seats[:, None, None].expand(-1, q.size(1), -1)
-        q = q.gather(2, seats.long()).squeeze(-1)
-
-        # N == 0 leads to nans, so let's clamp it at 1
-        N = n.sum(-1).clamp(1, None)
-        lambda_n = self.c_puct*N/(self.n_actions + N)
-
-        soln = search.solve_policy(pi, q, lambda_n)
-
-        return soln.policy
-
-    def descend(self):
-        result = descent.descend(
+    def _cuda(self):
+        return cuda.mcts(
             self.decisions.logits, 
             self.stats.w, 
             self.stats.n, 
@@ -112,6 +78,8 @@ class MCTS:
             self.transitions.terminal, 
             self.tree.children)
 
+    def descend(self):
+        result = cuda.descend(self._cuda())
         return result.parents.long(), result.actions.long()
 
     def backup(self, leaves):
@@ -164,11 +132,8 @@ class MCTS:
         self.sim += 1
 
     def root(self):
-        root = torch.zeros_like(self.envs)
-        p = self.policy(self.envs, root)
-
         return arrdict.arrdict(
-            logits=torch.log(p),
+            logits=cuda.root(self._cuda()).log(),
             v=self.decisions.v[:, 0])
     
     def n_leaves(self):
