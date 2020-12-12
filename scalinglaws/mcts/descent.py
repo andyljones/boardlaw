@@ -56,6 +56,12 @@ def test():
     result = descend(**data[-1,:3])
     print(result.parents, result.actions)
 
+def assert_distribution(xs, freqs):
+    for i, freq in enumerate(freqs):
+        actual = (xs == i).float().mean()
+        ci = 3*(freq*(1-freq)/len(xs))**.5
+        assert abs(actual - freq) <= ci, f'Expected {freq:.2f}±{ci:.2f} to be {i}, got {actual:.2f}'
+
 def test_one_node():
     data = arrdict.arrdict(
         logits=torch.tensor([[1/3, 2/3]]).log(),
@@ -67,6 +73,26 @@ def test_one_node():
         children=torch.tensor([[-1, -1]]))
     
     result = descend(**data.cuda()[None].repeat_interleave(1024, 0))
-    assert (result.parents == 0).all()
-    assert abs((result.actions == 0).float().mean() - 1/3) < 1e-2
-    assert abs((result.actions == 1).float().mean() - 2/3) < 1e-2
+    assert_distribution(result.parents, [1])
+    assert_distribution(result.actions, [1/3, 2/3])
+
+def test_three_node():
+    data = arrdict.arrdict(
+        logits=torch.tensor([
+            [1/3, 2/3],
+            [1/4, 3/4],
+            [1/5, 4/5]]).log(),
+        w=torch.tensor([[0.], [0.], [0.,]]),
+        n=torch.tensor([2, 1, 1]),
+        c_puct=torch.tensor(1.),
+        seats=torch.tensor([0, 0, 0]),
+        terminal=torch.tensor([False, False, False]),
+        children=torch.tensor([
+            [1, 2], 
+            [-1, -1], 
+            [-1, -1]]))
+
+    result = descend(**data.cuda()[None].repeat_interleave(1024, 0))
+
+    assert_distribution(result.parents, [0, 1/3, 2/3])
+    assert_distribution(result.actions, [1/3*1/4 + 2/3*1/5, 1/3*3/4 + 2/3*4/5])

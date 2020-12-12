@@ -75,7 +75,7 @@ __global__ void solve_policy_kernel(
     }
     __syncthreads();
 
-    return newton_search(pis, qs, A, lambda_n[b]);
+    alpha_star[b] = newton_search(pis, qs, A, lambda_n[b]);
 }
 
 __host__ TT solve_policy(const TT pi, const TT q, const TT lambda_n) {
