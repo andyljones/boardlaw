@@ -89,6 +89,43 @@ def test_low_cpuct():
     assert_distribution(result.parents, [0, 0, 1])
     assert_distribution(result.actions, [1/5, 4/5])
 
+def test_balanced_cpuct():
+    # Check the observed distribution satisfies the constraint
+    data = arrdict.arrdict(
+        logits=torch.tensor([
+            [1/3, 2/3],
+            [1/4, 3/4],
+            [1/5, 4/5]]).log(),
+        w=torch.tensor([[0.], [0.], [1.,]]),
+        n=torch.tensor([2, 1, 1]),
+        c_puct=torch.tensor(2.),
+        seats=torch.tensor([0, 0, 0]),
+        terminal=torch.tensor([False, False, False]),
+        children=torch.tensor([
+            [1, 2], 
+            [-1, -1], 
+            [-1, -1]]))
+
+    result = descend(**data.cuda()[None].repeat_interleave(8092, 0))
+
+    # Reconstruct the alpha and check it satisfies the constraint
+    dist = torch.histc(result.parents, 3, 0, 2)[1:].cpu()
+    p = dist/dist.sum()
+
+    A = data.logits.shape[1]
+    N = data.n[0]
+    lambda_n = data.c_puct*N/(A + N)
+    pi = data.logits[0].exp()
+    q = (data.w[:, 0]/data.n)[data.children[0]]
+    alphas = lambda_n*pi/p + q
+
+    alpha = alphas.mean()
+    unity = (lambda_n*pi/(alpha - q)).sum()
+
+    print(unity)
+    # This is particularly imprescise at low c_puct
+    assert abs(unity - 1) < .05
+    
 def test_terminal():
     # High cpuct, transition to node #1 is terminal
     data = arrdict.arrdict(
@@ -141,3 +178,4 @@ def benchmark():
 
     return results
 
+#TODO: Test other seats, test empty children
