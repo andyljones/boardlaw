@@ -186,11 +186,11 @@ def benchmark():
 
 ### BACKUP TESTS
 
-def test_backup():
+def test_backup_simple():
     data = arrdict.arrdict(
         v=torch.tensor([[1.], [2.]]),
-        w=torch.tensor([[0.], [0.]]),
-        n=torch.tensor([0, 0]).int(),
+        w=torch.tensor([[3.], [4.]]),
+        n=torch.tensor([5, 6]).int(),
         rewards=torch.tensor([[0.], [0.]]),
         parents=torch.tensor([-1, 0]).int(),
         terminal=torch.tensor([False, False]))[None].cuda()
@@ -199,6 +199,39 @@ def test_backup():
     leaves = torch.tensor([1]).int().cuda()
     cuda.backup(bk, leaves)
 
+    torch.testing.assert_allclose(data.w, torch.tensor([[[5.], [6.]]]).cuda())
+    torch.testing.assert_allclose(data.n, torch.tensor([[6, 7]]).cuda())
+
+def test_backup_rewards():
+    data = arrdict.arrdict(
+        v=torch.tensor([[0.], [0.]]),
+        w=torch.tensor([[0.], [0.]]),
+        n=torch.tensor([0, 0]).int(),
+        rewards=torch.tensor([[0.], [1.]]),
+        parents=torch.tensor([-1, 0]).int(),
+        terminal=torch.tensor([False, False]))[None].cuda()
+    bk = cuda.Backup(**data)
+
+    leaves = torch.tensor([1]).int().cuda()
+    cuda.backup(bk, leaves)
+
+    torch.testing.assert_allclose(data.w, torch.tensor([[[1.], [1.]]]).cuda())
+    torch.testing.assert_allclose(data.n, torch.tensor([[1, 1]]).cuda())
+
+def test_backup_terminal():
+    data = arrdict.arrdict(
+        v=torch.tensor([[0.], [1.], [2.]]),
+        w=torch.tensor([[0.], [0.], [0.]]),
+        n=torch.tensor([0, 0, 0]).int(),
+        rewards=torch.tensor([[0.], [3.], [0.]]),
+        parents=torch.tensor([-1, 0, 1]).int(),
+        terminal=torch.tensor([False, True, False]))[None].cuda()
+    bk = cuda.Backup(**data)
+
+    leaves = torch.tensor([2]).int().cuda()
+    cuda.backup(bk, leaves)
+
+    torch.testing.assert_allclose(data.w, torch.tensor([[[3.], [3.], [2.]]]).cuda())
 
 ### MCTS TESTS
 

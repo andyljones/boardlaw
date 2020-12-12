@@ -228,7 +228,6 @@ __global__ void backup_kernel(BackupPTA bk, I1D::PTA leaves) {
             if (bk.terminal[b][current]) {
                 v[s] = 0.f;
             }
-
             v[s] += bk.rewards[b][current][s];
 
             bk.n[b][current] += 1;

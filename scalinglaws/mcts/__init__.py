@@ -83,18 +83,20 @@ class MCTS:
             self.tree.children)
 
     def descend(self):
-        result = cuda.descend(self._cuda())
+        with torch.cuda.device(self.device):
+            result = cuda.descend(self._cuda())
         return result.parents.long(), result.actions.long()
 
     def backup(self, leaves):
-        bk = cuda.Backup(
-            v=self.decisions.v,
-            w=self.stats.w,
-            n=self.stats.n,
-            rewards=self.transitions.rewards,
-            parents=self.tree.parents,
-            terminal=self.transitions.terminal)
-        cuda.backup(bk, leaves.int())
+        with torch.cuda.device(self.device):
+            bk = cuda.Backup(
+                v=self.decisions.v,
+                w=self.stats.w,
+                n=self.stats.n,
+                rewards=self.transitions.rewards,
+                parents=self.tree.parents,
+                terminal=self.transitions.terminal)
+            cuda.backup(bk, leaves.int())
 
     def simulate(self, evaluator):
         if self.sim >= self.n_nodes:
@@ -127,9 +129,10 @@ class MCTS:
         self.sim += 1
 
     def root(self):
-        return arrdict.arrdict(
-            logits=cuda.root(self._cuda()).log(),
-            v=self.decisions.v[:, 0])
+        with torch.cuda.device(self.device):
+            return arrdict.arrdict(
+                logits=cuda.root(self._cuda()).log(),
+                v=self.decisions.v[:, 0])
     
     def n_leaves(self):
         return ((self.tree.children == -1).all(-1) & (self.tree.parents != -1)).sum(-1)
