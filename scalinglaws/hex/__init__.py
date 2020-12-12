@@ -1,5 +1,5 @@
 import torch
-from . import heads
+from .. import heads
 from rebar import arrdict
 import matplotlib as mpl
 import matplotlib.pyplot as plt

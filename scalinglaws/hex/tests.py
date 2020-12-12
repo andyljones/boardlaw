@@ -96,16 +96,14 @@ def test_open_spiel():
         their_state = open_spiel_board(state)
         assert our_state == their_state
 
-def benchmark(n_envs=4096, n_steps=256):
+def benchmark(n_envs=1024, n_steps=512):
     import aljpy
-    world = Hex.initial(n_envs)
+    worlds = Hex.initial(n_envs)
 
     torch.cuda.synchronize()
     with aljpy.timer() as timer:
         for _ in range(n_steps):
-            obs = world.observe()
-            actions = torch.distributions.Categorical(probs=obs.valid.float()).sample()
-            world, _ = world.step(actions)
-        
+            actions = torch.distributions.Categorical(probs=worlds.valid.float()).sample()
+            worlds, _ = worlds.step(actions)
         torch.cuda.synchronize()
     print(f'{n_envs*n_steps/timer.time():.0f} samples/sec')
