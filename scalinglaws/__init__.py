@@ -105,7 +105,6 @@ def run():
     opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-3, amsgrad=True)
 
     run_name = paths.timestamp('az-test')
-    compositor = widgets.Compositor()
     paths.clear(run_name)
     with logging.via_dir(run_name), stats.to_dir(run_name), \
             arena.monitor(run_name, worldfunc, agentfunc):

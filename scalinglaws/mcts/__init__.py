@@ -106,7 +106,7 @@ class MCTS:
         return soln.policy
 
     def descend(self):
-        result = descent.descend_cuda(
+        result = descent.descend(
             self.decisions.logits, 
             self.stats.w, 
             self.stats.n, 

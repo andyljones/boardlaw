@@ -19,81 +19,7 @@ at::cuda::CUDAStream stream() {
     return at::cuda::getCurrentCUDAStream();
 }
 
-__global__ void solve_policy_kernel(
-    F2D::PTA pi, F2D::PTA q, F1D::PTA lambda_n,
-    F1D::PTA alpha_star) {
-
-    const auto B = pi.size(0);
-    const auto A = pi.size(1);
-    const int b = blockIdx.x*blockDim.x + threadIdx.x;
-    if (b >= B) {
-        return;
-    }
-
-    // Copy data into shared memory
-    extern __shared__ float shared[];
-    float *qb = (float*)&shared[threadIdx.x*2*A];
-    float *pib = (float*)&shared[threadIdx.x*2*A+A];
-    for (int a = 0; a < A; a++) {
-        qb[a] = q[b][a];
-        pib[a] = pi[b][a];
-    }
-    __syncthreads();
-
-    const auto lambda = lambda_n[b];
-
-    // Find the initial alpha
-    float alpha = 0.f;
-    for (int a = 0; a < A; a++) {
-        float gap = fmaxf(lambda*pib[a], 1.e-6f);
-        alpha = fmaxf(alpha, qb[a] + gap);
-    }
-
-    float error = CUDART_INF_F;
-    float new_error = CUDART_INF_F;
-    // Typical problems converge in 10 steps. Hypothetically 100 might be 
-    // hit sometimes, but it's worth risking it for how utterly awful it'd 
-    // be debugging an infinite loop in the kernel.
-    for (int s=0; s<100; s++) {
-        float S = 0.f; 
-        float g = 0.f;
-        for (int a=0; a<A; a++) {
-            float top = lambda*pib[a];
-            float bot = alpha - qb[a];
-            S += top/bot;
-            g += -top/powf(bot, 2);
-        }
-        new_error = S - 1.f;
-        // printf("%d: alpha: %.2f, S: %.2f, e: %.2f, g: %.2f\n", b, alpha, S, new_error, g);
-        if ((new_error < 1e-3f) || (error == new_error)) {
-            alpha_star[b] = alpha;
-            break;
-        } else {
-            alpha -= new_error/g;
-            error = new_error;
-        }
-    }
-}
-
-__host__ TT solve_policy(const TT pi, const TT q, const TT lambda_n) {
-    const uint B = pi.size(0);
-    const uint A = pi.size(1);
-
-    F1D alpha_star(pi.new_empty({B}));
-    alpha_star.t.fill_(NAN);
-
-    //TODO: Replace this with a hardware dependent test
-    assert (BLOCK*2*A*sizeof(float) < 64*1024);
-
-    const uint n_blocks = (B + BLOCK - 1)/BLOCK;
-    solve_policy_kernel<<<{n_blocks}, {BLOCK}, BLOCK*2*A*sizeof(float), stream()>>>(
-        F2D(pi).pta(), F2D(q).pta(), F1D(lambda_n).pta(),
-        alpha_star.pta());
-
-    return alpha_star.t;
-}
-
-__device__ float solve(float* pi, float* q, int A, float lambda_n) {
+__device__ float newton_search(float* pi, float* q, int A, float lambda_n) {
     // Find the initial alpha
     float alpha = 0.f;
     for (int a = 0; a < A; a++) {
@@ -127,6 +53,50 @@ __device__ float solve(float* pi, float* q, int A, float lambda_n) {
 
     return alpha;
 }
+
+__global__ void solve_policy_kernel(
+    F2D::PTA pi, F2D::PTA q, F1D::PTA lambda_n,
+    F1D::PTA alpha_star) {
+
+    const auto B = pi.size(0);
+    const auto A = pi.size(1);
+    const int b = blockIdx.x*blockDim.x + threadIdx.x;
+    if (b >= B) {
+        return;
+    }
+
+    // Copy data into shared memory
+    extern __shared__ float shared[];
+    float *qs = (float*)&shared[threadIdx.x*2*A];
+    float *pis = (float*)&shared[threadIdx.x*2*A+A];
+    for (int a = 0; a < A; a++) {
+        qs[a] = q[b][a];
+        pis[a] = pi[b][a];
+    }
+    __syncthreads();
+
+    return newton_search(pis, qs, A, lambda_n[b]);
+}
+
+__host__ TT solve_policy(const TT pi, const TT q, const TT lambda_n) {
+    const uint B = pi.size(0);
+    const uint A = pi.size(1);
+
+    F1D alpha_star(pi.new_empty({B}));
+    alpha_star.t.fill_(NAN);
+
+    //TODO: Replace this with a hardware dependent test
+    assert (BLOCK*2*A*sizeof(float) < 64*1024);
+
+    const uint n_blocks = (B + BLOCK - 1)/BLOCK;
+    solve_policy_kernel<<<{n_blocks}, {BLOCK}, BLOCK*2*A*sizeof(float), stream()>>>(
+        F2D(pi).pta(), F2D(q).pta(), F1D(lambda_n).pta(),
+        alpha_star.pta());
+
+    return alpha_star.t;
+}
+
+
 
 __global__ void descend_kernel(
     F3D::PTA pi, F3D::PTA q, I2D::PTA n, F1D::PTA c_puct,
@@ -170,7 +140,7 @@ __global__ void descend_kernel(
         __syncthreads(); // memory barrier
 
         float lambda_n = c*float(N)/float(N +A);
-        float alpha = solve(pis, qs, A, lambda_n);
+        float alpha = newton_search(pis, qs, A, lambda_n);
 
         float rand = rands[b][t];
         float total = 0.f;
