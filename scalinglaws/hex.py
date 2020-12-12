@@ -4,6 +4,7 @@ from rebar import arrdict
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+import pytest
 
 # Empty, 
 # black, black win, black-north-connected, black-south-connected
@@ -347,12 +348,11 @@ def from_string(s, **kwargs):
     return worlds
 
 def test_basic():
-    s = Hex.initial(1, 3, device='cpu')
+    worlds = Hex.initial(1, 3, device='cpu')
 
     for _ in range(20):
-        o = s.observe()
-        actions = torch.distributions.Categorical(probs=o.valid.float()).sample()
-        s, _ = s.step(actions)
+        actions = torch.distributions.Categorical(probs=worlds.valid.float()).sample()
+        worlds, _ = worlds.step(actions)
 
 def open_spiel_board(state):
     # state ordering taken from hex.h 
@@ -376,10 +376,9 @@ def test_open_spiel():
     theirs = pyspiel.load_game("hex")
     state = theirs.new_initial_state()
     while True:
-        new = ours.observe()
-        seat = new.seats[e]
-        our_action = torch.distributions.Categorical(probs=new.valid.float()).sample()
-        ours, _ = ours.step(our_action)
+        seat = ours.seats[e]
+        our_action = torch.distributions.Categorical(probs=ours.valid.float()).sample()
+        ours, transitions = ours.step(our_action)
 
         if seat == 0:
             their_action = our_action[e]
@@ -389,7 +388,7 @@ def test_open_spiel():
 
         state.apply_action(their_action)
             
-        if t.terminal[e]:
+        if transitions.terminal[e]:
             assert state.is_terminal()
             break
             
@@ -410,15 +409,3 @@ def benchmark(n_envs=4096, n_steps=256):
         
         torch.cuda.synchronize()
     print(f'{n_envs*n_steps/timer.time():.0f} samples/sec')
-
-def test_subenvs():
-    state = Hex.initial(n_envs=3, boardsize=5, device='cpu')
-    substate = state[[1]].clone()
-    _, substate = substate.step(torch.tensor([[0, 0]], dtype=torch.long))
-    state[[1]] = substate
-
-    board = state.board
-    assert (board[[0, 2]] == 0).all()
-    assert (board[1][1:, :] == 0).all()
-    assert (board[1][:, 1:] == 0).all()
-    assert (board[1][0, 0] != 0).all()

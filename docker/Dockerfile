@@ -87,7 +87,7 @@ RUN pip install cmake && \
     cd / && \
     git clone https://github.com/andyljones/open_spiel.git
     # TODO: The install.sh bit will fail here after getting the subrepos we're after.
-    # cd open_spiel && install.sh || true && pip install -e .
+    cd open_spiel && ./install.sh || true && pip install -e .
 
 # Set up MoHex
 RUN apt-get install libdb-dev libboost-all-dev -y --no-install-recommends && \

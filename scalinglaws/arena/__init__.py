@@ -201,7 +201,7 @@ def monitor(*args, **kwargs):
             log.info('Abruptly terminating arena monitor; it should have shut down naturally!')
             p.terminate()
 
-def test():
+def demo():
     from scalinglaws import worldfunc, agentfunc
     from rebar import paths
     paths.clear('test')

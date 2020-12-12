@@ -52,10 +52,10 @@ def evaluate(worlds, agents):
     return results
 
 def test():
-    from ..validation import WinnerLoser, RandomAgent
+    from scalinglaws.validation import WinnerLoser, RandomAgent
 
     worlds = WinnerLoser.initial(4, device='cpu')
     results = evaluate(worlds, {'one': RandomAgent(), 'two': RandomAgent()})
 
-    assert results[0].black_wins == 2
-    assert results[1].black_wins == 2
+    assert results[0].wins == (2., 0.)
+    assert results[1].wins == (2., 0.)

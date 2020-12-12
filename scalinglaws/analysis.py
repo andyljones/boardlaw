@@ -63,7 +63,7 @@ def record(world, agents, N=0, **kwargs):
     trace = rollout(world, agents, **kwargs)
     return record_worlds(trace.worlds, N=N)
 
-def test_record():
+def demo_record():
     from rebar import storing
     from scalinglaws import worldfunc, agentfunc, mohex, analysis
 
@@ -71,11 +71,9 @@ def test_record():
     world = worldfunc(n_envs)
     agent = agentfunc()
     mhx = mohex.MoHexAgent()
-    agent.load_state_dict(storing.load_latest()['agent'])
-
     analysis.record(world, [agent, mhx], n_reps=1, N=0).notebook()
 
-def test_rollout():
+def demo_rollout():
     from . import networks, mcts, mohex
     env = hex.Hex.initial(n_envs=4, boardsize=5, device='cuda')
     network = networks.Network(env.obs_space, env.action_space, width=128).to(env.device)

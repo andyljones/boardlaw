@@ -3,7 +3,7 @@ from multiprocessing import Value
 import numpy as np
 import torch
 from rebar import arrdict
-from . import search, cuda
+from . import cuda
 import logging
 
 log = logging.getLogger(__name__)
