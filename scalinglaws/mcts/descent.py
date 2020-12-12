@@ -5,20 +5,6 @@ from . import search, cuda
 from rebar import arrdict
 import aljpy
 
-def root(logits, *args, **kwargs):
-    with torch.cuda.device(logits.device):
-        m = cuda.mcts(logits, *args, **kwargs)
-        return cuda.root(m)
-
-def descend(logits, *args, **kwargs):
-    with torch.cuda.device(logits.device):
-        m = cuda.mcts(logits, *args, **kwargs)
-        result = cuda.descend(m)
-    return arrdict.arrdict(
-        parents=result.parents, 
-        actions=result.actions)
-
-
 ### ROOT TESTS
 
 def test_root_one_node():

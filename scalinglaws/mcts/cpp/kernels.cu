@@ -39,7 +39,6 @@ struct Policy {
 
 };
 
-
 __device__ float newton_search(Policy p) {
     // Find the initial alpha
     float alpha = 0.f;
@@ -137,7 +136,6 @@ __host__ TT root(MCTS m) {
         m.pta(), F3D(pi).pta(), F3D(q).pta(), F2D(probs).pta());
 
     return probs;
-
 }
 
 __global__ void descend_kernel(

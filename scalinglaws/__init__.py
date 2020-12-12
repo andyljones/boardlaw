@@ -136,6 +136,7 @@ def run():
             stats.gpu.vitals(worlds.device, throttle=15)
 
 def benchmark_experience_collection():
+    # Make sure to init cuda before running this 
 
     torch.manual_seed(0)
     n_envs = 1024

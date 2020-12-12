@@ -1,4 +1,5 @@
 import torch
+import torch.cuda
 import sysconfig
 from pkg_resources import resource_filename
 import torch.utils.cpp_extension
@@ -41,4 +42,3 @@ def mcts(logits, w, n, c_puct, seats, terminal, children):
 
     with torch.cuda.device(logits.device):
         return cuda.MCTS(logits, w, n.int(), c_puct, seats.int(), terminal, children.int())
-
