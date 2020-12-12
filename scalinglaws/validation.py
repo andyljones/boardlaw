@@ -97,16 +97,16 @@ class Win(arrdict.namedarrtuple(fields=('envs',))):
         self.obs_space = (0,)
         self.action_space = (1,)
     
-        self.valid = torch.ones((self.n_envs, 1), dtype=torch.bool, device=self.device)
-        self.seats = torch.zeros((self.n_envs,), dtype=torch.long, device=self.device)
+        self.valid = torch.ones_like(self.envs[..., None].bool())
+        self.seats = torch.zeros_like(self.envs)
 
         self.logits = uniform_logits(self.valid)
-        self.v = torch.ones((self.n_envs, self.n_seats), dtype=torch.float, device=self.device)
+        self.v = torch.ones_like(self.valid.float().unsqueeze(-1))
 
     def step(self, actions):
         trans = arrdict.arrdict(
-            terminal=torch.ones((self.n_envs,), dtype=torch.bool, device=self.device),
-            rewards=torch.ones((self.n_envs, self.n_seats), dtype=torch.float, device=self.device))
+            terminal=torch.ones_like(self.envs.bool()),
+            rewards=torch.ones_like(self.envs.float()))
         return self, trans
 
 class WinnerLoser(arrdict.namedarrtuple(fields=('seats',))):
