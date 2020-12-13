@@ -23,10 +23,14 @@ class Network(nn.Module):
             heads.intake(obs_space, width),
             Residual(width),
             Residual(width),
+            Residual(width),
+            Residual(width),
             # lstm.LSTM(width),
             out)
         self.value = recurrence.Sequential(
             heads.intake(obs_space, width),
+            Residual(width),
+            Residual(width),
             Residual(width),
             Residual(width),
             # lstm.LSTM(width),
