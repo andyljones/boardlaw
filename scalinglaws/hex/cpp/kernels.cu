@@ -20,9 +20,9 @@ __device__ void flood(C3D::PTA board, int row, int col, uint8_t new_val) {
     const int neighbours[6][2] = {{-1, 0}, {-1, +1}, {0, -1}, {0, +1}, {+1, -1}, {+1, 0}};
 
     // If we don't need to flood the value, break
-    if (new_val < TOP) {
-        return;
-    }
+    if (new_val < TOP) { return; }
+
+    uint8_t old_val = board[b][row][col];
 
     extern __shared__ uint8_t shared[];
 
@@ -35,25 +35,21 @@ __device__ void flood(C3D::PTA board, int row, int col, uint8_t new_val) {
 
     // Set up a mask to keep track of which cells we've already seen
     uint8_t *seen = (uint8_t*)&shared[(2*threadIdx.x+1)*S*S];
-    for (int s=0; s<S*S; s++) {
-        seen[s] = 0;
-    }
+    for (int s=0; s<S*S; s++) { seen[s] = 0; }
 
     while (true) {
         // See if there's anything left in the queue
-        if (start == end) {
-            break;
-        }
+        if (start == end) { break; }
 
         // Pull a value out of the queue
         int r0 = queue[2*start+0];
         int c0 = queue[2*start+1];        
         start += 1;
         seen[r0*S+c0] = 1;
-        uint8_t old_val = board[b][r0][c0];
+        uint8_t cell_val = board[b][r0][c0];
 
         // If the old and new vals are the same, continue flooding!
-        if (old_val == new_val) {
+        if (cell_val == old_val) {
             // Put the new value into place
             board[b][r0][c0] = new_val;
             // and add the neighbours to the queue
@@ -128,6 +124,7 @@ __global__ void step_kernel(
 
     board[b][row][col] = seat? WHITE : BLACK;
 
+    printf("%d\n", new_val);
     flood(board, row, col, new_val);
 }
 
