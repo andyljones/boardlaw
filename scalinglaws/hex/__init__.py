@@ -184,12 +184,14 @@ class Random(Solitaire):
 
 def regression_test():
     from scalinglaws.hex import hexold
-    kwargs = dict(n_envs=4096, boardsize=512)
+    kwargs = dict(n_envs=4096, boardsize=11)
     old = hexold.Hex.initial(**kwargs)
     new = Hex.initial(**kwargs)
 
+    old_to_new = torch.tensor([0, 1, -1, 3, 4, 2, -1, 5, 6], device=old.device)
+
     history = []
-    for i in range(1000):
+    for i in range(1024):
         actions = torch.distributions.Categorical(probs=old.valid.float()).sample()
         history.append(actions)
         
@@ -197,6 +199,7 @@ def regression_test():
         newn, newt = new.step(actions)
         
         torch.testing.assert_allclose(oldn.obs, newn.obs)
+        torch.testing.assert_allclose(old_to_new[oldn.board.long()], newn.board)
         torch.testing.assert_allclose(oldt.rewards, newt.rewards)
         torch.testing.assert_allclose(oldt.terminal, newt.terminal)
         
@@ -204,6 +207,7 @@ def regression_test():
             history = []
         
         old, new = oldn, newn
+
 
 def test_bug():
     worlds = Hex.initial(n_envs=1, boardsize=3)
@@ -214,3 +218,20 @@ def test_bug():
         [0, 0, 0],
         [5, 0, 1],
         [4, 2, 0]], device=worlds.device))
+
+def test_bug_2():
+    worlds = Hex.initial(n_envs=1, boardsize=11)
+    worlds.board[:] = torch.tensor([[5, 3, 3, 6, 6, 6, 6, 6, 3, 6, 6],
+            [0, 6, 6, 6, 6, 4, 6, 6, 6, 6, 6],
+            [1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+            [1, 4, 4, 4, 5, 4, 2, 2, 2, 4, 4],
+            [5, 5, 4, 4, 5, 4, 2, 2, 4, 4, 6],
+            [5, 5, 5, 5, 4, 4, 4, 2, 4, 4, 6],
+            [5, 4, 4, 5, 5, 4, 2, 2, 4, 6, 6],
+            [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+            [4, 5, 5, 4, 6, 6, 6, 4, 6, 6, 6],
+            [5, 4, 4, 6, 4, 6, 6, 6, 6, 4, 4],
+            [5, 5, 4, 6, 4, 6, 6, 4, 4, 2, 4]], device=worlds.device, dtype=torch.uint8)
+    worlds.seats[:] = 0
+
+    worlds, transitions = worlds.step(torch.tensor([11]), device=worlds.device)
