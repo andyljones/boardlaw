@@ -9,5 +9,5 @@ using namespace std::string_literals;
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 
-    m.def("flood", &flood, "board"_a, "actions"_a, py::call_guard<py::gil_scoped_release>());
+    m.def("step", &step, "board"_a, "seats"_a, "actions"_a, py::call_guard<py::gil_scoped_release>());
 }

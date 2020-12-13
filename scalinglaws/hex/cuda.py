@@ -9,8 +9,9 @@ for k in dir(loaded):
 
 def test():
     board = torch.zeros((1, 3, 3)).int().cuda()
-    actions = torch.tensor([[0, 1]]).int().cuda()
+    seats = torch.zeros((1,)).int().cuda()
+    actions = torch.tensor([1]).int().cuda()
 
-    loaded.flood(board, actions)
+    results = loaded.step(board, seats, actions)
 
     print(board[0])

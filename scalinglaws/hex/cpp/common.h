@@ -1,3 +1,3 @@
 #include "../../cpp/common.h"
 
-void flood(TT board, TT actions);
+TT step(TT board, TT seats, TT actions);
