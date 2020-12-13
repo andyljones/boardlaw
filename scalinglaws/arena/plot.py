@@ -44,3 +44,7 @@ def periodic(run_name):
     ax.set_title(title)
 
     return μ
+
+def heatmap(run_name=-1):
+    rates = database.symmetric_wins(run_name)/database.symmetric_games(run_name)
+    sns.heatmap(rates, cmap='RdBu', vmin=0, vmax=1, square=True)

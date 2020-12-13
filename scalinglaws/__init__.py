@@ -106,8 +106,7 @@ def run():
 
     run_name = paths.timestamp('az-test')
     paths.clear(run_name)
-    with logging.to_dir(run_name), stats.to_dir(run_name), \
-            arena.monitor(run_name, worldfunc, agentfunc):
+    with logging.to_dir(run_name), stats.to_dir(run_name):
         buffer = []
         idxs = cycle(learning.batch_indices(buffer_length, n_envs, batch_size, worlds.device))
         while True:
@@ -137,10 +136,20 @@ def run():
 
 def monitor(run_name):
     compositor = widgets.Compositor()
-    with logging.from_dir(run_name, compositor), stats.from_dir(run_name, compositor):
+    with logging.from_dir(run_name, compositor), stats.from_dir(run_name, compositor), \
+            arena.monitor(run_name, worldfunc, agentfunc):
         while True:
             time.sleep(1)
 
+def demo(run_name):
+    from . import mohex
+
+    n_envs = 4
+    world = worldfunc(n_envs, device='cuda:1')
+    agent = agentfunc(device='cuda:1')
+    agent.load_state_dict(storing.select(storing.load_latest(-1), 'agent'))
+    mhx = mohex.MoHexAgent()
+    analysis.record(world, [agent, mhx], n_reps=1, N=0).notebook()
 
 def benchmark_experience_collection():
     # Make sure to init cuda before running this 

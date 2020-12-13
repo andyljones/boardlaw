@@ -4,6 +4,7 @@ import torch
 from rebar import storing, logging, dotdict, stats, paths
 import pickle
 from . import database, matchups
+from .plot import heatmap
 from .. import mohex
 import activelo
 import time
