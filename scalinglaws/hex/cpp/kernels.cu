@@ -32,7 +32,6 @@ __device__ void flood(C3D::PTA board, int row, int col, uint8_t new_val) {
     uint8_t *queue = (uint8_t*)&shared[(3*threadIdx.x+0)*S*S];
     queue[0] = row;
     queue[1] = col;
-    printf("Flooding from (%d, %d)\n", row, col);
 
     // Set up a mask to keep track of which cells we've already seen
     uint8_t *seen = (uint8_t*)&shared[(3*threadIdx.x+2)*S*S];
@@ -52,7 +51,6 @@ __device__ void flood(C3D::PTA board, int row, int col, uint8_t new_val) {
         if (cell_val == old_val) {
             // Put the new value into place
             board[b][r0][c0] = new_val;
-            printf("Updating (%d, %d)\n", r0, c0);
             // and add the neighbours to the queue
             for (int n=0; n<6; n++) {
                 int r = r0 + neighbours[n][0];
@@ -61,7 +59,6 @@ __device__ void flood(C3D::PTA board, int row, int col, uint8_t new_val) {
                 if ((0 <= r) && (r < S) && (0 <= c) && (c < S)) {
                     // and we haven't seen them already
                     if (!seen[r*S+c]) {
-                        printf("Adding (%d, %d)\n", r, c);
                         queue[2*end+0] = r;
                         queue[2*end+1] = c;
                         end += 1;

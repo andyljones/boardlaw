@@ -182,32 +182,6 @@ class Random(Solitaire):
         actions = torch.distributions.Categorical(probs=worlds.valid.float()).sample()
         return Hex.step(worlds, actions)
 
-def regression_test():
-    from scalinglaws.hex import hexold
-    kwargs = dict(n_envs=4096, boardsize=11)
-    old = hexold.Hex.initial(**kwargs)
-    new = Hex.initial(**kwargs)
-
-    old_to_new = torch.tensor([0, 1, -1, 3, 4, 2, -1, 5, 6], device=old.device)
-
-    history = []
-    for i in range(1024):
-        actions = torch.distributions.Categorical(probs=old.valid.float()).sample()
-        history.append(actions)
-        
-        oldn, oldt = old.step(actions)
-        newn, newt = new.step(actions)
-        
-        torch.testing.assert_allclose(oldn.obs, newn.obs)
-        torch.testing.assert_allclose(old_to_new[oldn.board.long()], newn.board)
-        torch.testing.assert_allclose(oldt.rewards, newt.rewards)
-        torch.testing.assert_allclose(oldt.terminal, newt.terminal)
-        
-        if oldt.terminal.any():
-            history = []
-        
-        old, new = oldn, newn
-
 
 def test_bug():
     worlds = Hex.initial(n_envs=1, boardsize=3)
