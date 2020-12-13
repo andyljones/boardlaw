@@ -95,8 +95,11 @@ def step_mohex(run_name, worlds, agents):
     log.info('Playing ' + ' v. '.join(agents))
     results = matchups.evaluate(worlds.mohex, agents)
 
-    wins, games = int(results[0].wins[0] + results[1].wins[1]), int(sum(r.games for r in results))
-    log.info(f'Storing. {wins} wins in {games} games for {list(agents)[0]} ')
+    wins = int(results[0].wins[0] + results[1].wins[1])
+    games = int(sum(r.games for r in results))
+    moves = int(sum(r.moves for r in results))
+    log.info(f'Storing. {wins} wins in {games} games for {list(agents)[0]}; {moves/(2*games):.1f} average moves per player')
+    stats.mean('moves-mohex', moves, 2*games)
     database.store(run_name, results)
 
 _latest_matchup = None

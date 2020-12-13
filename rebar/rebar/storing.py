@@ -18,14 +18,17 @@ def collapse(state_dicts):
             collapsed[f'{prefix}.{k}'] = v
     return collapsed
 
-def expand_once(state_dicts):
+def expand_once(state_dict):
     d = {}
-    for k, v in state_dicts.items():
+    for k, v in state_dict.items():
         parts = k.split('.')
         [head] = parts[:1]
         tail = '.'.join(parts[1:])
         d.setdefault(head, {})[tail] = v
     return d
+
+def select(state_dict, key):
+    return expand_once(state_dict)[key]
 
 def _store(path, objs):
     state_dict = collapse({k: v.state_dict() for k, v in objs.items()})

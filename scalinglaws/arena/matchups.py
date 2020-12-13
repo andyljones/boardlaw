@@ -15,15 +15,17 @@ def matchup_indices(n_envs, n_seats):
     patterns = matchup_patterns(n_seats)
     return patterns.repeat((n_envs//len(patterns), 1))
 
-def gather(wins, matchup_idxs, names):
+def gather(wins, moves, matchup_idxs, names):
     names = np.array(names)
     n_envs, n_seats = matchup_idxs.shape
     results = []
     for p in matchup_patterns(n_seats):
         ws = wins[(matchup_idxs == p).all(-1)].sum(0) 
+        ms = moves[(matchup_idxs == p).all(-1)].sum(0) 
         results.append(dotdict.dotdict(
             names=tuple(names[p]),
             wins=tuple(map(float, ws)),
+            moves=float(ms[0]),
             games=float(ws.sum())))
     return results
 
@@ -35,6 +37,7 @@ def evaluate(worlds, agents):
     envs = torch.arange(worlds.n_envs, device=worlds.device)
     terminal = torch.zeros((worlds.n_envs,), dtype=torch.bool, device=worlds.device)
     wins = torch.zeros((worlds.n_envs, worlds.n_seats), dtype=torch.int, device=worlds.device)
+    moves = torch.zeros((worlds.n_envs, worlds.n_seats), dtype=torch.int, device=worlds.device)
     matchup_idxs = matchup_indices(worlds.n_envs, worlds.n_seats).to(worlds.device)
     while True:
         for i, id in enumerate(agents):
@@ -44,11 +47,12 @@ def evaluate(worlds, agents):
                 worlds[mask], transitions = worlds[mask].step(decisions.actions)
                 terminal[mask] = transitions.terminal
                 wins[mask] += (transitions.rewards == 1).int()
+                moves[mask] += 1
 
         if terminal.all():
             break
     
-    results = gather(wins.cpu(), matchup_idxs.cpu(), list(agents))
+    results = gather(wins.cpu(), moves.cpu(), matchup_idxs.cpu(), list(agents))
     return results
 
 def test():
