@@ -52,6 +52,7 @@ using B1D = TensorProxy<bool, 1>;
 using B2D = TensorProxy<bool, 2>;
 using B3D = TensorProxy<bool, 3>;
 
-// using C1D = TensorProxy<char, 1>;
-// using C2D = TensorProxy<char, 2>;
-// using C3D = TensorProxy<char, 3>;
+//TODO: PyTorch seems to have a problem with these
+using C1D = TensorProxy<uint8_t, 1>;
+using C2D = TensorProxy<uint8_t, 2>;
+using C3D = TensorProxy<uint8_t, 3>;

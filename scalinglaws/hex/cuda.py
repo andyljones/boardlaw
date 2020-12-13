@@ -12,7 +12,7 @@ def empty_board():
     return torch.tensor([[
         [0, 0, 0],
         [0, 0, 0],
-        [0, 0, 0]]]).int().cuda()
+        [0, 0, 0]]]).byte().cuda()
 
 def move_board(*moves):
     board = empty_board()
