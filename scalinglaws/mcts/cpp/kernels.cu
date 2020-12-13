@@ -164,7 +164,7 @@ __global__ void descend_kernel(
             if ((prob > 0) && (total >= rand)) {
                 action = a;
                 break;
-            } else if (prob > 0) {
+            if (prob > 0) {
                 valid = a;
             }
         }

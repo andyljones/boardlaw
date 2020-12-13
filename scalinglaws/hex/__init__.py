@@ -72,7 +72,7 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seats'))):
         return new_world, transition
 
     @classmethod
-    def plot_worlds(cls, worlds, e=None, ax=None):
+    def plot_worlds(cls, worlds, e=None, ax=None, colors='obs'):
         e = (0,)*(worlds.board.ndim-2) if e is None else e
         board = worlds.board[e]
         width = board.shape[1]
@@ -92,7 +92,10 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seats'))):
 
         black = 'dimgray'
         white = 'lightgray'
-        colors = ['tan', black, white, black, black, white, white] 
+        if colors == 'obs':
+            colors = ['tan', black, white, black, black, white, white] 
+        elif colors == 'board':
+            colors = ['tan', black, white, 'maroon', 'sienna', 'cornflowerblue', 'plum']
         colors = np.vectorize(colors.__getitem__)(board).flatten()
 
 
@@ -124,8 +127,8 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seats'))):
 
         return ax.figure
 
-    def display(self, e=None):
-        ax = self.plot_worlds(arrdict.numpyify(arrdict.arrdict(self)), e=e)
+    def display(self, e=None, **kwargs):
+        ax = self.plot_worlds(arrdict.numpyify(arrdict.arrdict(self)), e=e, **kwargs)
         plt.close(ax.figure)
         return ax
 
