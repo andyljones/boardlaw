@@ -1,110 +1,13 @@
+from rebar import arrdict
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib as mpl
 import torch
 from .. import heads
-from rebar import arrdict
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-import numpy as np
-import pytest
+from . import cuda
 
-# Empty, 
-# black, black win, black-north-connected, black-south-connected
-# white, white win, white-west-connected, white-east-connected
-_CHARS = '.bB^vwW<>'
-
-def _cell_ords(device):
-    return {s: torch.tensor(i, dtype=torch.int, device=device) for i, s in enumerate(_CHARS)}
-
-class BoardHelper:
-
-    def __init__(self, board):
-        self.board = board.clone()
-        self.n_envs, self.boardsize = board.shape[:2]
-        self.device = self.board.device
-        self.envs = torch.arange(self.n_envs, device=self.device)
-
-        self._ORDS = _cell_ords(self.device)
-
-        self._IS_EDGE = {
-            '^': lambda idxs: idxs[..., 0] == 0,
-            'v': lambda idxs: idxs[..., 0] == self.boardsize-1,
-            '<': lambda idxs: idxs[..., 1] == 0,
-            '>': lambda idxs: idxs[..., 1] == self.boardsize-1}
-
-        self._NEIGHBOURS = torch.tensor([(-1, 0), (-1, +1), (0, -1), (0, +1), (+1, -1), (+1, +0)], device=self.device, dtype=torch.long)
-
-    def cells(self, idxs, val=None):
-        if idxs.size(-1) == 2:
-            rows, cols = idxs[..., 0], idxs[..., 1]
-            envs = self.envs[(slice(None),) + (None,)*(idxs.ndim-2)].expand_as(rows)
-        else: # idxs.size(-1) == 3
-            envs, rows, cols = idxs[..., 0], idxs[..., 1], idxs[..., 2]
-        
-        if val is None:
-            return self.board[envs, rows, cols]
-        else:
-            self.board[envs, rows, cols] = val
-    
-    def neighbours(self, idxs):
-        if idxs.size(1) == 3:
-            neighbours = self.neighbours(idxs[:, 1:])
-            envs = idxs[:, None, [0]].expand(-1, len(self._NEIGHBOURS), 1)
-            return torch.cat([envs, neighbours], 2)
-        return (idxs[:, None, :] + self._NEIGHBOURS).clamp(0, self.boardsize-1)
-
-    def colours(self, x):
-        colours = x.clone()
-        colours[(x == self._ORDS['^']) | (x == self._ORDS['v'])] = self._ORDS['b']
-        colours[(x == self._ORDS['<']) | (x == self._ORDS['>'])] = self._ORDS['w']
-        return colours
-
-    def flood(self, actions):
-        # This eats 70% of the game's runtime.
-        moves = self.cells(actions)
-        colors = self.colours(moves)
-
-        active = torch.stack([moves == self._ORDS[s] for s in '<>^v'], 0).any(0)
-
-        idxs = torch.cat([self.envs[:, None], actions], 1)[active]
-        while idxs.size(0) > 0:
-            self.cells(idxs, moves[idxs[:, 0]])
-            neighbour_idxs = self.neighbours(idxs)
-            possible = self.cells(neighbour_idxs) == colors[idxs[:, 0], None]
-
-            touched = torch.zeros_like(self.board, dtype=torch.bool)
-            touched[tuple(neighbour_idxs[possible].T)] = True
-            idxs = touched.nonzero(as_tuple=False)
-
-    def reset(self, terminate):
-        self.board[terminate] = self._ORDS['.']
-
-    def step(self, seat, actions):
-        assert (self.cells(actions) == 0).all(), 'One of the actions is to place a token on an already-occupied cell'
-
-        neighbours = self.cells(self.neighbours(actions))
-
-        black = seat == 0
-        white = seat == 1
-        conns = {s: ((neighbours == self._ORDS[s]).any(-1)) | self._IS_EDGE[s](actions) for s in self._IS_EDGE}
-
-        new_cells = torch.zeros_like(self.cells(actions))
-        
-        new_cells[black] = self._ORDS['b']
-        new_cells[black & conns['^']] = self._ORDS['^']
-        new_cells[black & conns['v']] = self._ORDS['v']
-        new_cells[black & conns['^'] & conns['v']] = self._ORDS['B']
-
-        new_cells[white] = self._ORDS['w']
-        new_cells[white & conns['<']] = self._ORDS['<']
-        new_cells[white & conns['>']] = self._ORDS['>']
-        new_cells[white & conns['<'] & conns['>']] = self._ORDS['W']
-
-        terminal = ((new_cells == self._ORDS['B']) | (new_cells == self._ORDS['W']))
-
-        self.cells(actions, new_cells)
-        self.flood(actions)
-        self.reset(terminal)
-
-        return terminal
+CHARS = '.bwTBLR'
+ORDS = {c: i for i, c in enumerate(CHARS)}
 
 class Hex(arrdict.namedarrtuple(fields=('board', 'seat'))):
 
@@ -112,7 +15,7 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seat'))):
     def initial(cls, n_envs, boardsize=11, device='cuda'):
         # As per OpenSpiel and convention, black plays first.
         return cls(
-            board=torch.full((n_envs, boardsize, boardsize), 0, device=device, dtype=torch.int),
+            board=torch.full((n_envs, boardsize, boardsize), 0, device=device, dtype=torch.uint8),
             seat=torch.full((n_envs,), 0, device=device, dtype=torch.int))
 
     def __init__(self, *args, **kwargs):
@@ -135,10 +38,9 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seat'))):
     @property
     def obs(self):
         if self._obs is None:
-            ords = _cell_ords(self.device)
             black_view = torch.stack([
-                torch.stack([self.board == ords[s] for s in 'b^vB']).any(0),
-                torch.stack([self.board == ords[s] for s in 'w<>W']).any(0)], -1).float()
+                torch.stack([self.board == ORDS[s] for s in 'bTB']).any(0),
+                torch.stack([self.board == ORDS[s] for s in 'wLR']).any(0)], -1).float()
 
             # White player sees a transposed board
             white_view = black_view.transpose(-3, -2).flip(-1)
@@ -167,26 +69,21 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seat'))):
             raise ValueError('You can only step a board with a single batch dimension')
 
         assert (0 <= actions).all(), 'You passed a negative action'
-        if actions.ndim == 1:
-            actions = torch.stack([actions // self.boardsize, actions % self.boardsize], -1)
+        if actions.ndim == 2:
+            actions = actions[..., 0]*self.boardsize + actions[:, 1]
 
-        helper = BoardHelper(self.board)
+        assert actions.shape == (self.n_envs,)
 
-        # White player sees a transposed board, so their actions need transposing back.
-        black_actions = actions
-        white_actions = actions.flip(1)
-        actions = torch.where(self.seat[:, None] == 0, black_actions, white_actions)
+        new_board = self.board.clone()
+        rewards = cuda.step(new_board, self.seats.int(), actions.int())
+        terminal = (rewards > 0).any(-1)
 
-        terminal = helper.step(self.seat, actions)
+        new_board[terminal] = 0
 
         new_seat = 1 - self.seat
         new_seat[terminal] = 0
 
-        new_world = type(self)(board=helper.board, seat=new_seat)
-
-        rewards = torch.zeros((self.n_envs, 2), device=self.device)
-        rewards.scatter_(1, self.seat[:, None].long(), terminal[:, None].float())
-        rewards.scatter_(1, 1-self.seat[:, None].long(), -terminal[:, None].float())
+        new_world = type(self)(board=new_board, seat=new_seat)
 
         transition = arrdict.arrdict(
             terminal=terminal, 
@@ -214,7 +111,7 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seat'))):
 
         black = 'dimgray'
         white = 'lightgray'
-        colors = ['tan'] + [black]*4 + [white]*4
+        colors = ['tan', black, white, black, black, white, white] 
         colors = np.vectorize(colors.__getitem__)(board).flatten()
 
 
@@ -300,3 +197,36 @@ class Random(Solitaire):
     def _play(cls, worlds):
         actions = torch.distributions.Categorical(probs=worlds.valid.float()).sample()
         return Hex.step(worlds, actions)
+
+def regression_test():
+    from . import Hex, hex2
+    kwargs = dict(n_envs=128, boardsize=11)
+    old = Hex.initial(**kwargs)
+    new = hex2.Hex.initial(**kwargs)
+
+    history = []
+    for i in range(1000):
+        actions = torch.distributions.Categorical(probs=old.valid.float()).sample()
+        history.append(actions)
+        
+        oldn, oldt = old.step(actions)
+        newn, newt = new.step(actions)
+        
+        torch.testing.assert_allclose(oldn.obs, newn.obs)
+        torch.testing.assert_allclose(oldt.rewards, newt.rewards)
+        torch.testing.assert_allclose(oldt.terminal, newt.terminal)
+        
+        if oldt.terminal.any():
+            history = []
+        
+        old, new = oldn, newn
+
+def test_bug():
+    worlds = Hex.initial(n_envs=1, boardsize=3)
+    actions = torch.tensor([5, 5, 6, 1], device=worlds.device)
+    for a in actions:
+        worlds, transitions = worlds.step(a[None])
+    torch.testing.assert_allclose(worlds.board[0], torch.tensor([
+        [0, 0, 0],
+        [5, 0, 1],
+        [4, 2, 0]], device=worlds.device))

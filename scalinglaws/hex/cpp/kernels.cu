@@ -88,7 +88,7 @@ __global__ void step_kernel(
     else           { row = action % S, col = action / S; }
 
     // Set up the adjacency indicator
-    __shared__ bool adj[9];
+    bool adj[9];
     for (int a=0; a<9; a++) {
         adj[a] = false;
     }
