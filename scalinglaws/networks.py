@@ -10,14 +10,8 @@ class Residual(nn.Linear):
     def __init__(self, width):
         super().__init__(width, width)
 
-    def forward(self, x, **kwargs):
+    def forward(self, x, *args, **kwargs):
         return x + F.relu(super().forward(x))
-
-def scatter_values(v, seats):
-    seats = torch.stack([seats, 1-seats], -1)
-    vs = torch.stack([v, -v], -1)
-    xs = torch.full_like(vs, np.nan)
-    return xs.scatter(-1, seats.long(), vs)
 
 class Network(nn.Module):
 
@@ -38,14 +32,17 @@ class Network(nn.Module):
             # lstm.LSTM(width),
             heads.ValueOutput(width))
 
+    def trace(self, world):
+        self.policy = torch.jit.trace_module(self.policy, {'forward': (world.obs, world.valid)})
+        self.vaue = torch.jit.trace_module(self.value, {'forward': (world.obs, world.valid, world.seats)})
+
     def forward(self, world, value=False):
         obs = world.obs
         outputs = arrdict.arrdict(
-            logits=self.policy(world.obs, valid=world.valid))
+            logits=self.policy(world.obs, world.valid))
 
         if value:
             #TODO: Maybe the env should handle this? 
             # Or there should be an output space for values? 
-            v = self.value(obs, valid=world.valid)
-            outputs['v'] = scatter_values(v, world.seats) if world.n_seats == 2 else v[..., None]
+            outputs['v'] = self.value(obs, world.valid, world.seats)
         return outputs

@@ -9,14 +9,14 @@ from . import cuda
 CHARS = '.bwTBLR'
 ORDS = {c: i for i, c in enumerate(CHARS)}
 
-class Hex(arrdict.namedarrtuple(fields=('board', 'seat'))):
+class Hex(arrdict.namedarrtuple(fields=('board', 'seats'))):
 
     @classmethod
     def initial(cls, n_envs, boardsize=11, device='cuda'):
         # As per OpenSpiel and convention, black plays first.
         return cls(
             board=torch.full((n_envs, boardsize, boardsize), 0, device=device, dtype=torch.uint8),
-            seat=torch.full((n_envs,), 0, device=device, dtype=torch.int))
+            seats=torch.full((n_envs,), 0, device=device, dtype=torch.int))
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -33,22 +33,13 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seat'))):
         self.obs_space = heads.Tensor((self.boardsize, self.boardsize, 2))
         self.action_space = heads.Masked(self.boardsize*self.boardsize)
 
-        self._obs = None
-
-    @property
-    def obs(self):
-        if self._obs is None:
-            self._obs = cuda.observe(self.board, self.seats)
-        return self._obs
-
-    @property
-    def valid(self):
-        shape = self.board.shape[:-2]
-        return (self.obs == 0).all(-1).reshape(*shape, -1)
-
-    @property
-    def seats(self):
-        return self.seat
+        if self.board.ndim == 3:
+            self.obs = cuda.observe(self.board, self.seats)
+            shape = self.board.shape[:-2]
+            self.valid = (self.obs == 0).all(-1).reshape(*shape, -1)
+        else:
+            self.obs = None
+            self.valid = None
 
     def step(self, actions):
         """Args:
@@ -74,10 +65,10 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seat'))):
 
         new_board[terminal] = 0
 
-        new_seat = 1 - self.seat
+        new_seat = 1 - self.seats
         new_seat[terminal] = 0
 
-        new_world = type(self)(board=new_board, seat=new_seat)
+        new_world = type(self)(board=new_board, seats=new_seat)
 
         transition = arrdict.arrdict(
             terminal=terminal, 

@@ -76,7 +76,7 @@ def temp_clear_set(net, state):
 
 class Sequential(nn.Sequential):
 
-    def forward(self, x, **kwargs):
+    def forward(self, x, *args, **kwargs):
         for module in self:
-            x = module(x, **kwargs)
+            x = module(x, *args, **kwargs)
         return x

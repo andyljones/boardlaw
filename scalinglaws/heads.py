@@ -44,9 +44,9 @@ class TensorIntake(nn.Linear):
         self._ndim = len(space.dim)
         super().__init__(int(np.prod(space.dim)), width)
 
-    def forward(self, obs, **kwargs):
+    def forward(self, obs, *args, **kwargs):
         if obs.ndim == self._ndim+1:
-            return self.forward(obs[None], **kwargs).squeeze(0)
+            return self.forward(obs[None], *args, **kwargs).squeeze(0)
 
         T, B = obs.shape[:2]
         return super().forward(obs.reshape(T*B, -1)).reshape(T, B, -1)
@@ -99,7 +99,7 @@ class MaskedOutput(nn.Module):
         self.core = nn.Linear(width, int(np.prod(shape)))
         self.shape = shape
     
-    def forward(self, x, valid, **kwargs):
+    def forward(self, x, valid, *args, **kwargs):
         y = self.core(x).reshape(*x.shape[:-1], *self.shape)
         y = y.where(valid, torch.full_like(y, -np.inf))
         return F.log_softmax(y, -1)
@@ -126,14 +126,21 @@ class DictOutput(nn.Module):
     def sample(self, l):
         return self._dtype({k: v.sample(l[k]) for k, v in self.outputs.items()})
 
+def scatter_values(v, seats):
+    seats = torch.stack([seats, 1-seats], -1)
+    vs = torch.stack([v, -v], -1)
+    xs = torch.full_like(vs, np.nan)
+    return xs.scatter(-1, seats.long(), vs)
+
 class ValueOutput(nn.Module):
 
     def __init__(self, width):
         super().__init__()
         self.core = nn.Linear(width, 1)
 
-    def forward(self, x, **kwargs):
-        return self.core.forward(x).squeeze(-1)
+    def forward(self, x, valid, seats, *args, **kwargs):
+        v = self.core.forward(x).squeeze(-1)
+        return scatter_values(v, seats)
 
 def output(space, width):
     if isinstance(space, dict):
