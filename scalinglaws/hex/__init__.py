@@ -38,13 +38,7 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seat'))):
     @property
     def obs(self):
         if self._obs is None:
-            black_view = torch.stack([
-                torch.stack([self.board == ORDS[s] for s in 'bTB']).any(0),
-                torch.stack([self.board == ORDS[s] for s in 'wLR']).any(0)], -1).float()
-
-            # White player sees a transposed board
-            white_view = black_view.transpose(-3, -2).flip(-1)
-            self._obs = black_view.where(self.seat[..., None, None, None] == 0, white_view)
+            self._obs = cuda.observe(self.board, self.seats)
         return self._obs
 
     @property

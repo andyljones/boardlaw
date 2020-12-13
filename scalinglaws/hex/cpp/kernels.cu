@@ -145,3 +145,12 @@ __host__ TT step(TT board, TT seats, TT actions) {
 
     return results;
 }
+
+__host__ TT observe(TT board, TT seats) {
+    auto black = ((board == BLACK) | (board == TOP) | (board == BOT));
+    auto white = ((board == WHITE) | (board == LEFT) | (board == RIGHT));
+    auto black_obs = at::stack({black, white}, -1).toType(at::kFloat);
+
+    auto white_obs = black_obs.transpose(-3, -2).flip(-1);
+    return black_obs.where(seats.reshape({-1, 1, 1, 1}) == 0, white_obs);
+}
