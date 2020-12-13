@@ -114,6 +114,8 @@ __global__ void root_kernel(MCTSPTA m, F3D::PTA pi, F3D::PTA q, F2D::PTA probs) 
 }
 
 __host__ TT root(MCTS m) {
+    c10::cuda::CUDAGuard g(m.logits.t.device());
+
     const uint B = m.logits.size(0);
     const uint A = m.logits.size(2);
 
@@ -175,6 +177,8 @@ __global__ void descend_kernel(
 }
 
 __host__ Descent descend(MCTS m) {
+    c10::cuda::CUDAGuard g(m.logits.t.device());
+
     const uint B = m.logits.size(0);
     const uint A = m.logits.size(2);
 
@@ -230,6 +234,8 @@ __global__ void backup_kernel(BackupPTA bk, I1D::PTA leaves) {
 }
 
 __host__ void backup(Backup b, TT leaves) {
+    c10::cuda::CUDAGuard g(leaves.device());
+
     const uint B = b.v.size(0);
     const uint S = b.v.size(2);
 

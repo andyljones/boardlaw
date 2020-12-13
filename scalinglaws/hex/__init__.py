@@ -33,8 +33,7 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seats'))):
         self.obs_space = heads.Tensor((self.boardsize, self.boardsize, 2))
         self.action_space = heads.Masked(self.boardsize*self.boardsize)
 
-        with torch.cuda.device(self.device):
-            self.obs = cuda.observe(self.board, self.seats)
+        self.obs = cuda.observe(self.board, self.seats)
         shape = self.board.shape[:-2]
         self.valid = (self.obs == 0).all(-1).reshape(*shape, -1)
 
@@ -57,8 +56,7 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seats'))):
         assert actions.shape == (self.n_envs,)
 
         new_board = self.board.clone()
-        with torch.cuda.device(self.device):
-            rewards = cuda.step(new_board, self.seats.int(), actions.int())
+        rewards = cuda.step(new_board, self.seats.int(), actions.int())
         terminal = (rewards > 0).any(-1)
 
         new_board[terminal] = 0

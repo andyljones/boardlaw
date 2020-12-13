@@ -134,6 +134,7 @@ __global__ void step_kernel(
 }
 
 __host__ TT step(TT board, TT seats, TT actions) {
+    c10::cuda::CUDAGuard g(board.device());
     const uint B = board.size(0);
     const uint S = board.size(1);
 
@@ -147,6 +148,7 @@ __host__ TT step(TT board, TT seats, TT actions) {
 }
 
 __host__ TT observe(TT board, TT seats) {
+    c10::cuda::CUDAGuard g(board.device());
     auto black = ((board == BLACK) | (board == TOP) | (board == BOT));
     auto white = ((board == WHITE) | (board == LEFT) | (board == RIGHT));
     auto black_obs = at::stack({black, white}, -1).toType(at::kFloat);
