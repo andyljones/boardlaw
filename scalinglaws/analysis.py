@@ -40,7 +40,7 @@ def plot_all(f):
         import numpy as np
         import matplotlib.pyplot as plt
 
-        B = state.seat.shape[0]
+        B = state.seats.shape[0]
         assert B < 65, f'Plotting {B} traces will be prohibitively slow' 
         n_rows = int(B**.5)
         n_cols = int(np.ceil(B/n_rows))
