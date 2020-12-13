@@ -33,13 +33,9 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seats'))):
         self.obs_space = heads.Tensor((self.boardsize, self.boardsize, 2))
         self.action_space = heads.Masked(self.boardsize*self.boardsize)
 
-        if self.board.ndim == 3:
-            self.obs = cuda.observe(self.board, self.seats)
-            shape = self.board.shape[:-2]
-            self.valid = (self.obs == 0).all(-1).reshape(*shape, -1)
-        else:
-            self.obs = None
-            self.valid = None
+        self.obs = cuda.observe(self.board, self.seats)
+        shape = self.board.shape[:-2]
+        self.valid = (self.obs == 0).all(-1).reshape(*shape, -1)
 
     def step(self, actions):
         """Args:

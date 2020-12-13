@@ -152,5 +152,11 @@ __host__ TT observe(TT board, TT seats) {
     auto black_obs = at::stack({black, white}, -1).toType(at::kFloat);
 
     auto white_obs = black_obs.transpose(-3, -2).flip(-1);
-    return black_obs.where(seats.reshape({-1, 1, 1, 1}) == 0, white_obs);
+
+    //TODO: This is garbage, what's a better way?
+    auto dims = std::vector<int64_t>({});
+    for (int d=0; d<seats.ndimension(); d++) { dims.push_back(seats.size(d)); }
+    for (int d=0; d<3; d++) { dims.push_back(1); }
+
+    return black_obs.where(seats.reshape(dims) == 0, white_obs);
 }

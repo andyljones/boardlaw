@@ -98,7 +98,7 @@ def agentfunc(device='cuda'):
 def run():
     buffer_length = 16 
     batch_size = 8192
-    n_envs = 1024
+    n_envs = 4096
     buffer_inc = batch_size//n_envs
 
     worlds = worldfunc(n_envs)
