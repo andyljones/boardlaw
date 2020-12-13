@@ -183,10 +183,10 @@ class Random(Solitaire):
         return Hex.step(worlds, actions)
 
 def regression_test():
-    from . import Hex, hex2
-    kwargs = dict(n_envs=128, boardsize=11)
-    old = Hex.initial(**kwargs)
-    new = hex2.Hex.initial(**kwargs)
+    from scalinglaws.hex import hexold
+    kwargs = dict(n_envs=4096, boardsize=512)
+    old = hexold.Hex.initial(**kwargs)
+    new = Hex.initial(**kwargs)
 
     history = []
     for i in range(1000):
