@@ -41,7 +41,7 @@ def mean(total, count=1):
 def mean_std(μ, σ):
     def resample(**kwargs):
         μm = (μ/σ**2).resample(**kwargs).mean()/(1/σ**2).resample(**kwargs).mean()
-        σm = 1/(1/σ**2).resample(**kwargs).mean()
+        σm = 1/(1/σ**2).resample(**kwargs).mean()**.5
         return pd.concat({'μ': μm, 'σ': σm, 'μ-': μm - 2*σm, 'μ+': μm + 2*σm}, 1)
     return resample
 
