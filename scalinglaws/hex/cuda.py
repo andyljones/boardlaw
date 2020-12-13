@@ -70,12 +70,12 @@ def test_wins():
     # Black win
     board = tokened_board((TC, TOP), (BC, BOT))
     result = apply(B, CC, board)
-    torch.testing.assert_allclose(result, torch.tensor([1., 0.]).cuda())
+    torch.testing.assert_allclose(result, torch.tensor([+1., -1.]).cuda())
 
     # White win
     board = tokened_board((CL, LEFT), (CR, RIGHT))
     result = apply(W, CC, board)
-    torch.testing.assert_allclose(result, torch.tensor([0., 1.]).cuda())
+    torch.testing.assert_allclose(result, torch.tensor([-1., +1.]).cuda())
 
 def test_flooding():
     # Bottom flooding

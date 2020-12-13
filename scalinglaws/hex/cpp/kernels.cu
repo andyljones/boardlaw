@@ -109,13 +109,19 @@ __global__ void step_kernel(
     // Use the adjacency to decide what the new cell should be
     char new_val;
     if (seat) {
-        if (adj[LEFT] && adj[RIGHT]) { results[b][1] = 1.f; } 
+        if (adj[LEFT] && adj[RIGHT]) { 
+            results[b][0] = -1.f;
+            results[b][1] = +1.f;
+        } 
 
         if (adj[LEFT]) { new_val = LEFT; } 
         else if (adj[RIGHT]) { new_val = RIGHT; } 
         else { new_val = WHITE; }
     } else {
-        if (adj[TOP] && adj[BOT]) { results[b][0] = 1.f; } 
+        if (adj[TOP] && adj[BOT]) {
+            results[b][0] = +1.f;
+            results[b][1] = -1.f;
+        } 
 
         if (adj[TOP]) { new_val = TOP; } 
         else if (adj[BOT]) { new_val = BOT; } 
