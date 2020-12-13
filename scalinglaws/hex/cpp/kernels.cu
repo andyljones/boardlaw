@@ -37,6 +37,7 @@ __device__ void flood(C3D::PTA board, int row, int col, uint8_t new_val) {
     uint8_t *seen = (uint8_t*)&shared[(2*threadIdx.x+1)*S*S];
     for (int s=0; s<S*S; s++) { seen[s] = 0; }
 
+    printf("Flooding (%d, %d) with %d \n", (int) row, (int) col, (int) new_val);
     while (true) {
         // See if there's anything left in the queue
         if (start == end) { break; }
@@ -44,14 +45,16 @@ __device__ void flood(C3D::PTA board, int row, int col, uint8_t new_val) {
         // Pull a value out of the queue
         int r0 = queue[2*start+0];
         int c0 = queue[2*start+1];        
+        printf("Got (%d, %d) from the queue at %d\n", (int) r0, (int) c0, start);
         start += 1;
-        seen[r0*S+c0] = 1;
+        seen[r0*S+c0] = 10;
         uint8_t cell_val = board[b][r0][c0];
 
         // If the old and new vals are the same, continue flooding!
         if (cell_val == old_val) {
             // Put the new value into place
             board[b][r0][c0] = new_val;
+            printf("Setting (%d, %d) to %d\n", (int)r0, (int)c0, (int)new_val);
             // and add the neighbours to the queue
             for (int n=0; n<6; n++) {
                 int r = r0 + neighbours[n][0];
@@ -60,6 +63,7 @@ __device__ void flood(C3D::PTA board, int row, int col, uint8_t new_val) {
                 if ((0 <= r) && (r < S) && (0 <= c) && (c < S)) {
                     // and we haven't seen them already
                     if (!seen[r*S+c]) {
+                        printf("Adding (%d, %d) to the queue at %d\n", (int) r, (int) c, end);
                         queue[2*end+0] = r;
                         queue[2*end+1] = c;
                         end += 1;
@@ -68,6 +72,7 @@ __device__ void flood(C3D::PTA board, int row, int col, uint8_t new_val) {
             }
         }
     }
+    printf("Done\n");
 }
 
 __global__ void step_kernel(
@@ -130,7 +135,6 @@ __global__ void step_kernel(
 
     board[b][row][col] = seat? WHITE : BLACK;
 
-    printf("%d\n", new_val);
     flood(board, row, col, new_val);
 }
 
