@@ -1,7 +1,4 @@
-#include <math.h>
-#include <math_constants.h>
-#include <ATen/ATen.h>
-#include <ATen/cuda/CUDAContext.h>
+#include "../../cpp/kernels.cu"
 #include "common.h"
 
 const uint BLOCK = 8;
@@ -18,6 +15,9 @@ enum {
     RIGHT
 };
 
+__device__ void flood(C3D::PTA board, int row, int col) {
+
+}
 
 __global__ void step_kernel(
     C3D::PTA board, I1D::PTA seats, I1D::PTA actions, F2D::PTA results) {
@@ -29,7 +29,6 @@ __global__ void step_kernel(
     if (b >= B) return;
 
     const int seat = seats[b]; 
-
 
     // Swap rows and cols if we're playing white
     const int action = actions[b];
@@ -43,17 +42,18 @@ __global__ void step_kernel(
         adj[a] = false;
     }
 
+    const int neighbours[6][2] = {{-1, 0}, {-1, +1}, {0, -1}, {0, +1}, {+1, -1}, {+1, 0}};
     // Populate the adjacency indicator
-    for (int i=-1; i<=1; i++) {
-        for (int j=-1; j<=1; j++) {
-            int r = row + i;
-            int c = col + j;
-            if      (r <  0) { adj[TOP] = true; }
-            else if (r >= S) { adj[BOT] = true; }
-            else if (c <  0) { adj[LEFT] = true; }
-            else if (c >= S) { adj[RIGHT] = true; }
-            else { adj[board[b][r][c]] = true; }
-        }
+    for (int n=0; n<6; n++) {
+        int r = row + neighbours[n][0];
+        int c = col + neighbours[n][1];
+        printf("%d %d\n", r, c);
+
+        if      (r <  0) { adj[TOP] = true; }
+        else if (r >= S) { adj[BOT] = true; }
+        else if (c <  0) { adj[LEFT] = true; }
+        else if (c >= S) { adj[RIGHT] = true; }
+        else { adj[board[b][r][c]] = true; }
     }
 
     // Use the adjacency to decide what the new cell should be
@@ -71,15 +71,18 @@ __global__ void step_kernel(
     }
 
     board[b][row][col] = new_cell;
+
+    flood(board, row, col);
 }
 
 __host__ TT step(TT board, TT seats, TT actions) {
     const uint B = board.size(0);
+    const uint S = board.size(1);
 
     TT results = board.new_zeros({B, 2}, at::kFloat);
 
     const uint n_blocks = (B + BLOCK - 1)/BLOCK;
-    step_kernel<<<{n_blocks}, {BLOCK}>>>(
+    step_kernel<<<{n_blocks}, {BLOCK}, BLOCK*S*S*sizeof(bool), stream()>>>(
         C3D(board).pta(), I1D(seats).pta(), I1D(actions).pta(), F2D(results).pta());
 
     return results;

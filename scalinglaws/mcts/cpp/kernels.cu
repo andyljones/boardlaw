@@ -1,15 +1,7 @@
-#include <math.h>
-#include <math_constants.h>
-#include <ATen/ATen.h>
+#include "../../cpp/kernels.cu"
 #include "common.h"
-#include <ATen/cuda/CUDAContext.h>
 
 const uint BLOCK = 8;
-
-
-at::cuda::CUDAStream stream() { 
-    return at::cuda::getCurrentCUDAStream();
-}
 
 struct Policy {
     int A;
