@@ -130,22 +130,22 @@ def legend(f):
     f.legend.location = 'top_left'
 
 
-def timeseries(source, info):
+def timeseries(source, info, **kwargs):
     y = info.id.iloc[0]
     #TODO: Work out how to apply the axes formatters to the tooltips
     f = bop.figure(x_range=bom.DataRange1d(start=0, follow='end'), tooltips=[('', '$data_y')])
-    f.line(x='time_', y=y, source=source)
+    f.line(x='time_', y=y, source=source, **kwargs)
     default_tools(f)
     x_zeroline(f)
     styling(f)
 
     return f
 
-def timedataframe(source, info):
+def timedataframe(source, info, **kwargs):
     f = bop.figure(x_range=bom.DataRange1d(start=0, follow='end'), tooltips=[('', '$data_y')])
 
     for y, label, color in zip(info.id.tolist(), info.label.tolist(), cycle(Category10_10)):
-        f.line(x='time_', y=y, legend_label=label, color=color, width=2, source=source)
+        f.line(x='time_', y=y, legend_label=label, color=color, width=2, source=source, **kwargs)
 
     default_tools(f)
     x_zeroline(f)
@@ -154,12 +154,15 @@ def timedataframe(source, info):
 
     return f
 
-def single(source, info):
+def single(source, info, **kwargs):
     # import aljpy; aljpy.extract()
     if (len(info) == 1) and (info.label == '').all():
-        return timeseries(source, info)
+        return timeseries(source, info, **kwargs)
     else:
-        return timedataframe(source, info)
+        return timedataframe(source, info, **kwargs)
+
+def log_single(*args, **kwargs):
+    return single(*args, **kwargs, y_axis_type='log')
 
 def confidence(source, info):
     f = bop.figure(x_range=bom.DataRange1d(start=0, follow='end'), tooltips=[('', '$data_y')])

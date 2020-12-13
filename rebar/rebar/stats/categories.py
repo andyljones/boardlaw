@@ -57,6 +57,12 @@ def cumsum(total=1):
         return total.resample(**kwargs).sum().cumsum()
     return resample
 
+@category(plotter=plotters.log_single)
+def log_cumsum(total=1):
+    def resample(**kwargs):
+        return total.resample(**kwargs).sum().cumsum()
+    return resample
+
 @category()
 def timeaverage(x):
     def resample(**kwargs):
