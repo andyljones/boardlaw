@@ -6,17 +6,72 @@ const uint BLOCK = 8;
 enum {
     EMPTY,
     BLACK,
-    BLACK_WIN,
+    WHITE,
     TOP,
     BOT, 
-    WHITE,
-    WHITE_WIN,
     LEFT,
     RIGHT
 };
 
-__device__ void flood(C3D::PTA board, int row, int col) {
+__device__ void flood(C3D::PTA board, int row, int col, uint8_t new_val) {
+    const uint S = board.size(1);
+    const int b = blockIdx.x*blockDim.x + threadIdx.x;
 
+    const int neighbours[6][2] = {{-1, 0}, {-1, +1}, {0, -1}, {0, +1}, {+1, -1}, {+1, 0}};
+
+    // If we don't need to flood the value, break
+    if (new_val < TOP) {
+        return;
+    }
+
+    extern __shared__ uint8_t shared[];
+
+    // Set up a queue to keep track of which cells need exploring
+    int start = 0;
+    int end = 1;
+    uint8_t *queue = (uint8_t*)&shared[2*threadIdx.x*S*S];
+    queue[0] = row;
+    queue[1] = col;
+
+    // Set up a mask to keep track of which cells we've already seen
+    uint8_t *seen = (uint8_t*)&shared[(2*threadIdx.x+1)*S*S];
+    for (int s=0; s<S*S; s++) {
+        seen[s] = 0;
+    }
+
+    while (true) {
+        // See if there's anything left in the queue
+        if (start == end) {
+            break;
+        }
+
+        // Pull a value out of the queue
+        int r0 = queue[2*start+0];
+        int c0 = queue[2*start+1];        
+        start += 1;
+        seen[r0*S+c0] = 1;
+        uint8_t old_val = board[b][r0][c0];
+
+        // If the old and new vals are the same, continue flooding!
+        if (old_val == new_val) {
+            // Put the new value into place
+            board[b][r0][c0] = new_val;
+            // and add the neighbours to the queue
+            for (int n=0; n<6; n++) {
+                int r = r0 + neighbours[n][0];
+                int c = c0 + neighbours[n][1];
+                // but only if they're not over the edge
+                if ((0 <= r) && (r < S) && (0 <= c) && (c < S)) {
+                    // and we haven't seen them already
+                    if (!seen[r*S+c]) {
+                        queue[2*end+0] = r;
+                        queue[2*end+1] = c;
+                        end += 1;
+                    }
+                }
+            }
+        }
+    }
 }
 
 __global__ void step_kernel(
@@ -47,7 +102,6 @@ __global__ void step_kernel(
     for (int n=0; n<6; n++) {
         int r = row + neighbours[n][0];
         int c = col + neighbours[n][1];
-        printf("%d %d\n", r, c);
 
         if      (r <  0) { adj[TOP] = true; }
         else if (r >= S) { adj[BOT] = true; }
@@ -57,22 +111,24 @@ __global__ void step_kernel(
     }
 
     // Use the adjacency to decide what the new cell should be
-    char new_cell;
+    char new_val;
     if (seat) {
-        if (adj[LEFT] && adj[RIGHT]) { new_cell = WHITE_WIN; results[b][1] = 1.f; } 
-        else if (adj[LEFT]) { new_cell = LEFT; } 
-        else if (adj[RIGHT]) { new_cell = RIGHT; } 
-        else { new_cell = WHITE; }
+        if (adj[LEFT] && adj[RIGHT]) { results[b][1] = 1.f; } 
+
+        if (adj[LEFT]) { new_val = LEFT; } 
+        else if (adj[RIGHT]) { new_val = RIGHT; } 
+        else { new_val = WHITE; }
     } else {
-        if (adj[TOP] && adj[BOT]) { new_cell = BLACK_WIN; results[b][0] = 1.f; } 
-        else if (adj[TOP]) { new_cell = TOP; } 
-        else if (adj[BOT]) { new_cell = BOT; } 
-        else { new_cell = BLACK; }
+        if (adj[TOP] && adj[BOT]) { results[b][0] = 1.f; } 
+
+        if (adj[TOP]) { new_val = TOP; } 
+        else if (adj[BOT]) { new_val = BOT; } 
+        else { new_val = BLACK; }
     }
 
-    board[b][row][col] = new_cell;
+    board[b][row][col] = seat? WHITE : BLACK;
 
-    flood(board, row, col);
+    flood(board, row, col, new_val);
 }
 
 __host__ TT step(TT board, TT seats, TT actions) {
@@ -82,7 +138,7 @@ __host__ TT step(TT board, TT seats, TT actions) {
     TT results = board.new_zeros({B, 2}, at::kFloat);
 
     const uint n_blocks = (B + BLOCK - 1)/BLOCK;
-    step_kernel<<<{n_blocks}, {BLOCK}, BLOCK*S*S*sizeof(bool), stream()>>>(
+    step_kernel<<<{n_blocks}, {BLOCK}, BLOCK*S*S*3*sizeof(uint8_t), stream()>>>(
         C3D(board).pta(), I1D(seats).pta(), I1D(actions).pta(), F2D(results).pta());
 
     return results;

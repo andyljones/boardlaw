@@ -35,19 +35,26 @@ def test_single_moves():
     test_move(0, 8, empty_board(), move_board((2, 2, 4))) # bot
 
     # White
-    test_move(1, 4, empty_board(), move_board((1, 1, 5))) # white
-    test_move(1, 0, empty_board(), move_board((0, 0, 7))) # left
-    test_move(1, 8, empty_board(), move_board((2, 2, 8))) # right
+    test_move(1, 4, empty_board(), move_board((1, 1, 2))) # white
+    test_move(1, 0, empty_board(), move_board((0, 0, 5))) # left
+    test_move(1, 8, empty_board(), move_board((2, 2, 6))) # right
 
 def test_wins():
+    
     # Black win
-    result = test_move(0, 4, 
-        move_board((0, 1, 3), (2, 1, 4)),
-        move_board((0, 1, 3), (2, 1, 4), (1, 1, 2)))
+    board = move_board((0, 1, 3), (2, 1, 4))
+    seats = torch.tensor([0]).int().cuda()
+    actions = torch.tensor([4]).int().cuda()
+    expected = move_board((0, 1, 3), (2, 1, 4), (1, 1, 1))
+    result = loaded.step(board, seats, actions)
+    torch.testing.assert_allclose(board, expected)
     torch.testing.assert_allclose(result, torch.tensor([1., 0.]).cuda())
 
     # White win
-    result = test_move(1, 4, 
-        move_board((1, 0, 7), (1, 2, 8)),
-        move_board((1, 0, 7), (1, 2, 8), (1, 1, 6)))
-    torch.testing.assert_allclose(result, torch.tensor([0., 1.]).cuda())
+    board = move_board((0, 1, 3), (2, 1, 4))
+    seats = torch.tensor([1]).int().cuda()
+    actions = torch.tensor([4]).int().cuda()
+    expected = move_board((1, 0, 7), (1, 2, 8), (1, 1, 6))
+    result = loaded.step(board, seats, actions)
+    torch.testing.assert_allclose(board, expected)
+    torch.testing.assert_allclose(result, torch.tensor([1., 0.]).cuda())
