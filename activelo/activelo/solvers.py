@@ -9,7 +9,7 @@ import geotorch
 from . import expectations
 
 μ0 = 0
-σ0 = 5
+σ0 = 10
 
 def pairwise_indices(N):
     j, k = torch.as_tensor(np.indices((N, N)).reshape(2, -1))
