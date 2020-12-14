@@ -38,7 +38,7 @@ def periodic_agents(run_name, agentfunc, device='cpu', **kwargs):
         agents = {} 
         for _, row in stored.iterrows():
             name = row.date.strftime(r'%y%m%d-%H%M%S-periodic')
-            sd = torch.load(row.path.open('rb'), map_location=device)
+            sd = torch.load(row.path, map_location=device)
             agents[name] = assemble_agent(agentfunc, sd, device=device, **kwargs)
         return agents
 
