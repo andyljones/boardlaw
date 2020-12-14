@@ -167,29 +167,3 @@ def benchmark_experience_collection():
             worlds = new_worlds
             log.info('actor stepped')
     print(f'{t/(16*n_envs)}/sample')
-
-def fill_matchups(run_name=-1):
-    from scalinglaws import worldfunc, agentfunc
-    from scalinglaws.arena import matchups, periodic_agents, database, log
-    from itertools import product
-
-    run_name = paths.resolve(run_name)
-    device = 'cuda:0'
-    agents = periodic_agents(run_name, agentfunc, device=device)
-    worlds = worldfunc(device=device, n_envs=256)
-
-    n, w = database.symmetric_pandas(run_name, agents)
-
-    for i, j in product(agents, agents):
-        if n.loc[i, j] > 0:
-            continue
-        if i == j:
-            continue
-
-        matchup = {m: agents[m] for m in (i, j)}
-        log.info('Playing ' + ' v. '.join(matchup))
-        results = matchups.evaluate(worlds, matchup)
-
-        wins, games = int(results[0].wins[0] + results[1].wins[1]), int(sum(r.games for r in results))
-        log.info(f'Storing. {wins} wins in {games} games for {list(matchup)[0]} ')
-        database.store(run_name, results)

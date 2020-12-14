@@ -212,3 +212,32 @@ def demo():
     from rebar import paths
     paths.clear('test')
     arena('test', worldfunc, agentfunc, ref_runs=['2020-11-27 19-40-27 az-test'])
+
+def fill_matchups(run_name=-1, device='cuda'):
+    from scalinglaws import worldfunc, agentfunc
+    from scalinglaws.arena import matchups, periodic_agents, database, log
+
+    run_name = paths.resolve(run_name)
+    agents = periodic_agents(run_name, agentfunc, device=device)
+    worlds = worldfunc(device=device, n_envs=256)
+
+    n, w = database.symmetric_pandas(run_name, agents)
+
+    while True:
+        n, w = database.symmetric_pandas(run_name, agents)
+        matchup = (n
+            .stack()
+            .loc[lambda s: s == 0]
+            .reset_index()
+            .loc[lambda df: df.black_name != df.white_name]
+            .sample(1)
+            .iloc[0, :2]
+            .tolist())
+
+        log.info(f'Playing {matchup}')
+        matchup = {m: agents[m] for m in matchup}
+        results = matchups.evaluate(worlds, matchup)
+
+        wins, games = int(results[0].wins[0] + results[1].wins[1]), int(sum(r.games for r in results))
+        log.info(f'Storing. {wins} wins in {games} games for {list(matchup)[0]} ')
+        database.store(run_name, results)
