@@ -150,7 +150,7 @@ def demo(run_name=-1):
     agent = agentfunc(device='cuda:1')
     agent.load_state_dict(storing.select(storing.load_latest(run_name), 'agent'))
     mhx = mohex.MoHexAgent()
-    analysis.record(world, [agent, agent], n_reps=1, N=0).notebook()
+    analysis.record(world, [agent, mhx], n_reps=1, N=0).notebook()
 
 def benchmark_experience_collection():
     # Make sure to init cuda before running this 

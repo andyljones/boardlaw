@@ -93,10 +93,10 @@ def stored_periodic(run_name=-1):
     df = pd.DataFrame(infos).sort_values('date').reset_index(drop=True)
     return df
 
-def load_periodic(run_name=-1, idx=-1, proc_name='MainProcess'):
+def load_periodic(run_name=-1, idx=-1, proc_name='MainProcess', device='cpu'):
     df = stored_periodic(run_name).loc[lambda df: df.proc_name == proc_name]
     if isinstance(idx, int):
         row = df.iloc[idx]
     else:
         raise ValueError('Only implemented integer indexing')
-    return pickle.loads(row.path.read_bytes())
+    return torch.load(row.path, map_location=device)

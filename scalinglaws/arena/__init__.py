@@ -4,7 +4,6 @@ import torch
 from rebar import storing, logging, dotdict, stats, paths
 import pickle
 from . import database, matchups
-from .plot import heatmap
 from .. import mohex
 import activelo
 import time
@@ -12,6 +11,9 @@ from logging import getLogger
 from contextlib import contextmanager
 from functools import wraps
 from multiprocessing import Process, Event, set_start_method
+
+# Re-export
+from .plot import heatmap, periodic
 
 log = getLogger(__name__)
 
