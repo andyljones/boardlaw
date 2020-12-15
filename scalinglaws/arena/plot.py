@@ -80,12 +80,22 @@ def nontransitivities():
 
     conf = (r > .5 + 2*e).astype(float) - (r < .5 - 2*e).astype(float)
 
-    #TODO: Check that this is correct
-    avb = conf.values[:, :, None]
-    avc = conf.values[:, None, :]
-    bvc = conf.values[None, :, :]
+    C = conf.values
+    results = np.zeros_like(C)
+    N = len(results)
+    for i in range(N):
+        for j in range(N):
+            bad = False
+            for k in range(N):
+                if (C[i, j] == +1) and (C[i, k] == -1) and (C[j, k] == +1):
+                    bad = True
+                if (C[i, j] == -1) and (C[i, k] == +1) and (C[j, k] == -1):
+                    bad = True
+            results[i, j] = bad
+    results = pd.DataFrame(results, 
+        [c[7:-9] for c in conf.index], 
+        [c[7:-9] for c in conf.columns])
 
-    agb_bad = ((avb == +1) & (avc == -1) & (bvc == +1)).any(-1)
-    alb_bad = ((avb == -1) & (avc == +1) & (bvc == -1)).any(-1)
-    bad = agb_bad | alb_bad
-    plt.imshow(bad | (conf.values == 0))
+    sns.heatmap(results, cmap='Greens', square=True)
+
+    return results
