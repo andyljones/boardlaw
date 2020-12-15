@@ -57,6 +57,35 @@ def periodic(run_name, target=None, drop=[]):
 
     return μ
 
-def heatmap(run_name=-1):
+def heatmap(run_name=-1, drop=[]):
     rates = database.symmetric_wins(run_name)/database.symmetric_games(run_name)
-    sns.heatmap(rates, cmap='RdBu', vmin=0, vmax=1, square=True)
+    rates = (rates
+        .drop(drop,  axis=0)
+        .drop(drop, axis=1)
+        .rename(index=lambda c: c[7:-9], columns=lambda c: c[7:-9]))
+    rates.values[np.diag_indices_from(rates)] = .5
+    # rates.values[np.triu_indices_from(rates)] = np.nan
+    rates.index.name = 'agent'
+    rates.columns.name = 'challenger'
+    ax = sns.heatmap(rates, cmap='RdBu', vmin=0, vmax=1, square=True)
+    ax.set_facecolor('dimgrey')
+    ax.set_title(f'{paths.resolve(run_name)} winrate')
+
+def nontransitivities():
+    from scalinglaws.arena import database
+    run_name = -1
+    w, n = database.symmetric_wins(run_name), database.symmetric_games(run_name)
+    r = w/n
+    e = (r*(1-r)/n)**.5
+
+    conf = (r > .5 + 2*e).astype(float) - (r < .5 - 2*e).astype(float)
+
+    #TODO: Check that this is correct
+    avb = conf.values[:, :, None]
+    avc = conf.values[:, None, :]
+    bvc = conf.values[None, :, :]
+
+    agb_bad = ((avb == +1) & (avc == -1) & (bvc == +1)).any(-1)
+    alb_bad = ((avb == -1) & (avc == +1) & (bvc == -1)).any(-1)
+    bad = agb_bad | alb_bad
+    plt.imshow(bad | (conf.values == 0))
