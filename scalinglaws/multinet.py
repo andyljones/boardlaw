@@ -27,10 +27,24 @@ class Streamed(nn.Module):
         self.streams = [torch.cuda.Stream() for _ in range(n_models)]
 
     def forward(self, x, idxs):
+        #TODO: This doesn't work at all
         y = x.new_empty((*x.shape[:-1], self.out_features))
+        torch.cuda.synchronize()
         for i, l in enumerate(self.layers):
             with torch.cuda.stream(self.streams[i]):
                 y[idxs == i] = l(x[idxs == i])
+        torch.cuda.synchronize()
+        return F.relu(y)
+
+class BMM(nn.Module):
+
+    def __init__(self, in_features, out_features, n_models):
+        super().__init__()
+        self.register_parameter('w', nn.Parameter(torch.zeros((n_models, in_features, out_features))))
+        self.register_parameter('b', nn.Parameter(torch.zeros((n_models, out_features))))
+
+    def forward(self, x, idxs):
+        y = torch.baddbmm(self.b[idxs, :, None], self.w[idxs], x[:, :, None]).squeeze(-1)
         return F.relu(y)
 
 def benchmark(cls, features=128, layers=1, models=1, envs=8192, T=128, device='cuda:1'):
@@ -53,6 +67,11 @@ def benchmark(cls, features=128, layers=1, models=1, envs=8192, T=128, device='c
 
 def profile(**kwargs):
     results = {}
-    for cls in [Naive, Streamed]:
-        results[cls.__name__] = pd.Series({m: benchmark(cls, **kwargs, models=m) for m in [1, 2, 4, 8, 16, 32, 64]})
-    return pd.concat(results, 1)
+    for cls in [Naive, Streamed, BMM]:
+        results[cls.__name__] = pd.Series({m: benchmark(cls, **kwargs, models=m) for m in [1, 2, 4, 8, 16, 32]})
+
+    df = pd.concat(results, 1)
+    ax = df.plot(logx=True, logy=True, marker='o')
+    ax.set_ylabel('μs/sample')
+    ax.set_xlabel('n models')
+    return df
