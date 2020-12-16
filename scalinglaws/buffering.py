@@ -44,7 +44,6 @@ class Buffer:
             self._buffer.targets[ts % self.length, bs] = rewards[bs]
             self._ready[terminal] = self.current
 
-
     def add_raw(self, subset, terminal, rewards):
         if self._buffer is None:
             self.device = terminal.device
@@ -54,7 +53,7 @@ class Buffer:
             self.bs = torch.arange(self.n_envs, device=self.device)
 
             self._buffer = subset.map(lambda x: x.new_zeros((self.length, *x.shape)))
-            self._buffer['targets'] = torch.zeros((self.length, self.n_envs, self.n_seats), device=self.device)
+            self._buffer['targets'] = torch.zeros((self.length, self.n_envs, self.n_seats), device=self.device, dtype=torch.half)
 
             self.current = 0
             self._ready = torch.zeros((self.n_envs,), device=self.device, dtype=torch.long)
@@ -68,11 +67,12 @@ class Buffer:
 
     def add(self, sample):
         """Expects the obs to precede the transition"""
+        # Conversions here take a 1600B sample down to a 600B sample 
         subset = arrdict.arrdict(
-            obs=sample.worlds.obs,
+            obs=sample.worlds.obs.byte(),
             valid=sample.worlds.valid,
-            seats=sample.worlds.seats,
-            logits=sample.decisions.logits)
+            seats=sample.worlds.seats.byte(),
+            logits=sample.decisions.logits.half())
         return self.add_raw(subset, sample.transitions.terminal, sample.transitions.rewards)
 
     def ready(self):
@@ -88,7 +88,12 @@ class Buffer:
             raise ValueError('No ready trajectories to draw from')
         ts = rs*(ends - start) + start
 
-        return self._buffer[ts.long() % self.length, bs]
+        sample = self._buffer[ts.long() % self.length, bs]
+        return arrdict.arrdict(
+            obs=sample.obs.float(),
+            valid=sample.valid,
+            seats=sample.seats.int(),
+            logits=sample.logits.float())
 
 def test_update_indices():
     starts = torch.tensor([7])
