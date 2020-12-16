@@ -54,7 +54,6 @@ class Buffer:
             self.current = 0
             self.ready = torch.zeros((self.n_envs,), device=self.device, dtype=torch.long)
 
-
         self._buffer[self.current % self.length] = arrdict.arrdict(
             **subset,
             targets=torch.zeros((self.n_envs,), device=self.device))
@@ -63,19 +62,19 @@ class Buffer:
         self.ready[terminal] = self.current
 
     def add(self, sample):
+        """Expects the obs to precede the transition"""
         subset = arrdict.arrdict(
             obs=sample.obs,
-            logits=sample.decisions.logits,
-            terminal=sample.transitions.terminal,
-            rewards=sample.transitions.rewards)
+            logits=sample.decisions.logits)
         return self.add_raw(subset, sample.transitions.terminal, sample.transitions.rewards)
 
     def sample(self, size):
         bs = torch.randint(0, self.n_envs, device=self.device, size=(size,))
 
         rs = torch.rand(device=self.device, size=(size,))
-        baseline = self.ready[bs]
-        ts = rs*(self.current - baseline) + baseline
+        start = min(self.current, 0)
+        ends = self.ready[bs]
+        ts = rs*(ends - start) + start
 
         return self._buffer[ts.long() % self.length, bs]
 
@@ -151,3 +150,17 @@ def test_buffer():
             terminal,
             rewards)
         ts = ts + 1
+
+    torch.testing.assert_allclose(
+        buffer._buffer.targets,
+        torch.tensor([[6., 6., 6.],
+                [7., 8., 0.],
+                [8., 8., 0.],
+                [4., 4., 6.],
+                [5., 6., 6.]]))
+
+    for _ in range(10):
+        sample = buffer.sample(3)
+        ds = durations[sample.bs]
+        expected = (sample.ts // ds + 1)*ds
+        torch.testing.assert_allclose(sample.targets, expected.float())
