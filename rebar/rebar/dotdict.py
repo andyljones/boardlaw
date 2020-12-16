@@ -173,8 +173,14 @@ def starmapping(f):
             return f(x, *args)
     return g
 
+#TODO: Need to write a reduce really
 def leaves(t):
     """Returns the leaves of a tree of dotdicts as a list"""
     if isinstance(t, dict):
         return [l for v in t.values() for l in leaves(v)]
     return [t]
+
+def first_value(t):
+    if isinstance(t, dict):
+        return first_value(next(iter(t)))
+    return t

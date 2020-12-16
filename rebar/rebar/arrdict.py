@@ -9,6 +9,9 @@ try:
 except ModuleNotFoundError:
     TORCH = False
 
+# Re-export
+from .dotdict import mapping, starmapping, leaves, first_value
+
 def _is_valid_field(x):
     return (isinstance(x, str) or (isinstance(x, tuple) and all(isinstance(xx, str) for xx in x)))
 

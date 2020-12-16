@@ -10,7 +10,7 @@ import time
 from logging import getLogger
 from contextlib import contextmanager
 from functools import wraps
-from multiprocessing import Process, Event, set_start_method
+from multiprocessing import Process, set_start_method
 
 # Re-export
 from .plot import heatmap, periodic
