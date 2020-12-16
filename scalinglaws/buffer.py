@@ -7,14 +7,6 @@ import torch
 import torch.testing
 from rebar import arrdict
 
-def unwrap(starts, current, size):
-    overflowed = (starts >= current)
-    counts = torch.where(overflowed,
-        current + (size - starts),
-        current - starts)
-    starts = current - counts
-    return starts
-
 def update_indices(starts, current):
     # This bit of madness is to generate the indices that need to be updated,
     # ie if starts[2] is 7 and current is 10, then the output will have 
@@ -44,14 +36,12 @@ class Buffer:
 
     def update_targets(self, terminal, rewards):
         if terminal.any():
-            starts = unwrap(self.ready[terminal], self.current, self.length)
-            ts, bs = update_indices(starts, self.current)
-            ts = ts % self.length
-            bs += terminal.nonzero(as_tuple=False).squeeze(1)[bs]
+            ts, bs = update_indices(self.ready[terminal], self.current)
+            bs = terminal.nonzero(as_tuple=False).squeeze(1)[bs]
 
-            self._buffer.targets[ts, bs] = rewards[bs]
+            self._buffer.targets[ts % self.length, bs] = rewards[bs]
 
-    def _add(self, subset, terminal, rewards):
+    def add_raw(self, subset, terminal, rewards):
         if self._buffer is None:
             self.device = terminal.device
             self.n_envs = terminal.size(0)
@@ -65,10 +55,10 @@ class Buffer:
             self.ready = torch.zeros((self.n_envs,), device=self.device, dtype=torch.long)
 
 
-        self._buffer[self.current] = arrdict.arrdict(
+        self._buffer[self.current % self.length] = arrdict.arrdict(
             **subset,
             targets=torch.zeros((self.n_envs,), device=self.device))
-        self.current = (self.current + 1) % self.length
+        self.current = self.current + 1
         self.update_targets(terminal, rewards)
         self.ready[terminal] = self.current
 
@@ -78,18 +68,16 @@ class Buffer:
             logits=sample.decisions.logits,
             terminal=sample.transitions.terminal,
             rewards=sample.transitions.rewards)
-        return self._add(subset, sample.transitions.terminal, sample.transitions.rewards)
+        return self.add_raw(subset, sample.transitions.terminal, sample.transitions.rewards)
 
-    def draw(self, size):
-        ts = torch.rand(device=self.device, size=(size,))
+    def sample(self, size):
         bs = torch.randint(0, self.n_envs, device=self.device, size=(size,))
 
-        return 
+        rs = torch.rand(device=self.device, size=(size,))
+        baseline = self.ready[bs]
+        ts = rs*(self.current - baseline) + baseline
 
-
-def test_unwrap():
-    starts = unwrap(torch.tensor([0, 2]), 1, 3)
-    torch.testing.assert_allclose(starts, torch.tensor([0, -1]))
+        return self._buffer[ts.long() % self.length, bs]
 
 def test_update_indices():
     starts = torch.tensor([7])
@@ -110,14 +98,14 @@ def test_update_indices():
     torch.testing.assert_allclose(ts, torch.tensor([9]))
     torch.testing.assert_allclose(bs, torch.tensor([0]))
 
-def test_add():
+def test_add_raw():
     # Check linear behaviour
     buffer = Buffer(3)
-    buffer._add(
+    buffer.add_raw(
         arrdict.arrdict(),
         torch.tensor([False]),
         torch.tensor([0.]))
-    buffer._add(
+    buffer.add_raw(
         arrdict.arrdict(),
         torch.tensor([True]),
         torch.tensor([1.]))
@@ -127,19 +115,19 @@ def test_add():
 
     # Check wrapped behaviour
     buffer = Buffer(3)
-    buffer._add(
+    buffer.add_raw(
         arrdict.arrdict(),
         torch.tensor([False]),
         torch.tensor([0.]))
-    buffer._add(
+    buffer.add_raw(
         arrdict.arrdict(),
         torch.tensor([True]),
         torch.tensor([0.]))
-    buffer._add(
+    buffer.add_raw(
         arrdict.arrdict(),
         torch.tensor([False]),
         torch.tensor([0.]))
-    buffer._add(
+    buffer.add_raw(
         arrdict.arrdict(),
         torch.tensor([True]),
         torch.tensor([1.]))
@@ -147,5 +135,19 @@ def test_add():
         buffer._buffer.targets, 
         torch.tensor([[1.], [0.], [1.]]))
 
-def test():
-    pass
+def test_buffer():
+    n_envs = 3
+    bs = torch.arange(n_envs)
+    ts = torch.zeros_like(bs)
+    durations = bs+1
+
+    buffer = Buffer(10)
+
+    for _ in range(6):
+        terminal = (ts+1) % durations == 0
+        rewards = (ts+1)*terminal.float()
+        buffer.add_raw(
+            arrdict.arrdict(ts=ts, bs=bs),
+            terminal,
+            rewards)
+        ts = ts + 1
