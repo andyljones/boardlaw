@@ -61,7 +61,7 @@ class Buffer:
         if np.random.rand() <= self.keep:
             self._buffer[self.current % self.length] = arrdict.arrdict(
                 **subset,
-                targets=torch.zeros((self.n_envs, self.n_seats), device=self.device))
+                targets=torch.zeros((self.n_envs, self.n_seats), device=self.device, dtype=torch.half))
             self.current = self.current + 1
         self.update_targets(terminal, rewards)
 
@@ -73,7 +73,7 @@ class Buffer:
             valid=sample.worlds.valid,
             seats=sample.worlds.seats.byte(),
             logits=sample.decisions.logits.half())
-        return self.add_raw(subset, sample.transitions.terminal, sample.transitions.rewards)
+        return self.add_raw(subset, sample.transitions.terminal, sample.transitions.rewards.half())
 
     def ready(self):
         return (self._ready > 0).all()
@@ -93,7 +93,8 @@ class Buffer:
             obs=sample.obs.float(),
             valid=sample.valid,
             seats=sample.seats.int(),
-            logits=sample.logits.float())
+            logits=sample.logits.float(),
+            targets=sample.targets.float())
 
 def test_update_indices():
     starts = torch.tensor([7])
