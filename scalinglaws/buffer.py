@@ -4,7 +4,16 @@
 * 
 """
 import torch
+import torch.testing
 from rebar import arrdict
+
+def unwrap(starts, current, size):
+    overflowed = (starts >= current)
+    counts = torch.where(overflowed,
+        current + (size - starts),
+        current - starts)
+    starts = current - counts
+    return starts
 
 def update_indices(starts, current):
     # This bit of madness is to generate the indices that need to be updated,
@@ -29,17 +38,39 @@ def update_indices(starts, current):
 
 class Buffer:
 
-    def __init__(self, size):
-        self._size = size
+    def __init__(self, length):
+        self.length = length
         self._buffer = None
 
     def update_targets(self, terminal, rewards):
-        starts = self.ready
         if terminal.any():
-            ts, bs = update_indices(starts[terminal], self.current)
-            bs += terminal.nonzero()[bs]
+            starts = unwrap(self.ready[terminal], self.current, self.length)
+            ts, bs = update_indices(starts, self.current)
+            ts = ts % self.length
+            bs += terminal.nonzero(as_tuple=False).squeeze(1)[bs]
 
             self._buffer.targets[ts, bs] = rewards[bs]
+
+    def _add(self, subset, terminal, rewards):
+        if self._buffer is None:
+            self.device = terminal.device
+            self.n_envs = terminal.size(0)
+            self.ts = torch.arange(self.length, device=self.device)
+            self.bs = torch.arange(self.n_envs, device=self.device)
+
+            self._buffer = subset.map(lambda x: x.new_zeros((self.length, *x.shape)))
+            self._buffer['targets'] = torch.zeros((self.length, self.n_envs), device=self.device)
+
+            self.current = 0
+            self.ready = torch.zeros((self.n_envs,), device=self.device, dtype=torch.long)
+
+
+        self._buffer[self.current] = arrdict.arrdict(
+            **subset,
+            targets=torch.zeros((self.n_envs,), device=self.device))
+        self.current = (self.current + 1) % self.length
+        self.update_targets(terminal, rewards)
+        self.ready[terminal] = self.current
 
     def add(self, sample):
         subset = arrdict.arrdict(
@@ -47,23 +78,18 @@ class Buffer:
             logits=sample.decisions.logits,
             terminal=sample.transitions.terminal,
             rewards=sample.transitions.rewards)
-        if self._buffer is None:
-            example = arrdict.first_value(sample)
-            self.device = example.device
-            self.n_envs = example.size(0)
-
-            self._buffer = subset.map(lambda x: x.new_zeros((self._size, *x.shape)))
-            self._buffer['targets'] = torch.zeros((self.size, self.n_envs), device=self.device)
-
-            self.current = 0
-            self.ready = torch.zeros((self.n_envs,), device=self.device, dtype=torch.long)
-
-        self._buffer[self.current] = subset
-        self.update_targets(sample.transitions.terminal, sample.transitions.rewards)
-        self.current = self.current + 1 % self._size
+        return self._add(subset, sample.transitions.terminal, sample.transitions.rewards)
 
     def draw(self, size):
-        pass
+        ts = torch.rand(device=self.device, size=(size,))
+        bs = torch.randint(0, self.n_envs, device=self.device, size=(size,))
+
+        return 
+
+
+def test_unwrap():
+    starts = unwrap(torch.tensor([0, 2]), 1, 3)
+    torch.testing.assert_allclose(starts, torch.tensor([0, -1]))
 
 def test_update_indices():
     starts = torch.tensor([7])
@@ -83,3 +109,43 @@ def test_update_indices():
     ts, bs = update_indices(starts, current)
     torch.testing.assert_allclose(ts, torch.tensor([9]))
     torch.testing.assert_allclose(bs, torch.tensor([0]))
+
+def test_add():
+    # Check linear behaviour
+    buffer = Buffer(3)
+    buffer._add(
+        arrdict.arrdict(),
+        torch.tensor([False]),
+        torch.tensor([0.]))
+    buffer._add(
+        arrdict.arrdict(),
+        torch.tensor([True]),
+        torch.tensor([1.]))
+    torch.testing.assert_allclose(
+        buffer._buffer.targets,
+        torch.tensor([[1.], [1.], [0.]]))
+
+    # Check wrapped behaviour
+    buffer = Buffer(3)
+    buffer._add(
+        arrdict.arrdict(),
+        torch.tensor([False]),
+        torch.tensor([0.]))
+    buffer._add(
+        arrdict.arrdict(),
+        torch.tensor([True]),
+        torch.tensor([0.]))
+    buffer._add(
+        arrdict.arrdict(),
+        torch.tensor([False]),
+        torch.tensor([0.]))
+    buffer._add(
+        arrdict.arrdict(),
+        torch.tensor([True]),
+        torch.tensor([1.]))
+    torch.testing.assert_allclose(
+        buffer._buffer.targets, 
+        torch.tensor([[1.], [0.], [1.]]))
+
+def test():
+    pass
