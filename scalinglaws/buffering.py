@@ -3,6 +3,7 @@
 * Need to keep a mask? End index? of whose samples have finished their games
 * 
 """
+import numpy as np
 import torch
 import torch.testing
 from rebar import arrdict
@@ -30,9 +31,10 @@ def update_indices(starts, current):
 
 class Buffer:
 
-    def __init__(self, length):
+    def __init__(self, length, keep=1.):
         self.length = length
         self._buffer = None
+        self.keep = keep
 
     def update_targets(self, terminal, rewards):
         if terminal.any():
@@ -40,6 +42,8 @@ class Buffer:
             bs = terminal.nonzero(as_tuple=False).squeeze(1)[bs]
 
             self._buffer.targets[ts % self.length, bs] = rewards[bs]
+            self._ready[terminal] = self.current
+
 
     def add_raw(self, subset, terminal, rewards):
         if self._buffer is None:
@@ -55,12 +59,12 @@ class Buffer:
             self.current = 0
             self._ready = torch.zeros((self.n_envs,), device=self.device, dtype=torch.long)
 
-        self._buffer[self.current % self.length] = arrdict.arrdict(
-            **subset,
-            targets=torch.zeros((self.n_envs, self.n_seats), device=self.device))
-        self.current = self.current + 1
+        if np.random.rand() <= self.keep:
+            self._buffer[self.current % self.length] = arrdict.arrdict(
+                **subset,
+                targets=torch.zeros((self.n_envs, self.n_seats), device=self.device))
+            self.current = self.current + 1
         self.update_targets(terminal, rewards)
-        self._ready[terminal] = self.current
 
     def add(self, sample):
         """Expects the obs to precede the transition"""

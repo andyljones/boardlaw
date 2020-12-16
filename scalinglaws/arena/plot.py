@@ -71,9 +71,8 @@ def heatmap(run_name=-1, drop=[]):
     ax.set_facecolor('dimgrey')
     ax.set_title(f'{paths.resolve(run_name)} winrate')
 
-def nontransitivities():
+def nontransitivities(run_name=-1):
     from scalinglaws.arena import database
-    run_name = -1
     w, n = database.symmetric_wins(run_name), database.symmetric_games(run_name)
     r = w/n
     e = (r*(1-r)/n)**.5
@@ -96,6 +95,6 @@ def nontransitivities():
         [c[7:-9] for c in conf.index], 
         [c[7:-9] for c in conf.columns])
 
-    sns.heatmap(results, cmap='Greens', square=True)
+    sns.heatmap(results, cmap='Greens', square=True, vmax=1, vmin=0)
 
     return results

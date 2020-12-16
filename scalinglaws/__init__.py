@@ -96,7 +96,7 @@ def run():
     worlds = worldfunc(n_envs)
     agent = agentfunc()
     opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-3, amsgrad=True)
-    buffer = buffering.Buffer(10*1024*1024//n_envs)
+    buffer = buffering.Buffer(1024*1024//n_envs)
 
     run_name = paths.timestamp('az-test')
     paths.clear(run_name)
