@@ -36,7 +36,7 @@ class Buffer:
 
     def update_targets(self, terminal, rewards):
         if terminal.any():
-            ts, bs = update_indices(self.ready[terminal], self.current)
+            ts, bs = update_indices(self._ready[terminal], self.current)
             bs = terminal.nonzero(as_tuple=False).squeeze(1)[bs]
 
             self._buffer.targets[ts % self.length, bs] = rewards[bs]
@@ -45,35 +45,43 @@ class Buffer:
         if self._buffer is None:
             self.device = terminal.device
             self.n_envs = terminal.size(0)
+            self.n_seats = rewards.shape[-1]
             self.ts = torch.arange(self.length, device=self.device)
             self.bs = torch.arange(self.n_envs, device=self.device)
 
             self._buffer = subset.map(lambda x: x.new_zeros((self.length, *x.shape)))
-            self._buffer['targets'] = torch.zeros((self.length, self.n_envs), device=self.device)
+            self._buffer['targets'] = torch.zeros((self.length, self.n_envs, self.n_seats), device=self.device)
 
             self.current = 0
-            self.ready = torch.zeros((self.n_envs,), device=self.device, dtype=torch.long)
+            self._ready = torch.zeros((self.n_envs,), device=self.device, dtype=torch.long)
 
         self._buffer[self.current % self.length] = arrdict.arrdict(
             **subset,
-            targets=torch.zeros((self.n_envs,), device=self.device))
+            targets=torch.zeros((self.n_envs, self.n_seats), device=self.device))
         self.current = self.current + 1
         self.update_targets(terminal, rewards)
-        self.ready[terminal] = self.current
+        self._ready[terminal] = self.current
 
     def add(self, sample):
         """Expects the obs to precede the transition"""
         subset = arrdict.arrdict(
-            obs=sample.obs,
+            obs=sample.worlds.obs,
+            valid=sample.worlds.valid,
+            seats=sample.worlds.seats,
             logits=sample.decisions.logits)
         return self.add_raw(subset, sample.transitions.terminal, sample.transitions.rewards)
+
+    def ready(self):
+        return (self._ready > 0).all()
 
     def sample(self, size):
         bs = torch.randint(0, self.n_envs, device=self.device, size=(size,))
 
         rs = torch.rand(device=self.device, size=(size,))
-        start = min(self.current, 0)
-        ends = self.ready[bs]
+        start = max(self.current - self.length, 0)
+        ends = self._ready[bs]
+        if (ends == start).any():
+            raise ValueError('No ready trajectories to draw from')
         ts = rs*(ends - start) + start
 
         return self._buffer[ts.long() % self.length, bs]
@@ -103,36 +111,36 @@ def test_add_raw():
     buffer.add_raw(
         arrdict.arrdict(),
         torch.tensor([False]),
-        torch.tensor([0.]))
+        torch.tensor([[0.]]))
     buffer.add_raw(
         arrdict.arrdict(),
         torch.tensor([True]),
-        torch.tensor([1.]))
+        torch.tensor([[1.]]))
     torch.testing.assert_allclose(
         buffer._buffer.targets,
-        torch.tensor([[1.], [1.], [0.]]))
+        torch.tensor([[[1.]], [[1.]], [[0.]]]))
 
     # Check wrapped behaviour
     buffer = Buffer(3)
     buffer.add_raw(
         arrdict.arrdict(),
         torch.tensor([False]),
-        torch.tensor([0.]))
+        torch.tensor([[0.]]))
     buffer.add_raw(
         arrdict.arrdict(),
         torch.tensor([True]),
-        torch.tensor([0.]))
+        torch.tensor([[0.]]))
     buffer.add_raw(
         arrdict.arrdict(),
         torch.tensor([False]),
-        torch.tensor([0.]))
+        torch.tensor([[0.]]))
     buffer.add_raw(
         arrdict.arrdict(),
         torch.tensor([True]),
-        torch.tensor([1.]))
+        torch.tensor([[1.]]))
     torch.testing.assert_allclose(
         buffer._buffer.targets, 
-        torch.tensor([[1.], [0.], [1.]]))
+        torch.tensor([[[1.]], [[0.]], [[1.]]]))
 
 def test_buffer():
     n_envs = 3
@@ -140,15 +148,15 @@ def test_buffer():
     ts = torch.zeros_like(bs)
     durations = bs+1
 
-    buffer = Buffer(10)
+    buffer = Buffer(5)
 
-    for _ in range(6):
+    for _ in range(8):
         terminal = (ts+1) % durations == 0
         rewards = (ts+1)*terminal.float()
         buffer.add_raw(
             arrdict.arrdict(ts=ts, bs=bs),
             terminal,
-            rewards)
+            rewards[..., None])
         ts = ts + 1
 
     torch.testing.assert_allclose(
@@ -157,10 +165,10 @@ def test_buffer():
                 [7., 8., 0.],
                 [8., 8., 0.],
                 [4., 4., 6.],
-                [5., 6., 6.]]))
+                [5., 6., 6.]])[..., None])
 
     for _ in range(10):
         sample = buffer.sample(3)
         ds = durations[sample.bs]
         expected = (sample.ts // ds + 1)*ds
-        torch.testing.assert_allclose(sample.targets, expected.float())
+        torch.testing.assert_allclose(sample.targets, expected[..., None].float())
