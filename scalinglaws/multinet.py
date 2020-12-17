@@ -36,7 +36,22 @@ class Streamed(nn.Module):
         torch.cuda.synchronize()
         return F.relu(y)
 
-class BMM(nn.Module):
+class AddMM(nn.Module):
+
+    def __init__(self, in_features, out_features, n_models):
+        #TODO: Why is this slower with one model than BMM?
+        super().__init__()
+        self.register_parameter('w', nn.Parameter(torch.zeros((n_models, in_features, out_features))))
+        self.register_parameter('b', nn.Parameter(torch.zeros((n_models, out_features))))
+        self.out_features = out_features
+
+    def forward(self, x, idxs):
+        y = x.new_empty((*x.shape[:-1], self.out_features))
+        for i in range(self.w.size(0)):
+            y[idxs == i] = torch.addmm(self.b[i], x[idxs == i], self.w[i])
+        return F.relu(y)
+
+class BAddBMM(nn.Module):
 
     def __init__(self, in_features, out_features, n_models):
         super().__init__()
@@ -66,8 +81,9 @@ def benchmark(cls, features=128, layers=1, models=1, envs=8192, T=128, device='c
     return 1e6*timer.time()/(T*envs)
 
 def profile(**kwargs):
+    #TODO: Check multilayer, check backprop
     results = {}
-    for cls in [Naive, Streamed, BMM]:
+    for cls in [AddMM, Naive, Streamed, BAddBMM]:
         results[cls.__name__] = pd.Series({m: benchmark(cls, **kwargs, models=m) for m in [1, 2, 4, 8, 16, 32]})
 
     df = pd.concat(results, 1)
