@@ -139,8 +139,30 @@ def demo(run_name=-1):
     world = worldfunc(n_envs, device='cuda:1')
     agent = agentfunc(device='cuda:1')
     agent.load_state_dict(storing.select(storing.load_latest(run_name), 'agent'))
-    mhx = mohex.MoHexAgent()
-    analysis.record(world, [agent, mhx], n_reps=1, N=0).notebook()
+    mhx = mohex.MoHexAgent(presearch=False, max_games=1)
+    analysis.record(world, [agent, agent], n_reps=1, N=0).notebook()
+
+def compare(fst_run=-1, snd_run=-1, n_envs=256, device='cuda:1'):
+    import pandas as pd
+
+    world = worldfunc(n_envs, device=device)
+
+    fst = agentfunc(device=device)
+    fst.load_state_dict(storing.select(storing.load_latest(fst_run), 'agent'))
+
+    snd = agentfunc(device=device)
+    snd.load_state_dict(storing.select(storing.load_latest(snd_run), 'agent'))
+
+    bw = analysis.rollout(world, [fst, snd], n_reps=1)
+    bw_wins = (bw.transitions.rewards[bw.transitions.terminal.cumsum(0) <= 1] == 1).sum(0)
+
+    wb = analysis.rollout(world, [snd, fst], n_reps=1)
+    wb_wins = (wb.transitions.rewards[wb.transitions.terminal.cumsum(0) <= 1] == 1).sum(0)
+
+    # Rows: black, white; cols: old, new
+    wins = torch.stack([bw_wins, wb_wins.flipud()]).numpy()
+
+    return pd.DataFrame(wins/n_envs, ['black', 'white'], ['fst', 'snd'])
 
 def benchmark_experience_collection():
     # Make sure to init cuda before running this 
