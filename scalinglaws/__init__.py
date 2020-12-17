@@ -90,13 +90,13 @@ def agentfunc(device='cuda'):
     return mcts.MCTSAgent(network, n_nodes=64)
 
 def run():
-    batch_size = 8192
-    n_envs = 8192
+    batch_size = 1024
+    n_envs = 1024
 
     worlds = worldfunc(n_envs)
     agent = agentfunc()
     opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-3, amsgrad=True)
-    buffer = buffering.Buffer(8*1024*1024//n_envs, keep=1.)
+    buffer = buffering.Buffer(1024*1024//n_envs, keep=1.)
 
     run_name = paths.timestamp('az-test')
     paths.clear(run_name)

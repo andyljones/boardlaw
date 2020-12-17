@@ -40,17 +40,21 @@ class Network(nn.Module):
             nn.Conv2d(2, width, 1),
             Residual(width),
             Residual(width),
+            Residual(width),
+            nn.Conv2d(width, 2, 1),
             Flatten())
+        example_in = torch.zeros((1, *obs_space.dim)).permute(0, 3, 1, 2)
+        #TODO: Does this help at all?
+        self.body = torch.jit.trace_module(self.body, {'forward': (example_in,)})
 
-        example_in = torch.zeros((1, *obs_space.dim))
-        example_out = self.body(example_in.permute(0, 3, 1, 2))
+        example_out = self.body(example_in)
         n_out = example_out.nelement()
         
         self.neck = nn.Sequential(
-            nn.Linear(n_out, 4*width),
+            nn.Linear(n_out, 2*width),
             nn.ReLU())
-        self.policy = heads.output(action_space, 4*width)
-        self.value = heads.ValueOutput(4*width)
+        self.policy = heads.output(action_space, 2*width)
+        self.value = heads.ValueOutput(2*width)
 
     # def trace(self, world):
     #     self.policy = torch.jit.trace_module(self.policy, {'forward': (world.obs, world.valid)})
