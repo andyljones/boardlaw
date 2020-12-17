@@ -191,24 +191,22 @@ class MoHexAgent:
     def __call__(self, worlds):
         self._load(worlds)
 
-        futures = []
-        for proxy, seat in zip(self._proxies, worlds.seats):
-            color = 'bw'[seat]
-            futures.append(proxy.solve_async(color))
+        actions = torch.distributions.Categorical(probs=worlds.valid.float()).sample()
+        use_mohex = torch.rand(worlds.n_envs) > self.crippling
+
+        futures = {}
+        for i, (proxy, seat) in enumerate(zip(self._proxies, worlds.seats)):
+            if use_mohex[i]:
+                color = 'bw'[seat]
+                futures[i] = proxy.solve_async(color)
         
-        actions = []
-        for future, seat in zip(futures, worlds.seats):
-            row, col = future()
-            actions.append((row, col) if seat == 0 else (col, row))
-
-        actions = torch.tensor(actions, dtype=torch.long, device=worlds.device)
-
-        # To linear indices
-        actions = actions[:, 0]*worlds.boardsize + actions[:, 1]
-
-        randoms = torch.distributions.Categorical(probs=worlds.valid.float()).sample()
-        use_randoms = torch.rand(actions.shape) < self.crippling
-        actions[use_randoms] = randoms[use_randoms] 
+        for i,future in futures.items():
+            seat = worlds.seats[i]
+            if seat == 0:
+                row, col = future()
+            else:
+                col, row = future()
+            actions[i] = worlds.boardsize*row + col
         
         return arrdict.arrdict(
             actions=actions)
