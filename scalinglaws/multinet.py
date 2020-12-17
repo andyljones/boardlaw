@@ -1,9 +1,8 @@
 import pandas as pd
-import aljpy
 import torch
 from torch import nn
 from torch.nn import functional as F
-from rebar import recurrence
+from rebar import recurrence, timer
 
 class Naive(nn.Module):
 
@@ -73,12 +72,10 @@ def benchmark(cls, features=128, layers=1, models=1, envs=8192, T=128, device='c
         model.extend([cls(features, features, models)])
     model = recurrence.Sequential(*model).to(device)
 
-    with aljpy.timer() as timer:
-        torch.cuda.synchronize()
-        for t in range(T):
+    with timer.timer(cuda=True) as t:
+        for _ in range(T):
             y = model(x, idxs=idxs)
-        torch.cuda.synchronize()
-    return 1e6*timer.time()/(T*envs)
+    return 1e6*t.time()/(T*envs)
 
 def profile(**kwargs):
     #TODO: Check multilayer, check backprop

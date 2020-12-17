@@ -6,6 +6,7 @@ from . import database
 import seaborn as sns
 import matplotlib.pyplot as plt
 from rebar import paths
+import copy
 
 def to_pandas(soln, games):
     return dotdict.dotdict(
@@ -98,3 +99,44 @@ def nontransitivities(run_name=-1):
     sns.heatmap(results, cmap='Greens', square=True, vmax=1, vmin=0)
 
     return results
+
+def errors(run_name=-1):
+    run_name = paths.resolve(run_name)
+    games, wins = database.symmetric_pandas(run_name)
+    games, wins = drop_latest(games), drop_latest(wins)
+    games, wins = drop_names(games, ['mohex']), drop_names(wins, ['mohex'])
+    soln = activelo.solve(games.values, wins.values)
+
+    rates = (wins + 1)/(games + 2)
+
+    expected = soln.μ[:, None] - soln.μ[None, :]
+    actual = -(np.log(1 - rates) - np.log(rates)).where(games > 2, np.nan).values
+
+    resid_var = np.nanmean((actual - expected)**2)/np.nanmean(actual**2)
+    corr = np.corrcoef(actual[~np.isnan(actual)], expected[~np.isnan(actual)])[0, 1]
+
+    fig = plt.figure()
+    gs = plt.GridSpec(2, 3, fig, height_ratios=[10, 1])
+    fig.set_size_inches(18, 6)
+
+    cmap = copy.copy(plt.cm.RdBu)
+    cmap.set_bad('lightgrey')
+    vlim = max(abs(expected).max(), np.nanmax(abs(actual)))
+    kwargs = dict(cmap=cmap, vmin=-vlim, vmax=+vlim, aspect=1)
+
+    ax = plt.subplot(gs[0, 0])
+    ax.imshow(actual, **kwargs)
+    ax.set_title('actual')
+
+    ax = plt.subplot(gs[0, 1])
+    ax.imshow(expected, **kwargs)
+    ax.set_title('expected')
+
+    ax = plt.subplot(gs[0, 2])
+    im = ax.imshow(actual - expected, **kwargs)
+    ax.set_title('diff')
+
+    ax = plt.subplot(gs[1, :])
+    plt.colorbar(im, cax=ax, orientation='horizontal')
+    ax.annotate(f'resid var: {resid_var:.0%}, corr: {corr:.0%}', (.5, -1.2), ha='center', xycoords='axes fraction')
+

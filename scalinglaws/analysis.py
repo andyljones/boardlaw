@@ -6,6 +6,7 @@ from logging import getLogger
 
 log = getLogger(__name__)
 
+@torch.no_grad()
 def rollout(worlds, agents, n_steps=None, n_trajs=None, n_reps=None):
     assert sum(x is not None for x in (n_steps, n_trajs, n_reps)) == 1, 'Must specify exactly one of n_steps or n_trajs or n_reps'
 

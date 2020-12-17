@@ -66,7 +66,8 @@ class MCTS:
 
     def initialize(self, evaluator):
         world = self.worlds[:, 0]
-        decisions = evaluator(world, value=True)
+        with torch.no_grad():
+            decisions = evaluator(world, value=True)
         self.decisions.logits[:, self.sim] = dirichlet_noise(decisions.logits, world.valid, eps=self.noise_eps)
         self.decisions.v[:, 0] = decisions.v
 

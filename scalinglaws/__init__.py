@@ -133,7 +133,7 @@ def monitor(run_name):
             time.sleep(1)
 
 def demo(run_name=-1):
-    from . import mohex
+    from scalinglaws import mohex
 
     n_envs = 4
     world = worldfunc(n_envs, device='cuda:1')
@@ -160,7 +160,7 @@ def compare(fst_run=-1, snd_run=-1, n_envs=256, device='cuda:1'):
     wb_wins = (wb.transitions.rewards[wb.transitions.terminal.cumsum(0) <= 1] == 1).sum(0)
 
     # Rows: black, white; cols: old, new
-    wins = torch.stack([bw_wins, wb_wins.flipud()]).numpy()
+    wins = torch.stack([bw_wins, wb_wins.flipud()]).detach().cpu().numpy()
 
     return pd.DataFrame(wins/n_envs, ['black', 'white'], ['fst', 'snd'])
 
