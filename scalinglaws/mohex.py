@@ -175,9 +175,10 @@ def param_list():
 
 class MoHexAgent:
 
-    def __init__(self, **kwargs):
+    def __init__(self, crippling=0., **kwargs):
         self._proxies = []
         self._kwargs = kwargs
+        self.crippling = crippling
 
     def _load(self, worlds):
         if len(self._proxies) < worlds.n_envs:
@@ -204,6 +205,10 @@ class MoHexAgent:
 
         # To linear indices
         actions = actions[:, 0]*worlds.boardsize + actions[:, 1]
+
+        randoms = torch.distributions.Categorical(probs=worlds.valid.float()).sample()
+        use_randoms = torch.rand(actions.shape) < self.crippling
+        actions[use_randoms] = randoms[use_randoms] 
         
         return arrdict.arrdict(
             actions=actions)
@@ -229,7 +234,7 @@ def check_setting(setting, common={'presearch': False, 'max_games': 1}, n_envs=9
 
     world = hex.Hex.initial(n_envs=n_envs, boardsize=5, device=device)
 
-    bad = MoHexAgent(**common, **setting)
+    bad = MoHexAgent(**{**common, **setting})
     good = MoHexAgent(**common)
 
     trace = analysis.rollout(world, [bad, good], n_reps=1)

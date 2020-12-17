@@ -24,7 +24,7 @@ FROM build AS dev
 # Install the Python packages I usually use
 RUN apt-get install -y --no-install-recommends \
         # Needed for sanity
-        neovim gdb wget man-db tree silversearcher-ag build-essential \
+        neovim gdb wget man-db tree silversearcher-ag build-essential htop \
         # Needed for git installs
         git ssh-client 
 
