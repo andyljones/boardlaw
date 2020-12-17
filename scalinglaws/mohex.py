@@ -10,7 +10,9 @@ from tempfile import NamedTemporaryFile
 
 log = getLogger(__name__)
 
-def configfile(max_games=None, max_memory=None, presearch=None, max_time=None, max_nodes=None):
+
+def configfile(max_games=None, max_memory=None, presearch=None, 
+        max_time=None, max_nodes=None, extras=[]):
     contents = []
     if max_games is not None:
         contents.append(f'param_mohex max_games {max_games}')
@@ -27,6 +29,7 @@ def configfile(max_games=None, max_memory=None, presearch=None, max_time=None, m
     if max_time is not None:
         contents.append(f'param_mohex use_time_management 1')
         contents.append(f'param_game game_time {max_time/2}')
+    contents.extend(extras)
 
     with NamedTemporaryFile('w', delete=False, prefix='mohex-config-') as f:
         f.write('\n'.join(contents))
@@ -140,6 +143,35 @@ class MoHex:
         s = self.query('showboard')
         print('\n'.join(s.splitlines()[3:-1]))
 
+def param_list():
+    import re 
+
+    mhx = MoHex()
+    parts = '''param_book
+    param_book_builder
+    param_dfpn
+    param_dfpn_db
+    param_dfs
+    param_dfs_db
+    param_game
+    param_mohex
+    param_mohex_policy
+    param_player_board
+    param_player_ice
+    param_player_vc
+    param_solver_board
+    param_solver_ice
+    param_solver_vc'''
+    for p in parts.splitlines():
+        print(p)
+        for line in mhx.query(p).strip().splitlines():
+            try:
+                m = re.match(r'([\[\]\w]+) ([\w_]+) (.*)', line)
+                print(f'  {m.group(2):31s}{m.group(1):10s}{m.group(3)}')
+            except:
+                print(f'  {line}')
+
+
 class MoHexAgent:
 
     def __init__(self, **kwargs):
@@ -181,6 +213,84 @@ class MoHexAgent:
     def to(self, device):
         assert device == 'cpu'
         return self
+
+def test_setting(setting, common={'presearch': False, 'max_games': 1}, n_envs=9, device='cuda:1'):
+    """Play a MoHex v MoHex game, with one agent with certain 'bad' parameters playing black.
+    
+    If the black player gets less than a perfect win-rate, hooray! You've found the 'bad' setting.
+    """
+    if isinstance(setting, str):
+        setting = {'extras': [setting]}
+    elif isinstance(setting, list):
+        setting = {'extras': setting}
+
+    from . import analysis
+
+    world = hex.Hex.initial(n_envs=n_envs, boardsize=5, device=device)
+
+    bad = MoHexAgent(**common, **setting)
+    good = MoHexAgent(**common)
+
+    trace = analysis.rollout(world, [bad, good], n_reps=1)
+
+    mask = trace.transitions.terminal.cumsum(0).le(1)
+    rates = trace.transitions.rewards[mask].eq(1).sum(0)/n_envs
+
+    print(f'"{setting}": winrate of {rates[0]}')
+    return rates[0] < 1
+
+def test_settings():
+    params = """param_mohex
+    backup_ice_info                [bool]    1
+    extend_unstable_search         [bool]    1
+    perform_pre_search             [bool]    1
+    prior_pruning                  [bool]    1
+    use_rave                       [bool]    1
+    use_root_data                  [bool]    1
+    virtual_loss                   [bool]    1
+    param_mohex_policy
+    pattern_heuristic              [bool]    1
+    param_player_board
+    backup_ice_info                [bool]    1
+    use_decompositions             [bool]    1
+    use_ice                        [bool]    1
+    use_vcs                        [bool]    1
+    param_player_ice
+    find_all_pattern_superiors     [bool]    1
+    use_capture                    [bool]    1
+    find_reversible                [bool]    1
+    param_player_vc
+    use_patterns                   [bool]    1
+    use_non_edge_patterns          [bool]    1
+    incremental_builds             [bool]    1
+    limit_fulls                    [bool]    1
+    limit_or                       [bool]    1
+    param_solver_board
+    backup_ice_info                [bool]    1
+    use_decompositions             [bool]    1  
+    use_ice                        [bool]    1  
+    use_vcs                        [bool]    1  
+    param_solver_ice
+    find_all_pattern_superiors     [bool]    1
+    use_capture                    [bool]    1
+    find_reversible                [bool]    1
+    param_solver_vc
+    use_patterns                   [bool]    1
+    use_non_edge_patterns          [bool]    1
+    incremental_builds             [bool]    1
+    limit_fulls                    [bool]    1
+    limit_or                       [bool]    1"""
+
+    results = {}
+    category = None
+    for l in params.splitlines():
+        if not l.startswith('  '):
+            category = l.strip()
+        else:
+            name = l.strip().split(' ')[0]
+            results[f'{category} {name}'] = test_setting(f'{category} {name} 0')
+
+    return results
 
 def test():
     worlds = hex.Hex.initial(1, boardsize=5)
