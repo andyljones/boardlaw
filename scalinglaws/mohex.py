@@ -4,6 +4,7 @@ import os
 from select import select
 from logging import getLogger
 import shlex
+import time
 from . import hex
 from rebar import arrdict
 from tempfile import NamedTemporaryFile
@@ -214,7 +215,7 @@ class MoHexAgent:
         assert device == 'cpu'
         return self
 
-def test_setting(setting, common={'presearch': False, 'max_games': 1}, n_envs=9, device='cuda:1'):
+def check_setting(setting, common={'presearch': False, 'max_games': 1}, n_envs=9, device='cuda:1'):
     """Play a MoHex v MoHex game, with one agent with certain 'bad' parameters playing black.
     
     If the black player gets less than a perfect win-rate, hooray! You've found the 'bad' setting.
@@ -239,7 +240,9 @@ def test_setting(setting, common={'presearch': False, 'max_games': 1}, n_envs=9,
     print(f'"{setting}": winrate of {rates[0]}')
     return rates[0] < 1
 
-def test_settings():
+def check_settings():
+    """This crashes vscode/ssh/whatever after 4-5 iterations"""
+
     params = """param_mohex
     backup_ice_info                [bool]    1
     extend_unstable_search         [bool]    1
@@ -248,33 +251,33 @@ def test_settings():
     use_rave                       [bool]    1
     use_root_data                  [bool]    1
     virtual_loss                   [bool]    1
-    param_mohex_policy
+param_mohex_policy
     pattern_heuristic              [bool]    1
-    param_player_board
+param_player_board
     backup_ice_info                [bool]    1
     use_decompositions             [bool]    1
     use_ice                        [bool]    1
     use_vcs                        [bool]    1
-    param_player_ice
+param_player_ice
     find_all_pattern_superiors     [bool]    1
     use_capture                    [bool]    1
     find_reversible                [bool]    1
-    param_player_vc
+param_player_vc
     use_patterns                   [bool]    1
     use_non_edge_patterns          [bool]    1
     incremental_builds             [bool]    1
     limit_fulls                    [bool]    1
     limit_or                       [bool]    1
-    param_solver_board
+param_solver_board
     backup_ice_info                [bool]    1
     use_decompositions             [bool]    1  
     use_ice                        [bool]    1  
     use_vcs                        [bool]    1  
-    param_solver_ice
+param_solver_ice
     find_all_pattern_superiors     [bool]    1
     use_capture                    [bool]    1
     find_reversible                [bool]    1
-    param_solver_vc
+param_solver_vc
     use_patterns                   [bool]    1
     use_non_edge_patterns          [bool]    1
     incremental_builds             [bool]    1
@@ -286,9 +289,14 @@ def test_settings():
     for l in params.splitlines():
         if not l.startswith('  '):
             category = l.strip()
+        elif l.strip().startswith('#'):
+            print(f'Skipping "{l.strip()}"')
+            continue
         else:
+            print(f'Trying "{l.strip()}"')
             name = l.strip().split(' ')[0]
-            results[f'{category} {name}'] = test_setting(f'{category} {name} 0')
+            results[f'{category} {name}'] = check_setting(f'{category} {name} 0')
+            time.sleep(5)
 
     return results
 

@@ -85,7 +85,7 @@ def worldfunc(n_envs, device='cuda'):
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
-    network = networks.Network(worlds.obs_space, worlds.action_space, width=128).to(worlds.device)
+    network = networks.Network(worlds.obs_space, worlds.action_space).to(worlds.device)
     # network.trace(worlds)
     return mcts.MCTSAgent(network, n_nodes=64)
 
@@ -125,7 +125,7 @@ def run():
             stats.gpu.memory(worlds.device)
             stats.gpu.vitals(worlds.device, throttle=15)
 
-def monitor(run_name):
+def monitor(run_name=-1):
     compositor = widgets.Compositor()
     with logging.from_dir(run_name, compositor), stats.from_dir(run_name, compositor), \
             arena.monitor(run_name, worldfunc, agentfunc):

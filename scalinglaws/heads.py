@@ -51,7 +51,6 @@ class TensorIntake(nn.Linear):
         T, B = obs.shape[:2]
         return super().forward(obs.reshape(T*B, -1)).reshape(T, B, -1)
 
-
 class ConcatIntake(nn.Module):
 
     def __init__(self, space, width):
