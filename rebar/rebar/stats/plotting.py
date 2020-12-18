@@ -8,9 +8,7 @@ from bokeh import layouts as bol
 from . import reading
 from .categories import CATEGORIES
 from contextlib import contextmanager
-from IPython.display import clear_output
 
-bop.output_notebook(hide_banner=True)
 
 def array(fig):
     fig.canvas.draw_idle()
@@ -25,6 +23,7 @@ class Stream:
 
     def __init__(self, run_name=-1, prefix=''):
         super().__init__()
+        bop.output_notebook(hide_banner=True)
 
         self._reader = reading.Reader(run_name, prefix)
 
@@ -44,7 +43,8 @@ class Stream:
             f.title = bom.Title(text=title)
             children.append(f)
         self._grid = self._new_grid(children)
-        ## TODO: Not wild about this
+        ## TODO: Not wild about the flicker that comes from clearing this way
+        from IPython.display import clear_output
         clear_output(wait=True)
         self._handle = bop.show(self._grid, notebook_handle=True)
 
@@ -63,7 +63,6 @@ class Stream:
             self._source.stream(new.reset_index())
         
         boi.push_notebook(handle=self._handle)
-
 
 def view(run_name=-1, prefix='', rule='60s'):
     stream = Stream(run_name, prefix)

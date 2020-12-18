@@ -1,12 +1,6 @@
-from IPython.display import display, clear_output
 import threading
 
 WRITE_LOCK = threading.RLock()
-
-def widgets():
-    """Deferred import because it's really slow"""
-    from ipywidgets import widgets
-    return widgets
 
 class Output:
 
@@ -16,6 +10,7 @@ class Output:
         self.lines = lines
 
     def refresh(self, content):
+        from IPython.display import clear_output
         # This is not thread-safe, but the recommended way to do 
         # thread-safeness - to use append_stdout - causes flickering
         with WRITE_LOCK, self._output:
@@ -28,14 +23,19 @@ class Output:
 class Compositor:
 
     def __init__(self, lines=80):
+        import ipywidgets as widgets
+
         self.lines = lines
-        self._box = widgets().HBox(
-            layout=widgets().Layout(align_items='stretch'))
+        self._box = widgets.HBox(
+            layout=widgets.Layout(align_items='stretch'))
+        from IPython import display
         display(self._box)
 
     def output(self):
-        output = widgets().Output(
-            layout=widgets().Layout(width='100%'))
+        import ipywidgets as widgets
+
+        output = widgets.Output(
+            layout=widgets.Layout(width='100%'))
         self._box.children = (*self._box.children, output)
 
         return Output(self, output, self.lines)

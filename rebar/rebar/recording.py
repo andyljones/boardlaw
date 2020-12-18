@@ -2,7 +2,6 @@ import av
 from io import BytesIO
 import numpy as np
 import base64
-from IPython.display import display, HTML
 from pathlib import Path
 from multiprocessing import cpu_count
 import matplotlib.pyplot as plt
@@ -115,6 +114,7 @@ def html_tag(video, height=None, **kwargs):
 </video>"""
 
 def notebook(video, height=640):
+    from IPython.display import display, HTML
     return display(HTML(html_tag(video, height)))
 
 def _init():
