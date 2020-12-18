@@ -76,9 +76,7 @@ def wins(run_name, min_games=-1):
     df = summary(run_name)
     if len(df) == 0:
         return pd.DataFrame()
-    games = df.white_wins + df.black_wins
-    games = games.where(games > min_games)
-    return df.black_wins/games
+    return df.black_wins
 
 def moves(run_name):
     df = summary(run_name)

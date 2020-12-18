@@ -8,14 +8,20 @@ from logging import getLogger
 
 log = getLogger(__name__)
 
-def run():
+def run(max_diff=np.inf):
     agent = mohex.MoHexAgent()
     worlds = hex.Hex.initial(n_envs=8)
 
     universe = np.linspace(0, 1, 11)
     pairs = cycle(permutations(universe, 2))
 
-    active = torch.tensor(list(islice(pairs, worlds.n_envs)))
+    active = torch.zeros((worlds.n_envs, 2))
+    for idx in range(worlds.n_envs):
+        for x, y in pairs:
+            if abs(x - y) <= max_diff:
+                log.info(f'Starting on {x} v {y}')
+                active[idx] = torch.tensor((x, y))
+                break
     
     moves = torch.zeros((worlds.n_envs,))
     while True:
@@ -38,6 +44,11 @@ def run():
             log.info(f'Storing {result.names[0]} v {result.names[1]}, {result.wins[0]}-{result.wins[1]} in {result.moves} moves')
             database.store('mohex', result)
             moves[idx] = 0
-            active[idx] = torch.tensor(next(pairs))
+
+            for x, y in pairs:
+                if abs(x - y) <= max_diff:
+                    log.info(f'Starting on {x} v {y}')
+                    active[idx] = torch.tensor((x, y))
+                    break
 
         
