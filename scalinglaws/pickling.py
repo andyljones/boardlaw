@@ -1,3 +1,8 @@
+"""This is a copy-pasted chunk of cloudpickle with a modified _is_importable that
+redirects pickling of local-dir code from the standard pickling machinery (which
+only records the name and file) into the cloudpickle machinery (which takes a full
+copy of the code).
+"""
 from cloudpickle.cloudpickle_fast import (
     CloudPickler, subimport, dynamic_subimport,
     _BUILTIN_TYPE_NAMES, _builtin_type, _dynamic_class_reduce,
@@ -5,19 +10,30 @@ from cloudpickle.cloudpickle_fast import (
 from cloudpickle.cloudpickle import _lookup_module_and_qualname
 from collections import ChainMap
 import sys
+import os
+from io import BytesIO
+
+def is_library(obj, name):
+    mod_qualname = _lookup_module_and_qualname(obj, name=name)
+    if mod_qualname is None:
+        return False
+    else:
+        mod, qualname = mod_qualname
+        if hasattr(mod, '__file__'):
+            return not mod.__file__.startswith(os.getcwd())
+        return True
 
 def _is_importable(obj, name=None):
-    """Dispatcher utility to test the importability of various constructs."""
+    """This is the only function we've modified; everything else here is 
+    just needed to nestle it into the CloudPickler's machinery"""
     if isinstance(obj, types.FunctionType):
-        return _lookup_module_and_qualname(obj, name=name) is not None
+        return is_library(obj, name)
     elif issubclass(type(obj), type):
-        return _lookup_module_and_qualname(obj, name=name) is not None
+        return is_library(obj, name)
     elif isinstance(obj, types.ModuleType):
-        # We assume that sys.modules is primarily used as a cache mechanism for
-        # the Python import machinery. Checking if a module has been added in
-        # is sys.modules therefore a cheap and simple heuristic to tell us whether
-        # we can assume  that a given module could be imported by name in
-        # another Python process.
+        if hasattr(obj, '__file__'):
+            if obj.__file__.startswith(os.getcwd()):
+                return False
         return obj.__name__ in sys.modules
     else:
         raise TypeError(
@@ -72,6 +88,17 @@ class LocalPickler(CloudPickler):
             # distpatch_table
             return NotImplemented
 
+def dump(obj, file, protocol=None, buffer_callback=None):
+    LocalPickler(file, protocol=protocol, buffer_callback=buffer_callback).dump(obj)
+
+def dumps(obj, protocol=None, buffer_callback=None):
+    with BytesIO() as file:
+        cp = LocalPickler(file, protocol=protocol, buffer_callback=buffer_callback)
+        cp.dump(obj)
+        return file.getvalue()
+
+### TESTS
+
 OLD = """
 from torch import nn
 class TestNetwork(nn.Module):
@@ -95,42 +122,40 @@ class TestNetwork(nn.Module):
         return self.w(x)*0 + 2
 """
 
+def reload_recreate(path, contents):
+    import importlib
+    from pathlib import Path
+
+    #TODO: Is there a better way to temporarily ignore the bytecode cache?
+    Path('__pycache__/test_pickling.cpython-38.pyc').unlink(True)
+    path.write_text(contents)
+    import test_pickling
+    importlib.reload(test_pickling)
+    from test_pickling import TestNetwork
+    return TestNetwork()
+
 def test():
     import os
     import pickle
-    import pathlib
-    import importlib
     import torch
+    from pathlib import Path
 
     try:
-        path = pathlib.Path('test_pickling.py')
-        import test_pickling
+        path = Path('test_pickling.py')
 
-        os.remove('__pycache__/test_pickling.cpython-38.pyc')
-        path.write_text(OLD)
-        importlib.reload(test_pickling)
-        from test_pickling import TestNetwork
-
-
-        net = TestNetwork()
+        old = reload_recreate(path, OLD)
         with open('test_pickling.pkl', 'wb+') as f:
-            LocalPickler(f).dump(net)
+            LocalPickler(f).dump(old)
 
-        os.remove('__pycache__/test_pickling.cpython-38.pyc')
-        path.write_text(NEW)
-        importlib.reload(test_pickling)
-        from test_pickling import TestNetwork
-
+        new = reload_recreate(path, NEW)
         with open('test_pickling.pkl', 'rb+') as f:
             old = pickle.load(f)
-            
-        new = TestNetwork()
             
         assert old.w.weight.shape[0] == 1
         assert new.w.weight.shape[0] == 2
 
-        assert old(torch.zeros(1)) == 1
-        assert new(torch.zeros(2)) == 2
+        assert old(torch.zeros(1))[0] == 1
+        assert new(torch.zeros(2))[0] == 2
     finally:
-        os.remove('test_pickling.pkl')
-        os.remove('test_pickling.py')
+        Path('test_pickling.pkl').unlink(True)
+        Path('test_pickling.py').unlink(True)
