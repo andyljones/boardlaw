@@ -15,7 +15,7 @@ def matchup_indices(n_envs, n_seats):
     patterns = matchup_patterns(n_seats)
     return patterns.repeat((n_envs//len(patterns), 1))
 
-def gather(wins, moves, matchup_idxs, names):
+def gather(wins, moves, matchup_idxs, names, boardsize):
     names = np.array(names)
     n_envs, n_seats = matchup_idxs.shape
     results = []
@@ -26,7 +26,8 @@ def gather(wins, moves, matchup_idxs, names):
             names=tuple(names[p]),
             wins=tuple(map(float, ws)),
             moves=float(ms[0]),
-            games=float(ws.sum())))
+            games=float(ws.sum()),
+            boardsize=boardsize))
     return results
 
 def evaluate(worlds, agents):
@@ -52,7 +53,7 @@ def evaluate(worlds, agents):
         if terminal.all():
             break
     
-    results = gather(wins.cpu(), moves.cpu(), matchup_idxs.cpu(), list(agents))
+    results = gather(wins.cpu(), moves.cpu(), matchup_idxs.cpu(), list(agents), worlds.boardsize)
     return results
 
 def test():

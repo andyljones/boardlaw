@@ -175,10 +175,10 @@ def param_list():
 
 class MoHexAgent:
 
-    def __init__(self, crippling=0., **kwargs):
+    def __init__(self, random=0., **kwargs):
         self._proxies = []
         self._kwargs = kwargs
-        self.crippling = crippling
+        self.random = random
 
     def _load(self, worlds):
         if len(self._proxies) < worlds.n_envs:
@@ -192,7 +192,7 @@ class MoHexAgent:
         self._load(worlds)
 
         actions = torch.distributions.Categorical(probs=worlds.valid.float()).sample()
-        use_mohex = torch.rand(worlds.n_envs) > self.crippling
+        use_mohex = torch.rand(worlds.n_envs) >= self.random
 
         futures = {}
         for i, (proxy, seat) in enumerate(zip(self._proxies, worlds.seats)):

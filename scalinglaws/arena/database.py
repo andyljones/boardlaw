@@ -14,6 +14,7 @@ def database():
                 black_name text, white_name text, 
                 black_wins real, white_wins real,
                 moves real,
+                boardsize real,
                 PRIMARY KEY (run_name, black_name, white_name))'''
         conn.execute(results_table)
         yield conn
@@ -25,11 +26,11 @@ def store(run_name, result):
         return 
     # upsert: https://stackoverflow.com/questions/2717590/sqlite-insert-on-duplicate-key-update-upsert
     with database() as conn:
-        subs = (run_name, *result.names, *result.wins, result.moves, 
+        subs = (run_name, *result.names, *result.wins, result.moves, result.boardsize,
             *result.wins, result.moves)
         conn.execute('''
             insert into results 
-            values (?,?,?,?,?,?)
+            values (?,?,?,?,?,?,?)
             on conflict(run_name, black_name, white_name) do update set 
             black_wins = black_wins + ?,
             white_wins = white_wins + ?,
