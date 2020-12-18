@@ -4,7 +4,6 @@ from rebar import arrdict
 import torch
 import torch.distributions
 import activelo
-from IPython import display 
 
 def winrate(black, white):
     return 1/(1 + np.exp(-(black - white)))
@@ -75,6 +74,7 @@ def simulate(truth, n_games=256, σresid_tol=.1):
         trace.append(arrdict.arrdict({k: v for k, v in soln.items() if k != 'trace'}))
 
         plt.close()
+        from IPython import display 
         display.clear_output(wait=True)
         display.display(plot(trace, truth))
         if soln.σresid < σresid_tol:
