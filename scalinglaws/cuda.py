@@ -2,11 +2,13 @@ import torch
 import torch.cuda
 import sysconfig
 from pkg_resources import resource_filename
-import torch.utils.cpp_extension
 
 DEBUG = False
 
 def load(pkg):
+    # This import is pretty slow, so let's defer it
+    import torch.utils.cpp_extension
+
     name = pkg.split('.')[-1] + 'cuda' 
     [torch_libdir] = torch.utils.cpp_extension.library_paths()
     python_libdir = sysconfig.get_config_var('LIBDIR')

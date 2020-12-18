@@ -24,10 +24,18 @@ BL = 6
 BC = 7
 BR = 8
 
-loaded = cuda.load(__package__)
-for k in dir(loaded):
-    if not k.startswith('__'):
-        globals()[k] = getattr(loaded, k)
+_cache = None
+def module():
+    global _cache
+    if _cache is None:
+        _cache = cuda.load(__package__)
+    return _cache 
+
+def step(*args, **kwargs):
+    return module().step(*args, **kwargs)
+
+def observe(*args, **kwargs):
+    return module().observe(*args, **kwargs)
 
 def empty_board():
     return torch.tensor([[
@@ -46,7 +54,7 @@ def tokened_board(*moves):
 def apply(seat, action, board):
     seats = torch.tensor([seat]).int().cuda()
     actions = torch.tensor([action]).int().cuda()
-    return loaded.step(board, seats, actions)
+    return step(board, seats, actions)
 
 def test_move(seat, action, initial, expected):
     result = apply(seat, action, initial)
