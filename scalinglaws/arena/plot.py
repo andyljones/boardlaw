@@ -3,7 +3,6 @@ import numpy as np
 from rebar import dotdict
 import pandas as pd
 from . import database
-import seaborn as sns
 import matplotlib.pyplot as plt
 from rebar import paths
 import copy
@@ -59,6 +58,8 @@ def periodic(run_name, target=None, drop=[]):
     return μ
 
 def heatmap(run_name=-1, drop=[]):
+    import seaborn as sns
+
     rates = database.symmetric_wins(run_name)/database.symmetric_games(run_name)
     rates = (rates
         .drop(drop,  axis=0)
@@ -73,6 +74,7 @@ def heatmap(run_name=-1, drop=[]):
     ax.set_title(f'{paths.resolve(run_name)} winrate')
 
 def nontransitivities(run_name=-1):
+    import seaborn as sns
     from scalinglaws.arena import database
     w, n = database.symmetric_wins(run_name), database.symmetric_games(run_name)
     r = w/n
