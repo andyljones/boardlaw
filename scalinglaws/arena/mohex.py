@@ -5,27 +5,50 @@ from . import database
 from itertools import permutations, cycle, islice
 from rebar import arrdict
 from logging import getLogger
+import activelo
 
 log = getLogger(__name__)
 
-def run(max_diff=np.inf):
+def refill(names, queue, count=1):
+    if len(queue) >= count:
+        return 
+
+    n = (database.symmetric_games('mohex')
+            .reindex(index=names, columns=names)
+            .fillna(0))
+    w = (database.symmetric_wins('mohex')
+            .reindex(index=names, columns=names)
+            .fillna(0))
+
+    soln = activelo.solve(n.values, w.values)
+    imp = activelo.improvement(soln, 1)
+    while len(queue) < count:
+        probs = imp.flatten()/imp.sum()
+        idx = np.random.choice(np.arange(n.size), p=probs)
+        pair = (idx // n.shape[0], idx % n.shape[0])
+
+        log.info(f'Adding {pair} to the list')
+        queue.append(pair)
+        queue.append(pair[::-1])
+
+def run():
     agent = mohex.MoHexAgent()
     worlds = hex.Hex.initial(n_envs=8)
 
-    universe = np.linspace(0, 1, 11)
-    pairs = cycle(permutations(universe, 2))
+    universe = torch.linspace(0, 1, 11)
+    names = sorted([f'mohex-{r}' for r in universe])
 
-    active = torch.zeros((worlds.n_envs, 2))
-    for idx in range(worlds.n_envs):
-        for x, y in pairs:
-            if abs(x - y) <= max_diff:
-                log.info(f'Starting on {x} v {y}')
-                active[idx] = torch.tensor((x, y))
-                break
-    
+    queue = []
+    refill(names, queue, worlds.n_envs)
+
+    active = torch.tensor(queue[:worlds.n_envs])
+    queue = queue[worlds.n_envs:]
+
     moves = torch.zeros((worlds.n_envs,))
     while True:
-        agent.random = active.gather(1, worlds.seats[:, None].long().cpu())[:, 0]
+        idxs = active.gather(1, worlds.seats[:, None].long().cpu())[:, 0]
+        agent.random = universe[idxs]
+
         decisions = agent(worlds)
         worlds, transitions = worlds.step(decisions.actions)
         log.info('Stepped')
@@ -37,18 +60,17 @@ def run(max_diff=np.inf):
         terminal = transitions.terminal.cpu()
         for idx in terminal.nonzero(as_tuple=False).squeeze(-1):
             result = arrdict.arrdict(
-                names=(f'mohex-{active[idx][0]:.2f}', f'mohex-{active[idx][1]:.2f}'),
+                names=(f'mohex-{universe[active[idx][0]]:.2f}', f'mohex-{universe[active[idx][1]]:.2f}'),
                 wins=tuple(map(int, wins[idx])),
                 moves=int(moves[idx]),
                 boardsize=worlds.boardsize)
+
             log.info(f'Storing {result.names[0]} v {result.names[1]}, {result.wins[0]}-{result.wins[1]} in {result.moves} moves')
             database.store('mohex', result)
+
             moves[idx] = 0
 
-            for x, y in pairs:
-                if abs(x - y) <= max_diff:
-                    log.info(f'Starting on {x} v {y}')
-                    active[idx] = torch.tensor((x, y))
-                    break
-
-        
+            refill(names, queue)
+            log.info(f'Starting on {queue[0]}')
+            active[idx] = torch.tensor(queue[0])
+            queue = queue[1:]
