@@ -4,7 +4,6 @@ import time
 from pathlib import Path
 from collections import defaultdict, deque
 import logging.handlers
-import ipywidgets as widgets
 from contextlib import contextmanager
 import psutil
 from . import widgets, paths

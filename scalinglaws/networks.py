@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from . import heads, lstm
+from . import heads
 from torch import nn
 from rebar import recurrence, arrdict
 from torch.nn import functional as F
