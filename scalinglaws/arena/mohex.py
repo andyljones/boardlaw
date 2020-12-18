@@ -19,6 +19,11 @@ def refill(names, queue, count=1):
     w = (database.symmetric_wins('mohex')
             .reindex(index=names, columns=names)
             .fillna(0))
+    
+    for (i, j) in queue:
+        ni, nj = names[i], names[j]
+        w.loc[ni, nj] += (w.loc[ni, nj] + 1)/(n.loc[ni, nj] + 2)
+        n.loc[ni, nj] += 1
 
     soln = activelo.solve(n.values, w.values)
     imp = activelo.improvement(soln, 1)
