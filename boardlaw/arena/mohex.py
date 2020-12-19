@@ -9,6 +9,9 @@ import pandas as pd
 
 log = getLogger(__name__)
 
+BOARDSIZES = [3, 5, 7, 9, 11]
+RUN_NAMES = [f'mohex-{s}' for s in BOARDSIZES]
+
 def refill(run_name, names, queue, count=1):
     if len(queue) >= count:
         return 
@@ -83,6 +86,9 @@ def run(boardsize):
 
 
 def elos():
-    df = pd.concat({f: analysis.elos(f'mohex-{f}', target=-1) for f in [3, 5, 7, 9, 11]}, 1)
+    df = pd.concat({n: analysis.elos(n, target=-1) for n in RUN_NAMES}, 1)
     ax = df.xs('μ', 1, 1).plot()
     ax.invert_xaxis()
+
+def total_games():
+    return pd.Series({n: database.games(n).sum().sum() for n in RUN_NAMES})
