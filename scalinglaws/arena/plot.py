@@ -109,10 +109,10 @@ def errors(run_name=-1):
     games, wins = drop_names(games, ['mohex']), drop_names(wins, ['mohex'])
     soln = activelo.solve(games.values, wins.values)
 
-    rates = (wins + 1)/(games + 2)
+    rates = wins/games
 
-    expected = soln.μ[:, None] - soln.μ[None, :]
-    actual = -(np.log(1 - rates) - np.log(rates)).where(games > 2, np.nan).values
+    expected = 1/(1 + np.exp(-soln.μ[:, None] + soln.μ[None, :]))
+    actual = rates.where(games > 0, np.nan).values
 
     resid_var = np.nanmean((actual - expected)**2)/np.nanmean(actual**2)
     corr = np.corrcoef(actual[~np.isnan(actual)], expected[~np.isnan(actual)])[0, 1]
@@ -123,22 +123,27 @@ def errors(run_name=-1):
 
     cmap = copy.copy(plt.cm.RdBu)
     cmap.set_bad('lightgrey')
-    vlim = max(abs(expected).max(), np.nanmax(abs(actual)))
-    kwargs = dict(cmap=cmap, vmin=-vlim, vmax=+vlim, aspect=1)
+    kwargs = dict(cmap=cmap, vmin=0, vmax=1, aspect=1)
 
     ax = plt.subplot(gs[0, 0])
     ax.imshow(actual, **kwargs)
     ax.set_title('actual')
 
     ax = plt.subplot(gs[0, 1])
-    ax.imshow(expected, **kwargs)
+    im = ax.imshow(expected, **kwargs)
     ax.set_title('expected')
 
+    ax = plt.subplot(gs[1, :2])
+    plt.colorbar(im, cax=ax, orientation='horizontal')
+
+
     ax = plt.subplot(gs[0, 2])
-    im = ax.imshow(actual - expected, **kwargs)
+    im = ax.imshow(actual - expected, vmin=-1, vmax=+1, aspect=1, cmap='RdBu')
     ax.set_title('diff')
 
-    ax = plt.subplot(gs[1, :])
+    ax = plt.subplot(gs[1, 2])
     plt.colorbar(im, cax=ax, orientation='horizontal')
     ax.annotate(f'resid var: {resid_var:.0%}, corr: {corr:.0%}', (.5, -1.2), ha='center', xycoords='axes fraction')
+
+
 
