@@ -1,11 +1,11 @@
 import torch
 import numpy as np
 from .. import mohex, hex
-from . import database
-from itertools import permutations, cycle, islice
+from . import database, analysis
 from rebar import arrdict
 from logging import getLogger
 import activelo
+import pandas as pd
 
 log = getLogger(__name__)
 
@@ -80,3 +80,9 @@ def run(boardsize):
             log.info(f'Starting on {queue[0]}')
             active[idx] = torch.tensor(queue[0])
             queue = queue[1:]
+
+
+def elos():
+    df = pd.concat({f: analysis.elos(f'mohex-{f}', target=-1) for f in [3, 5, 7, 9, 11]}, 1)
+    ax = df.xs('μ', 1, 1).plot()
+    ax.invert_xaxis()

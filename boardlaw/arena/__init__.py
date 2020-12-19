@@ -2,7 +2,6 @@ import pandas as pd
 import torch
 from rebar import storing, logging, dotdict, stats, paths
 from . import trials
-from .. import mohex
 import time
 from logging import getLogger
 from contextlib import contextmanager
@@ -11,6 +10,7 @@ from multiprocessing import Process, set_start_method
 
 # Re-export
 from .plot import heatmap, periodic, nontransitivities
+from .analysis import elos
 
 log = getLogger(__name__)
 
@@ -54,6 +54,7 @@ def arena(run_name, worldfunc, agentfunc, device='cuda:1'):
             latest=worldfunc(device=device, n_envs=256),
             mohex=worldfunc(device=device, n_envs=8))
 
+        from .. import mohex
         mhx = mohex.MoHexAgent()
         kinds = list(worlds)
         
