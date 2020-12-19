@@ -1,8 +1,10 @@
 import time
 import numpy as np
 import torch
-from rebar import arrdict, stats, recording
+from rebar import arrdict, stats, recording, storing, widgets, logging
 from logging import getLogger
+from .common import worldfunc, agentfunc
+from . import arena
 
 log = getLogger(__name__)
 
@@ -64,9 +66,40 @@ def record(world, agents, N=0, **kwargs):
     trace = rollout(world, agents, **kwargs)
     return record_worlds(trace.worlds, N=N)
 
+def demo(run_name=-1):
+    from boardlaw import mohex
+
+    n_envs = 4
+    world = worldfunc(n_envs, device='cuda:1')
+    agent = agentfunc(device='cuda:1')
+    agent.load_state_dict(storing.select(storing.load_latest(run_name), 'agent'))
+    mhx = mohex.MoHexAgent(presearch=False, max_games=1)
+    record(world, [agent, agent], n_reps=1, N=0).notebook()
+
+def compare(fst_run=-1, snd_run=-1, n_envs=256, device='cuda:1'):
+    import pandas as pd
+
+    world = worldfunc(n_envs, device=device)
+
+    fst = agentfunc(device=device)
+    fst.load_state_dict(storing.select(storing.load_latest(fst_run), 'agent'))
+
+    snd = agentfunc(device=device)
+    snd.load_state_dict(storing.select(storing.load_latest(snd_run), 'agent'))
+
+    bw = rollout(world, [fst, snd], n_reps=1)
+    bw_wins = (bw.transitions.rewards[bw.transitions.terminal.cumsum(0) <= 1] == 1).sum(0)
+
+    wb = rollout(world, [snd, fst], n_reps=1)
+    wb_wins = (wb.transitions.rewards[wb.transitions.terminal.cumsum(0) <= 1] == 1).sum(0)
+
+    # Rows: black, white; cols: old, new
+    wins = torch.stack([bw_wins, wb_wins.flipud()]).detach().cpu().numpy()
+
+    return pd.DataFrame(wins/n_envs, ['black', 'white'], ['fst', 'snd'])
+
 def demo_record():
-    from rebar import storing
-    from boardlaw import worldfunc, agentfunc, mohex, analysis
+    from boardlaw import mohex, analysis
 
     n_envs = 16
     world = worldfunc(n_envs)
@@ -84,3 +117,10 @@ def demo_rollout():
     trace = rollout(env, [agent, oppo], 20)
 
     trace.responses.rewards.sum(0).sum(0)
+
+def monitor(run_name=-1):
+    compositor = widgets.Compositor()
+    with logging.from_dir(run_name, compositor), stats.from_dir(run_name, compositor), \
+            arena.monitor(run_name, worldfunc, agentfunc):
+        while True:
+            time.sleep(1)
