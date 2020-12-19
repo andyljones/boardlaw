@@ -9,14 +9,14 @@ import activelo
 
 log = getLogger(__name__)
 
-def refill(names, queue, count=1):
+def refill(run_name, names, queue, count=1):
     if len(queue) >= count:
         return 
 
-    n = (database.symmetric_games('mohex')
+    n = (database.symmetric_games(run_name)
             .reindex(index=names, columns=names)
             .fillna(0))
-    w = (database.symmetric_wins('mohex')
+    w = (database.symmetric_wins(run_name)
             .reindex(index=names, columns=names)
             .fillna(0))
     
@@ -36,15 +36,16 @@ def refill(names, queue, count=1):
         queue.append(pair)
         queue.append(pair[::-1])
 
-def run():
+def run(boardsize):
+    run_name = f'mohex-{boardsize}'
     agent = mohex.MoHexAgent()
-    worlds = hex.Hex.initial(n_envs=8)
+    worlds = hex.Hex.initial(n_envs=8, boardsize=boardsize)
 
     universe = torch.linspace(0, 1, 11)
     names = sorted([f'mohex-{r}' for r in universe])
 
     queue = []
-    refill(names, queue, worlds.n_envs)
+    refill(run_name, names, queue, worlds.n_envs)
 
     active = torch.tensor(queue[:worlds.n_envs])
     queue = queue[worlds.n_envs:]
@@ -71,11 +72,11 @@ def run():
                 boardsize=worlds.boardsize)
 
             log.info(f'Storing {result.names[0]} v {result.names[1]}, {result.wins[0]}-{result.wins[1]} in {result.moves} moves')
-            database.store('mohex', result)
+            database.store(run_name, result)
 
             moves[idx] = 0
 
-            refill(names, queue)
+            refill(run_name, names, queue)
             log.info(f'Starting on {queue[0]}')
             active[idx] = torch.tensor(queue[0])
             queue = queue[1:]
