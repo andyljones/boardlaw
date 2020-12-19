@@ -104,7 +104,7 @@ RUN apt-get install libdb-dev libboost-all-dev -y --no-install-recommends && \
 RUN curl https://raw.githubusercontent.com/toobaz/ipynb_output_filter/master/ipynb_output_filter.py > /bin/ipynb_output_filter.py && \
     echo "*.ipynb   filter=ipynb_output_filter" > /root/.gitattributes && \
     git config --global core.attributesfile /root/.gitattributes && \
-    git config --global filter.ipynb_output_filter.clean python /bin/ipynb_output_filter.py && \
+    git config --global filter.ipynb_output_filter.clean "python /bin/ipynb_output_filter.py" && \
     git config --global filter.ipynb_output_filter.smudge cat
 
 # Set up the entrypoint script
