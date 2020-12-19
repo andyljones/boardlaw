@@ -118,9 +118,10 @@ def errors(run_name=-1):
     corr = np.corrcoef(actual[~np.isnan(actual)], expected[~np.isnan(actual)])[0, 1]
 
     fig = plt.figure()
-    gs = plt.GridSpec(2, 3, fig, height_ratios=[10, 1])
-    fig.set_size_inches(18, 6)
+    gs = plt.GridSpec(4, 2, fig, height_ratios=[20, 1, 20, 1])
+    fig.set_size_inches(12, 12)
 
+    # Top row
     cmap = copy.copy(plt.cm.RdBu)
     cmap.set_bad('lightgrey')
     kwargs = dict(cmap=cmap, vmin=0, vmax=1, aspect=1)
@@ -133,17 +134,28 @@ def errors(run_name=-1):
     im = ax.imshow(expected, **kwargs)
     ax.set_title('expected')
 
-    ax = plt.subplot(gs[1, :2])
+    ax = plt.subplot(gs[1, :])
     plt.colorbar(im, cax=ax, orientation='horizontal')
 
-
-    ax = plt.subplot(gs[0, 2])
+    # Bottom left
+    ax = plt.subplot(gs[2, 0])
     im = ax.imshow(actual - expected, vmin=-1, vmax=+1, aspect=1, cmap='RdBu')
-    ax.set_title('diff')
+    ax.set_title('error')
 
-    ax = plt.subplot(gs[1, 2])
+    ax = plt.subplot(gs[3, 0])
     plt.colorbar(im, cax=ax, orientation='horizontal')
-    ax.annotate(f'resid var: {resid_var:.0%}, corr: {corr:.0%}', (.5, -1.2), ha='center', xycoords='axes fraction')
+    # ax.annotate(f'resid var: {resid_var:.0%}, corr: {corr:.0%}', (.5, -1.2), ha='center', xycoords='axes fraction')
+
+    # Bottom right
+    ax = plt.subplot(gs[2, 1])
+    se = (expected*(1-expected)/games)**.5
+    im = ax.imshow((actual - expected)/se, vmin=-3, vmax=+3, aspect=1, cmap='RdBu')
+    ax.set_title('standard error')
+
+    ax = plt.subplot(gs[3, 1])
+    plt.colorbar(im, cax=ax, orientation='horizontal')
+    # ax.annotate(f'resid var: {resid_var:.0%}, corr: {corr:.0%}', (.5, -1.2), ha='center', xycoords='axes fraction')
+
 
 
 
