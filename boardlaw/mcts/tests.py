@@ -261,7 +261,7 @@ def test_depth():
     world = validation.All.initial(length=3, device='cuda')
     agent = validation.ProxyAgent()
 
-    m = mcts(world, agent, n_nodes=15)
+    m = mcts(world, agent, n_nodes=15, noise_eps=0.)
 
     expected = torch.tensor([[1/8.]], device=world.device)
     torch.testing.assert_allclose(m.root().v, expected)
@@ -273,7 +273,7 @@ def test_multienv():
     world = validation.All.initial(n_envs=2, length=3)
     agent = validation.ProxyAgent()
 
-    m = mcts(world, agent, n_nodes=15)
+    m = mcts(world, agent, n_nodes=15, noise_eps=0.)
 
     expected = torch.tensor([[1/8.], [1/8.]], device=world.device)
     torch.testing.assert_allclose(m.root().v, expected)
@@ -304,7 +304,7 @@ def test_planted_game():
     bw.
     wb.
     """
-    m = full_game_mcts(competitive, 63, c_puct=1.)
+    m = full_game_mcts(competitive, 63, c_puct=1., noise_eps=0.)
     probs = m.root().logits.exp()[0]
     assert (probs[2] > probs[8]) and (probs[5] > probs[7])
 
@@ -312,7 +312,7 @@ def test_planted_game():
 def test_full_game():
     from .. import hex
     worlds = hex.Hex.initial(128, boardsize=3, device='cuda')
-    black = MCTSAgent(validation.RandomAgent(), n_nodes=32, c_puct=.5)
+    black = MCTSAgent(validation.RandomAgent(), n_nodes=32, c_puct=.5, noise_eps=0.)
     white = validation.RandomAgent()
     trace = analysis.rollout(worlds, [black, white], n_reps=1)
 
