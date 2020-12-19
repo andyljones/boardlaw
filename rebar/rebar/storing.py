@@ -1,5 +1,4 @@
 import torch
-from scalinglaws.heads import Tensor
 from time import strptime
 import pandas as pd
 import pickle

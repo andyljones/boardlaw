@@ -75,7 +75,7 @@ def heatmap(run_name=-1, drop=[]):
 
 def nontransitivities(run_name=-1):
     import seaborn as sns
-    from scalinglaws.arena import database
+    from boardlaw.arena import database
     w, n = database.symmetric_wins(run_name), database.symmetric_games(run_name)
     r = w/n
     e = (r*(1-r)/n)**.5

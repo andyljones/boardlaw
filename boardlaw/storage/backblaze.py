@@ -17,7 +17,7 @@ def sync(source, dest, workers=4):
     with b2.SyncReport(sys.stdout, False) as reporter:
         syncer.sync_folders(
             source_folder=b2.parse_sync_folder(source, api()),
-            dest_folder=b2.parse_sync_folder(f'b2://alj-drones/{dest}', api()),
+            dest_folder=b2.parse_sync_folder(f'b2://boardlaw/{dest}', api()),
             now_millis=int(round(time.time() * 1000)),
             reporter=reporter
         )
@@ -25,4 +25,4 @@ def sync(source, dest, workers=4):
 def sync_traces():
     from .common import compression
     compression.compress_traces() 
-    sync('./output/traces', 'output/traces')%     
+    sync('./output/traces', 'output/traces')

@@ -57,7 +57,7 @@ def evaluate(worlds, agents):
     return results
 
 def test():
-    from scalinglaws.validation import WinnerLoser, RandomAgent
+    from boardlaw.validation import WinnerLoser, RandomAgent
 
     worlds = WinnerLoser.initial(4, device='cpu')
     results = evaluate(worlds, {'one': RandomAgent(), 'two': RandomAgent()})

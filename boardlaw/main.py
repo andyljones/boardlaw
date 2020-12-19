@@ -132,7 +132,7 @@ def monitor(run_name=-1):
             time.sleep(1)
 
 def demo(run_name=-1):
-    from scalinglaws import mohex
+    from boardlaw import mohex
 
     n_envs = 4
     world = worldfunc(n_envs, device='cuda:1')

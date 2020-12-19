@@ -66,7 +66,7 @@ def record(world, agents, N=0, **kwargs):
 
 def demo_record():
     from rebar import storing
-    from scalinglaws import worldfunc, agentfunc, mohex, analysis
+    from boardlaw import worldfunc, agentfunc, mohex, analysis
 
     n_envs = 16
     world = worldfunc(n_envs)

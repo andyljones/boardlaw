@@ -92,14 +92,14 @@ def monitor(*args, **kwargs):
             p.terminate()
 
 def demo():
-    from scalinglaws import worldfunc, agentfunc
+    from boardlaw import worldfunc, agentfunc
     from rebar import paths
     paths.clear('test')
     arena('test', worldfunc, agentfunc, ref_runs=['2020-11-27 19-40-27 az-test'])
 
 def fill_matchups(run_name=-1, device='cuda'):
-    from scalinglaws import worldfunc, agentfunc
-    from scalinglaws.arena import matchups, periodic_agents, database, log
+    from boardlaw import worldfunc, agentfunc
+    from boardlaw.arena import matchups, periodic_agents, database, log
 
     run_name = paths.resolve(run_name)
     agents = periodic_agents(run_name, agentfunc, device=device)

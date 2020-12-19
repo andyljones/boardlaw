@@ -112,7 +112,7 @@ def graph(output, params={}):
     return dot
 
 def demo():
-    from scalinglaws.arena.vb import ELBO
+    from boardlaw.arena.vb import ELBO
     vb = ELBO(5)
 
     N = 5
