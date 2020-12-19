@@ -7,8 +7,9 @@ import aljpy
 
 @aljpy.memcache()
 def api():
+    # Keys are in 1Password
     api = b2.B2Api()
-    keys = json.loads(Path('/credentials/backblaze.json').read_text())
+    keys = json.loads(Path('credentials.json').read_text())['backblaze']
     api.authorize_account('production', **keys)
     return api
 
@@ -22,7 +23,13 @@ def sync(source, dest, workers=4):
             reporter=reporter
         )
 
+def upload(source, dest):
+    bucket = api().get_bucket_by_name('boardlaw')
+    bucket.upload_local_file(
+        local_file=source,
+        file_name=dest)
+
 def sync_traces():
-    from .common import compression
+    from . import compression
     compression.compress_traces() 
     sync('./output/traces', 'output/traces')

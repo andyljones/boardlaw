@@ -13,4 +13,4 @@ build
 dist
 .env
 .cubicasa-confirmed
-credentials.yml
+credentials.json
