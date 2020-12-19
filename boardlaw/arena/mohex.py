@@ -1,3 +1,4 @@
+from boardlaw.arena import evaluator
 import torch
 import numpy as np
 from .. import mohex, hex
@@ -84,11 +85,26 @@ def run(boardsize):
             active[idx] = torch.tensor(queue[0])
             queue = queue[1:]
 
-
-def elos():
+def all_elos():
     df = pd.concat({n: analysis.elos(n, target=-1) for n in RUN_NAMES}, 1)
     ax = df.xs('μ', 1, 1).plot()
     ax.invert_xaxis()
 
 def total_games():
     return pd.Series({n: database.games(n).sum().sum() for n in RUN_NAMES})
+
+class Trialer:
+
+    def __init__(self, worldfunc):
+        self.worlds = worldfunc(8)
+        self.elos = analysis.elos(self.worlds.boardsize)
+        self.challenger = 0
+        self.mohex = mohex.MoHexAgent()
+        self.history = []
+
+    def trial(self, agent):
+        challenger = self.elos.index[self.challenger]
+        _, randomness = challenger.split('-')
+        self.mohex.random = float(randomness)
+        results = evaluator.evaluate(self.worlds, {'agent': agent, challenger: self.mohex}) 
+        self.history.extend(results)
