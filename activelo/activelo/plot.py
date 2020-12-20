@@ -1,7 +1,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from . import common
 
 def plot(soln):
+    soln = common.numpyify(soln)
+
     fig, axes = plt.subplots(2, 3)
     fig.set_size_inches(12, 8)
 

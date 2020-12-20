@@ -1,10 +1,12 @@
+from activelo.common import numpyify
+import pandas as pd
 import torch
 import torch.distributions
 import torch.testing
 import numpy as np
 import scipy as sp
 import scipy.stats
-from . import solvers
+from . import solvers, common
 
 def safe_divide(x, y):
     r = np.zeros_like(x)
@@ -30,9 +32,14 @@ def posterior_var_ratio(μd, σd, G):
     return safe_divide(posterior_var, σd**2)
 
 def improvement(soln, G):
+    if isinstance(soln.μ, pd.Series):
+        return common.pandify(improvement(common.numpyify(soln), G), soln.μ.index)
     return safe_divide(sensitivities(soln.Σ), posterior_var_ratio(soln.μd, soln.σd, G))
 
 def suggest(soln, G):
+    if isinstance(soln.μ, pd.Series):
+        row, col = suggest(common.numpyify(soln), G)
+        return soln.μ.index[row], soln.μ.index[col]
     idx = improvement(soln, G).argmax()
     return np.unravel_index(idx, soln.μd.shape) 
 

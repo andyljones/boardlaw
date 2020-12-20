@@ -1,3 +1,4 @@
+import pandas as pd
 from rebar import arrdict
 import numpy as np
 import matplotlib.pyplot as plt
@@ -6,7 +7,7 @@ import torch.distributions
 import torch.testing
 from torch import nn
 import geotorch
-from . import expectations
+from . import expectations, common
 
 μ0 = 0
 σ0 = 10
@@ -132,6 +133,8 @@ class Solver:
             trace=arrdict.stack(trace)).detach().numpy()
 
 def solve(n, w):
+    if isinstance(n, pd.DataFrame):
+        return arrdict.arrdict({k: common.pandify(v, n.index) for k, v in solve(n.values, w.values).items()})
     return Solver(n.shape[0])(n, w)
 
 def test_elbo():
