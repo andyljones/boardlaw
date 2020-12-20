@@ -3,7 +3,6 @@ import numpy as np
 import torch
 from rebar import arrdict, stats, recording, storing, widgets, logging
 from logging import getLogger
-from .common import worldfunc, agentfunc
 from . import arena
 
 log = getLogger(__name__)
@@ -68,6 +67,7 @@ def record(world, agents, N=0, **kwargs):
 
 def demo(run_name=-1):
     from boardlaw import mohex
+    from .main.common import worldfunc, agentfunc
 
     n_envs = 4
     world = worldfunc(n_envs, device='cuda:1')
@@ -78,6 +78,7 @@ def demo(run_name=-1):
 
 def compare(fst_run=-1, snd_run=-1, n_envs=256, device='cuda:1'):
     import pandas as pd
+    from .main.common import worldfunc, agentfunc
 
     world = worldfunc(n_envs, device=device)
 
@@ -100,6 +101,7 @@ def compare(fst_run=-1, snd_run=-1, n_envs=256, device='cuda:1'):
 
 def demo_record():
     from boardlaw import mohex, analysis
+    from .main.common import worldfunc, agentfunc
 
     n_envs = 16
     world = worldfunc(n_envs)
@@ -119,6 +121,7 @@ def demo_rollout():
     trace.responses.rewards.sum(0).sum(0)
 
 def monitor(run_name=-1):
+    from .main.common import worldfunc, agentfunc
     compositor = widgets.Compositor()
     with logging.from_dir(run_name, compositor), stats.from_dir(run_name, compositor), \
             arena.monitor(run_name, worldfunc, agentfunc):

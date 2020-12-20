@@ -5,16 +5,19 @@ from rebar import dotdict, paths
 from . import database
 import activelo
 
-def to_pandas(soln, games):
+def pandas(soln, names):
     return dotdict.dotdict(
-        μ=pd.Series(soln.μ, games.index),
-        Σ=pd.DataFrame(soln.Σ, games.index, games.index))
+        μ=pd.Series(soln.μ, names),
+        Σ=pd.DataFrame(soln.Σ, names, names))
 
-def condition(soln, name):
+def difference(soln, contrast, name=None):
     μ, Σ = soln.μ, soln.Σ 
-    σ2 = np.diag(Σ) + Σ.loc[name, name] - 2*Σ[name]
-    μc = μ - μ[name]
-    return μc, σ2**.5
+    σ2 = np.diag(Σ) + Σ.loc[contrast, contrast] - 2*Σ[contrast]
+    μc = μ - μ[contrast]
+    if name:
+        return μc[name], σ2[name]**.5
+    else:
+        return μc, σ2**.5
 
 def mask(games, wins, filter):
     mask = games.index.str.match(filter)
@@ -27,12 +30,12 @@ def elos(run_name, target=None, filter='.*'):
     games, wins = mask(games, wins, filter)
 
     soln = activelo.solve(games.values, wins.values)
-    soln = to_pandas(soln, games)
+    soln = pandas(soln, games.index)
 
     if isinstance(target, int):
-        μ, σ = condition(soln, soln.μ.index[target])
+        μ, σ = difference(soln, soln.μ.index[target])
     elif isinstance(target, str):
-        μ, σ = condition(soln, target)
+        μ, σ = difference(soln, target)
     else:
         μ, σ = soln.μ, np.diag(soln.Σ)**.5
 
