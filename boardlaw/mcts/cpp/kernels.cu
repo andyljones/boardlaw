@@ -127,6 +127,7 @@ __host__ TT root(MCTS m) {
     const uint n_blocks = (B + BLOCK - 1)/BLOCK;
     root_kernel<<<{n_blocks}, {BLOCK}, Policy::memory(B, A), stream()>>>(
         m.pta(), F3D(pi).pta(), F3D(q).pta(), F2D(probs).pta());
+    C10_CUDA_CHECK(cudaGetLastError());
 
     return probs;
 }
@@ -196,6 +197,7 @@ __host__ Descent descend(MCTS m) {
     const uint n_blocks = (B + BLOCK - 1)/BLOCK;
     descend_kernel<<<{n_blocks}, {BLOCK}, shared_memory, stream()>>>(
         m.pta(), F3D(pi).pta(), F3D(q).pta(), F2D(rands).pta(), descent.pta());
+    C10_CUDA_CHECK(cudaGetLastError());
 
     return descent;
 }
@@ -242,4 +244,5 @@ __host__ void backup(Backup b, TT leaves) {
     const uint n_blocks = (B + BLOCK - 1)/BLOCK;
     backup_kernel<<<{n_blocks}, {BLOCK}, BLOCK*S*sizeof(float), stream()>>>(
         b.pta(), I1D(leaves).pta());
+    C10_CUDA_CHECK(cudaGetLastError());
 }

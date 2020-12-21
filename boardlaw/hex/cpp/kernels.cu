@@ -144,6 +144,7 @@ __host__ TT step(TT board, TT seats, TT actions) {
     const uint n_blocks = (B + BLOCK - 1)/BLOCK;
     step_kernel<<<{n_blocks}, {BLOCK}, BLOCK*S*S*3*sizeof(uint8_t), stream()>>>(
         C3D(board).pta(), I1D(seats).pta(), I1D(actions).pta(), F2D(results).pta());
+    C10_CUDA_CHECK(cudaGetLastError());
 
     return results;
 }
