@@ -26,7 +26,7 @@ struct Policy {
         return lambda_n*pi[a]/(alpha - q[a]);
     }
     
-    __host__ static uint memory(uint B, uint A) {
+    __host__ static uint memory(uint A) {
         uint mem = BLOCK*2*A*sizeof(float);
         TORCH_CHECK(mem < 64*1024, "Too much shared memory per block")
         return mem;
@@ -152,7 +152,7 @@ __host__ TT root(MCTS m) {
     auto probs = at::empty_like(pi.select(1, 0));
 
     const uint n_blocks = (B + BLOCK - 1)/BLOCK;
-    root_kernel<<<{n_blocks}, {BLOCK}, Policy::memory(B, A), stream()>>>(
+    root_kernel<<<{n_blocks}, {BLOCK}, Policy::memory(A), stream()>>>(
         m.pta(), F3D(pi).pta(), F3D(q).pta(), F2D(probs).pta());
     C10_CUDA_CHECK(cudaGetLastError());
 
@@ -228,7 +228,7 @@ __host__ Descent descend(MCTS m) {
         m.seats.t.new_empty({B})};
 
     const uint n_blocks = (B + BLOCK - 1)/BLOCK;
-    descend_kernel<<<{n_blocks}, {BLOCK}, Policy::memory(B, A), stream()>>>(
+    descend_kernel<<<{n_blocks}, {BLOCK}, Policy::memory(A), stream()>>>(
         m.pta(), F3D(pi).pta(), F3D(q).pta(), F2D(rands).pta(), descent.pta());
     C10_CUDA_CHECK(cudaGetLastError());
 
@@ -269,7 +269,7 @@ __global__ void backup_kernel(BackupPTA bk, I1D::PTA leaves) {
 }
 
 __host__ void backup(Backup b, TT leaves) {
-    c10::cuda::CUDAGuard g(leaves.device());
+    c10::cuda::CUDAGuard c(leaves.device());
 
     const uint B = b.v.size(0);
     const uint S = b.v.size(2);
