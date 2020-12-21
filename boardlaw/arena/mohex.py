@@ -31,7 +31,7 @@ def refill(run_name, names, queue, count=1):
         n.loc[ni, nj] += 1
 
     soln = activelo.solve(n.values, w.values)
-    imp = activelo.improvement(soln, 1)
+    imp = activelo.improvement(soln)
     while len(queue) < count:
         probs = imp.flatten()/imp.sum()
         idx = np.random.choice(np.arange(n.size), p=probs)
@@ -120,7 +120,7 @@ class Trialer:
         log.info(f'Agent elo is {μ:.2f}±{2*σ:.2f} based on {2*int(games.loc["agent"].sum())} games')
         stats.mean_std(μ, σ)
 
-        imp = activelo.improvement(soln, self.worlds.n_envs)
+        imp = activelo.improvement(soln)
         imp = pd.DataFrame(imp, games.index, games.index)
 
         challenger = imp['agent'].idxmax()

@@ -18,7 +18,7 @@ def periodic_trial(run_name, worlds, agents):
 
     soln = activelo.solve(n.values, w.values)
     log.info(f'Fitted a posterior, {(soln.σd**2).mean()**.5:.2f}σd over {n.shape[0]} agents')
-    matchup = activelo.suggest(soln, worlds.periodic.n_envs)
+    matchup = activelo.suggest(soln)
     matchup = [n.index[m] for m in matchup]
 
     agents = {m: agents[m] for m in matchup}
@@ -41,7 +41,7 @@ def mohex_trial(run_name, worlds, agents):
 
     soln = activelo.solve(n.values, w.values)
     log.info(f'Fitted a posterior, {(soln.σd**2).mean()**.5:.2f}σd over {n.shape[0]} agents')
-    improvement = activelo.improvement(soln, worlds.mohex.n_envs)
+    improvement = activelo.improvement(soln)
     improvement = pd.DataFrame(improvement, n.index, n.columns).loc['mohex'].drop('mohex')
     matchup = ('mohex', improvement.idxmax())
 
