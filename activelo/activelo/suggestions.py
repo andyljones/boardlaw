@@ -20,6 +20,8 @@ def sensitivities(Σ):
     return ((Σ[:, None, :] - Σ[None, :, :])**2).sum(-1)
 
 def improvement(soln):
+    if isinstance(soln.μ, pd.Series):
+        return common.pandify(improvement(common.numpyify(soln)), soln.μ.index)
     e = np.exp(-soln.μd)
     # This is the Fisher info for one game
     fisher_info = 1/(1/e + 2 + e)
