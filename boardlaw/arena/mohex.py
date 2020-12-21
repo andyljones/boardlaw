@@ -4,7 +4,7 @@ import torch
 import numpy as np
 from .. import mohex, hex
 from . import database, analysis
-from rebar import arrdict, stats
+from rebar import arrdict, stats, paths
 from logging import getLogger
 import activelo
 import pandas as pd
@@ -100,8 +100,8 @@ def append(df, name):
 
 class Trialer:
 
-    def __init__(self, worldfunc, max_history=256):
-        self.worlds = worldfunc(8)
+    def __init__(self, worldfunc, device='cuda:1', max_history=256):
+        self.worlds = worldfunc(8, device=device)
         self.mohex = mohex.MoHexAgent()
         self.history = deque(maxlen=max_history//self.worlds.n_envs)
 
@@ -118,7 +118,7 @@ class Trialer:
         soln = activelo.solve(games, wins)
         μ, σ = analysis.difference(soln, 'mohex-0.00', 'agent')
         log.info(f'Agent elo is {μ:.2f}±{2*σ:.2f} based on {2*int(games.loc["agent"].sum())} games')
-        stats.mean_std(μ, σ)
+        stats.mean_std('elo-mohex', μ, σ)
 
         imp = activelo.improvement(soln)
         imp = pd.DataFrame(imp, games.index, games.index)

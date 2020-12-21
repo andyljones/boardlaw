@@ -28,7 +28,7 @@ class Compositor:
         self.lines = lines
         self._box = widgets.HBox(
             layout=widgets.Layout(align_items='stretch'))
-        from IPython import display
+        from IPython.display import display
         display(self._box)
 
     def output(self):

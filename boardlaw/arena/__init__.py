@@ -1,7 +1,7 @@
 import pandas as pd
 import torch
 from rebar import storing, logging, dotdict, stats, paths
-from . import trials
+from . import trials, mohex
 import time
 from logging import getLogger
 from contextlib import contextmanager
@@ -74,11 +74,30 @@ def arena(run_name, worldfunc, agentfunc, device='cuda:1'):
                 trials.trial(run_name, worlds, agents, kinds[i % len(kinds)])
                 i += 1
 
+def mohex_arena(run_name, worldfunc, agentfunc, device='cuda:1'):
+    run_name = paths.resolve(run_name)
+    # with logging.via_dir(run_name), stats.to_dir(run_name):
+    trialer = mohex.Trialer(worldfunc, device)
+    
+    i = 0
+    agent = None
+    last_load, last_step = 0, 0
+    while True:
+        if time.time() - last_load > 15:
+            last_load = time.time()
+            agents = latest_agent(run_name, agentfunc, device=device)
+            agent = list(agents.values())[0]
+        
+        if agent and (time.time() - last_step > 1):
+            last_step = time.time()
+            trialer.trial(agent)
+            i += 1
+
 @wraps(arena)
 @contextmanager
 def monitor(*args, **kwargs):
     set_start_method('spawn', True)
-    p = Process(target=arena, args=args, kwargs=kwargs, name='arena-monitor')
+    p = Process(target=mohex_arena, args=args, kwargs=kwargs, name='arena-monitor')
     try:
         p.start()
         yield
