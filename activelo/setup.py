@@ -10,7 +10,7 @@ setup(
     author='Andy Jones',
     author_email='andyjones.ed@gmail.com',
     url='http://www.github.com/andyljones/activelo',
-    packages=find_packages(include=['activelo*']),
+    packages=find_packages(),
     python_requires='>=3.6',
     install_requires=[
         'numpy>=1.18',

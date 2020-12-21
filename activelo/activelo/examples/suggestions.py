@@ -60,7 +60,7 @@ def simulate(truth, n_games=256, σresid_tol=.1):
         soln = solver(games, wins)
         ranks = torch.as_tensor(soln.μ)
 
-        black, white = activelo.suggest(soln, n_games)
+        black, white = activelo.suggest(soln)
         black_wins = torch.distributions.Binomial(n_games, winrate(truth[black], truth[white])).sample()
         wins[black, white] += black_wins
         wins[white, black] += n_games - black_wins
