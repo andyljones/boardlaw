@@ -23,8 +23,13 @@ def improvement(soln):
     if isinstance(soln.μ, pd.Series):
         return common.pandify(improvement(common.numpyify(soln)), soln.μ.index)
     e = np.exp(-soln.μd)
-    # This is the Fisher info for one game
+    #TODO: This is not in any way correct. It's the Fisher info v. the d's, when we're
+    # really after the Fisher info v. the x ~ N(μ, Σ). Go re-read 'Asymptotic Analysis 
+    # of Objectives based on Fisher Information'
     fisher_info = 1/(1/e + 2 + e)
+    # And I definitely shouldn't be multiplying the info by the var like this
+    # I think the proper way is gonna involve adding various rank-one updates to the
+    # Σ^-1 and seeing which has the best trace/det/whatever. 
     return fisher_info*sensitivities(soln.Σ)
 
 def suggest(soln):

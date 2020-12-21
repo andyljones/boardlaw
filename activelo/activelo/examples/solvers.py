@@ -2,6 +2,7 @@ import torch
 import torch.distributions
 import numpy as np
 import matplotlib.pyplot as plt
+from pkg_resources import resource_filename
 import activelo
 
 def generated_example():
@@ -17,7 +18,7 @@ def generated_example():
     activelo.plot(trace)
 
 def saved_example(filename):
-    raw = np.load(filename)
+    raw = np.load(resource_filename(__package__, filename))
     n = torch.as_tensor(raw['n'])
     w = torch.as_tensor(raw['w'])
     torch.set_rng_state(torch.as_tensor(raw['rng']))
