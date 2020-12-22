@@ -3,10 +3,6 @@
 
 const uint BLOCK = 8;
 
-__device__ void check(int id, int size, int i) {
-    if ((i < 0) || (size < i)) printf("%d: %d < %d\n", id, size, i);
-}
-
 struct Policy {
     int A;
     float* pi;
@@ -39,7 +35,6 @@ __device__ float newton_search(Policy p) {
     float alpha = 0.f;
     for (int a = 0; a<p.A; a++) {
         float gap = fmaxf(p.lambda_n*p.pi[a], 1.e-6f);
-        check(-1, p.A, a);
         alpha = fmaxf(alpha, p.q[a] + gap);
     }
 
@@ -53,7 +48,6 @@ __device__ float newton_search(Policy p) {
         float g = 0.f;
         for (int a=0; a<p.A; a++) {
             float top = p.lambda_n*p.pi[a];
-            check(-2, p.A, a);
             float bot = alpha - p.q[a];
             S += top/bot;
             g += -top/powf(bot, 2);
@@ -80,41 +74,22 @@ __device__ Policy policy(MCTSPTA m, F3D::PTA pi, F3D::PTA q, int t) {
 
     int N = 0;
     auto seat = m.seats[b][t];
-    check(0, m.seats.size(0), b);
-    check(1, m.seats.size(1), t);
 
     for (int a=0; a<p.A; a++) {
         auto child = m.children[b][t][a];
-        check(2, m.children.size(0), b);
-        check(3, m.children.size(1), t);
-        check(4, m.children.size(2), a);
 
         if (child > -1) {
             p.q[a] = q[b][child][seat];
-            check(5, q.size(0), b);
-            check(6, q.size(1), child);
-            check(7, q.size(2), seat);
             p.pi[a] = pi[b][t][a];
-            check(8, pi.size(0), b);
-            check(9, pi.size(1), t);
-            check(10, pi.size(2), a);
-
             N += m.n[b][child];
-            check(11, m.n.size(0), b);
-            check(12, m.n.size(1), child);
-
         } else {
             p.q[a] = 0.f;
             p.pi[a] = pi[b][t][a];
-            check(13, pi.size(0), b);
-            check(14, pi.size(1), t);
-            check(15, pi.size(2), a);
             N += 1;
         }
     }
     __syncthreads(); // memory barrier
 
-    check(30, m.c_puct.size(0), b);
     p.lambda_n = m.c_puct[b]*float(N)/float(N +A);
     p.alpha = newton_search(p);
 
@@ -173,16 +148,12 @@ __global__ void descend_kernel(
     int action = -1;
     int valid = -1;
     while (true) {
-        if (m.terminal[b][t]) break;
         if (t == -1) break;
-        check(16, m.terminal.size(0), b);
-        check(17, m.terminal.size(1), t);
+        if (m.terminal[b][t]) break;
 
         auto p = policy(m, pi, q, t);
 
         float rand = rands[b][t];
-        check(18, rands.size(0), b);
-        check(19, rands.size(1), t);
         float total = 0.f;
         // This is a bit of a mess. Intent is to handle the edge 
         // case of rand being 1, and the probabilities not summing
@@ -201,16 +172,11 @@ __global__ void descend_kernel(
             }
         }
         parent = t;
-        check(20, m.children.size(0), b);
-        check(21, m.children.size(1), t);
-        check(22, m.children.size(2), action);
         t = m.children[b][t][action];
     }
 
     descent.parents[b] = parent;
     descent.actions[b] = (action >= 0)? action : valid;
-    check(23, descent.parents.size(0), b);
-    check(24, descent.actions.size(0), b);
 }
 
 __host__ Descent descend(MCTS m) {
