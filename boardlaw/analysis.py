@@ -121,9 +121,7 @@ def demo_rollout():
     trace.responses.rewards.sum(0).sum(0)
 
 def monitor(run_name=-1):
-    from .main.common import worldfunc, agentfunc
     compositor = widgets.Compositor()
-    with logging.from_dir(run_name, compositor), stats.from_dir(run_name, compositor), \
-            arena.monitor(run_name, worldfunc, agentfunc):
+    with logging.from_dir(run_name, compositor), stats.from_dir(run_name, compositor):
         while True:
             time.sleep(1)

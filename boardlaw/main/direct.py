@@ -99,7 +99,8 @@ def run():
 
     run_name = paths.timestamp('az-test')
     paths.clear(run_name)
-    with logging.to_dir(run_name), stats.to_dir(run_name):
+    with logging.to_dir(run_name), stats.to_dir(run_name), \
+            arena.monitor(run_name, worldfunc, agentfunc):
         buffer = []
         idxs = cycle(learning.batch_indices(buffer_length, n_envs, batch_size, worlds.device))
         while True:
