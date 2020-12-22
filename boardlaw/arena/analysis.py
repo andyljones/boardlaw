@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-from rebar import dotdict, paths
+from rebar import dotdict, paths, stats
 from . import database
 import activelo
 
@@ -41,15 +41,20 @@ def elos(run_name, target=None, filter='.*'):
 
     return pd.concat({'μ': μ, 'σ': σ}, 1)
 
-def plot_elo_progress():
-    import numpy as np
-    import matplotlib.pyplot as plt
+def plot_elo_progress(run_names=[-1]):
     with plt.style.context('seaborn-poster'):
-        df = stats.dataframe(prefix='elo-mohex', rule='30s')['mean_std'].mul(400/np.log(10))
         fig, ax = plt.subplots()
-        df['elo-mohex/μ'].plot(ax=ax)
-        ax.fill_between(df.index, df['elo-mohex/μ-'], df['elo-mohex/μ+'], alpha=.2)
         ax.set_ylabel('agent elo v. perfect play')
-        ax.set_title('Training progress on 5x5 Hex')
+        ax.set_title('Training progress on 7x7 Hex')
         ax.axhline(0, color='k', alpha=.5)
 
+        for run_name in run_names:
+            df = stats.dataframe(run_name, prefix='elo-mohex')['mean_std'].mul(400/np.log(10)).ffill()
+            hours = df.index.total_seconds()/3600
+            #df['elo-mohex/μ'].plot(ax=ax, label=run_name)
+            ax.fill_between(hours, df['elo-mohex/μ-'], df['elo-mohex/μ+'], alpha=.2)
+            ax.plot(hours, df['elo-mohex/μ'], label=paths.resolve(run_name))
+            ax.set_xlim(0, hours.max())
+            ax.set_xlabel('hours')
+        
+        ax.legend()
