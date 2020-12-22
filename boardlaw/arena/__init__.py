@@ -46,32 +46,22 @@ def latest_agent(run_name, agentfunc, device='cpu', **kwargs):
     except ValueError:
         return {}
 
-def arena(run_name, worldfunc, agentfunc, device='cuda:1'):
+def periodic_arena(run_name, worldfunc, agentfunc, device='cuda:1'):
     run_name = paths.resolve(run_name)
-    with logging.to_dir(run_name), stats.to_dir(run_name):
-        worlds = dotdict.dotdict(
-            periodic=worldfunc(device=device, n_envs=256),
-            latest=worldfunc(device=device, n_envs=256),
-            mohex=worldfunc(device=device, n_envs=8))
+    with logging.via_dir(run_name), stats.to_dir(run_name):
+        worlds = worldfunc(device=device, n_envs=256)
 
-        from .. import mohex
-        mhx = mohex.MoHexAgent()
-        kinds = list(worlds)
-        
         i = 0
         agents = {}
         last_load, last_step = 0, 0
         while True:
             if time.time() - last_load > 15:
                 last_load = time.time()
-                agents = {
-                    **periodic_agents(run_name, agentfunc, device=device),
-                    **latest_agent(run_name, agentfunc, device=device),
-                    'mohex': mhx}
+                agents = periodic_agents(run_name, agentfunc, device=device)
             
             if time.time() - last_step > 1:
                 last_step = time.time()
-                trials.trial(run_name, worlds, agents, kinds[i % len(kinds)])
+                trials.periodic_trial(run_name, worlds, agents)
                 i += 1
 
 def mohex_arena(run_name, worldfunc, agentfunc, device='cuda:1'):
@@ -93,7 +83,7 @@ def mohex_arena(run_name, worldfunc, agentfunc, device='cuda:1'):
                 trialer.trial(agent)
                 i += 1
 
-@wraps(arena)
+@wraps(periodic_arena)
 @contextmanager
 def monitor(*args, **kwargs):
     set_start_method('spawn', True)
@@ -117,15 +107,13 @@ def demo():
     paths.clear('test')
     arena('test', worldfunc, agentfunc, ref_runs=['2020-11-27 19-40-27 az-test'])
 
-def fill_matchups(run_name=-1, device='cuda'):
-    from boardlaw import worldfunc, agentfunc
-    from boardlaw.arena import matchups, periodic_agents, database, log
+def fill_matchups(run_name=-1, device='cuda:1'):
+    from boardlaw.main.common import worldfunc, agentfunc
+    from boardlaw.arena import evaluator, periodic_agents, database, log
 
     run_name = paths.resolve(run_name)
     agents = periodic_agents(run_name, agentfunc, device=device)
     worlds = worldfunc(device=device, n_envs=256)
-
-    n, w = database.symmetric_pandas(run_name, agents)
 
     while True:
         n, w = database.symmetric_pandas(run_name, agents)
@@ -140,7 +128,7 @@ def fill_matchups(run_name=-1, device='cuda'):
 
         log.info(f'Playing {matchup}')
         matchup = {m: agents[m] for m in matchup}
-        results = matchups.evaluate(worlds, matchup)
+        results = evaluator.evaluate(worlds, matchup)
 
         wins, games = int(results[0].wins[0] + results[1].wins[1]), int(sum(r.games for r in results))
         log.info(f'Storing. {wins} wins in {games} games for {list(matchup)[0]} ')

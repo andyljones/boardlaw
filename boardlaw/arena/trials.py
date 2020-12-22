@@ -23,7 +23,7 @@ def periodic_trial(run_name, worlds, agents):
 
     agents = {m: agents[m] for m in matchup}
     log.info('Playing ' + ' v. '.join(agents))
-    results = evaluator.evaluate(worlds.periodic, agents)
+    results = evaluator.evaluate(worlds, agents)
 
     wins, games = int(results[0].wins[0] + results[1].wins[1]), int(sum(r.games for r in results))
     log.info(f'Storing. {wins} wins in {games} games for {list(agents)[0]} ')
@@ -47,7 +47,7 @@ def mohex_trial(run_name, worlds, agents):
 
     agents = {m: agents[m] for m in matchup}
     log.info('Playing ' + ' v. '.join(agents))
-    results = evaluator.evaluate(worlds.mohex, agents)
+    results = evaluator.evaluate(worlds, agents)
 
     wins = int(results[0].wins[0] + results[1].wins[1])
     games = int(sum(r.games for r in results))
@@ -69,7 +69,7 @@ def latest_trial(run_name, worlds, agents):
 
     agents = {m: agents[m] for m in matchup}
     log.info('Playing ' + ' v. '.join(agents))
-    results = evaluator.evaluate(worlds.periodic, agents)
+    results = evaluator.evaluate(worlds, agents)
 
     global _latest_matchup, _latest_results
     if _latest_matchup != matchup:

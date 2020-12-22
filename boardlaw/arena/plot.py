@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from rebar import paths
 import copy
 
-def periodic(run_name, target=None, filter=None):
+def periodic(run_name=-1, target=None, filter=''):
     run_name = paths.resolve(run_name)
     elos = analysis.elos(run_name, target, filter=filter)
     if target:

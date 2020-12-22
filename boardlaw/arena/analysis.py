@@ -37,7 +37,7 @@ def elos(run_name, target=None, filter='.*'):
     elif isinstance(target, str):
         μ, σ = difference(soln, target)
     else:
-        μ, σ = soln.μ, np.diag(soln.Σ)**.5
+        μ, σ = soln.μ, pd.Series(np.diag(soln.Σ)**.5, games.index)
 
     return pd.concat({'μ': μ, 'σ': σ}, 1)
 
@@ -47,9 +47,10 @@ def plot_elo_progress(run_names=[-1]):
         ax.set_ylabel('agent elo v. perfect play')
         ax.set_title('Training progress on 7x7 Hex')
         ax.axhline(0, color='k', alpha=.5)
+        ax.grid(axis='y')
 
         for run_name in run_names:
-            df = stats.dataframe(run_name, prefix='elo-mohex')['mean_std'].mul(400/np.log(10)).ffill()
+            df = stats.dataframe(run_name, prefix='elo-mohex')['mean_std'].ffill()
             hours = df.index.total_seconds()/3600
             #df['elo-mohex/μ'].plot(ax=ax, label=run_name)
             ax.fill_between(hours, df['elo-mohex/μ-'], df['elo-mohex/μ+'], alpha=.2)
