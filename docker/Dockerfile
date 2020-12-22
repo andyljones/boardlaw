@@ -1,5 +1,5 @@
 # Build image
-FROM nvidia/cuda:11.1-cudnn8-devel-ubuntu18.04 as build
+FROM nvidia/cuda:11.1-cudnn8-devel-ubuntu20.04 as build
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -16,7 +16,6 @@ RUN curl -o ~/miniconda.sh -O https://repo.anaconda.com/miniconda/Miniconda3-lat
 ENV PATH /opt/conda/bin:/opt/nvidia/nsight-compute/2020.2.1/:/opt/nvidia/nsight-systems/2020.3.4/bin/:$PATH
 
 WORKDIR /code
-
 
 # Dev image
 FROM build AS dev
@@ -85,12 +84,13 @@ RUN pip install cmake && \
     apt-get install clang-10 -y --no-install-recommends && \
     ln -s $(which clang-10) /usr/bin/clang++ && \
     cd / && \
-    git clone https://github.com/andyljones/open_spiel.git
+    git clone https://github.com/andyljones/open_spiel.git && \
     # TODO: The install.sh bit will fail here after getting the subrepos we're after.
     cd open_spiel && ./install.sh || true && pip install -e .
 
 # Set up MoHex
-RUN apt-get install libdb-dev libboost-all-dev -y --no-install-recommends && \
+RUN DEBIAN_FRONTEND=noninteractive TZ=Europe/London \
+    apt-get install libdb-dev libboost-all-dev -y --no-install-recommends && \
     cd / && \
     git clone https://github.com/cgao3/benzene-vanilla-cmake.git mohex && \
     mkdir mohex/build && \
