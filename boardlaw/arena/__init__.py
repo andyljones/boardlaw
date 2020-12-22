@@ -76,22 +76,22 @@ def arena(run_name, worldfunc, agentfunc, device='cuda:1'):
 
 def mohex_arena(run_name, worldfunc, agentfunc, device='cuda:1'):
     run_name = paths.resolve(run_name)
-    # with logging.via_dir(run_name), stats.to_dir(run_name):
-    trialer = mohex.Trialer(worldfunc, device)
-    
-    i = 0
-    agent = None
-    last_load, last_step = 0, 0
-    while True:
-        if time.time() - last_load > 15:
-            last_load = time.time()
-            agents = latest_agent(run_name, agentfunc, device=device)
-            agent = list(agents.values())[0]
+    with logging.via_dir(run_name), stats.to_dir(run_name):
+        trialer = mohex.Trialer(worldfunc, device)
         
-        if agent and (time.time() - last_step > 1):
-            last_step = time.time()
-            trialer.trial(agent)
-            i += 1
+        i = 0
+        agent = None
+        last_load, last_step = 0, 0
+        while True:
+            if time.time() - last_load > 15:
+                last_load = time.time()
+                agents = latest_agent(run_name, agentfunc, device=device)
+                agent = list(agents.values())[0]
+            
+            if agent and (time.time() - last_step > 1):
+                last_step = time.time()
+                trialer.trial(agent)
+                i += 1
 
 @wraps(arena)
 @contextmanager

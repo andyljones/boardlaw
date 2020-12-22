@@ -41,3 +41,15 @@ def elos(run_name, target=None, filter='.*'):
 
     return pd.concat({'μ': μ, 'σ': σ}, 1)
 
+def plot_elo_progress():
+    import numpy as np
+    import matplotlib.pyplot as plt
+    with plt.style.context('seaborn-poster'):
+        df = stats.dataframe(prefix='elo-mohex', rule='30s')['mean_std'].mul(400/np.log(10))
+        fig, ax = plt.subplots()
+        df['elo-mohex/μ'].plot(ax=ax)
+        ax.fill_between(df.index, df['elo-mohex/μ-'], df['elo-mohex/μ+'], alpha=.2)
+        ax.set_ylabel('agent elo v. perfect play')
+        ax.set_title('Training progress on 5x5 Hex')
+        ax.axhline(0, color='k', alpha=.5)
+
