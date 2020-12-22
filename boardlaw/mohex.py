@@ -200,7 +200,7 @@ class MoHexAgent:
                 color = 'bw'[seat]
                 futures[i] = proxy.solve_async(color)
         
-        for i,future in futures.items():
+        for i, future in futures.items():
             seat = worlds.seats[i]
             if seat == 0:
                 row, col = future()
@@ -305,7 +305,7 @@ param_solver_vc
 
 def test():
     worlds = hex.Hex.initial(1, boardsize=5)
-    agents = MoHexAgent(max_games=1000)
+    agents = MoHexAgent()
 
     for _ in range(10):
         decisions = agents(worlds)

@@ -4,7 +4,7 @@
 const uint BLOCK = 8;
 
 __device__ void check(int id, int size, int i) {
-    if (size < i) printf("%d: %d < %d\n", id, size, i);
+    if ((i < 0) || (size < i)) printf("%d: %d < %d\n", id, size, i);
 }
 
 struct Policy {
@@ -201,10 +201,10 @@ __global__ void descend_kernel(
             }
         }
         parent = t;
-        t = m.children[b][t][action];
         check(20, m.children.size(0), b);
         check(21, m.children.size(1), t);
         check(22, m.children.size(2), action);
+        t = m.children[b][t][action];
     }
 
     descent.parents[b] = parent;

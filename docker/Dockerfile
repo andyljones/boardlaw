@@ -1,5 +1,5 @@
 # Build image
-FROM nvidia/cuda:11.1-cudnn8-devel-ubuntu20.04 as build
+FROM nvidia/cuda:11.1-cudnn8-devel-ubuntu18.04 as build
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -41,7 +41,7 @@ RUN pip install  \
         # Core reqs
         numpy torch torchvision tqdm matplotlib beautifulsoup4 psutil ninja pytest b2sdk sympy \ 
         # Things I find useful
-        pandas jupyter seaborn bokeh setproctitle wurlitzer ipython==7.5 av flake8 gitpython networkx \ 
+        pandas jupyter seaborn bokeh setproctitle wurlitzer ipython av flake8 gitpython networkx \ 
         # Docs
         sphinx
 

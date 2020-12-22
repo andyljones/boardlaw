@@ -14,7 +14,7 @@ setup(
     python_requires='>=3.6',
     install_requires=[
         'numpy>=1.18',
-        'scipy>=1.5',
+        'scipy>=1.4',
         'torch>=1.7',
         'torchvision>=0.6',
         'matplotlib>=3'],
