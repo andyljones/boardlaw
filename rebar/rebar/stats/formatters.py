@@ -21,13 +21,19 @@ def single(finals, info):
     return ks, vs
 
 def confidence(finals, info):
-    is_multi = len(info) > 1
     (title,) = info.title.unique()
-    info = pd.concat([info, info.label.str.extract('^(?P<seq>.*)/(?P<stat>.*)')], 1)
-    ks, vs = ([f'{title}/'], ['']) if is_multi else ([], [])
-    for (category, title, seq), i in info.groupby(['category', 'title', 'seq']):
-        i = i.set_index('stat')
+    (category,) = info.category.unique()
+    if not info.label.str.contains('/').any():
+        i = info.set_index('label')
         μ, σ = finals[category, i.loc['μ', 'key']], finals[category, i.loc['σ', 'key']]
-        ks.append(f'  {title}/{seq}' if is_multi else f'{title}')
-        vs.append(f'{μ:.2f}±{2*σ:.2f}')
+        ks = [f'{title}']
+        vs = [f'{μ:.2f}±{2*σ:.2f}']
+    else:
+        info = pd.concat([info, info.label.str.extract('^(?P<seq>.*)/(?P<stat>.*)')], 1)
+        ks, vs = ([f'{title}/'], [''])
+        for (title, seq), i in info.groupby(['title', 'seq']):
+            i = i.set_index('stat')
+            μ, σ = finals[category, i.loc['μ', 'key']], finals[category, i.loc['σ', 'key']]
+            ks.append(f'  {title}/{seq}')
+            vs.append(f'{μ:.2f}±{2*σ:.2f}')
     return ks, vs

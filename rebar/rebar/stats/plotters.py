@@ -167,16 +167,20 @@ def log_single(*args, **kwargs):
 def confidence(source, info):
     f = bop.figure(x_range=bom.DataRange1d(start=0, follow='end'), tooltips=[('', '$data_y')])
 
-    info = pd.concat([info, info.label.str.extract('^(?P<seq>.*)/(?P<stat>.*)')], 1)
-
-    for (seq, i), color in zip(info.groupby('seq'), cycle(Category10_10)):
-        i = i.set_index('stat')['id']
-        f.varea(x='time_', y1=i['μ-'], y2=i['μ+'], legend_label=seq, color=color, alpha=.2, source=source)
-        f.line(x='time_', y=i['μ'], legend_label=seq, color=color, source=source)
+    if not info.label.str.contains('/').any():
+        i = info.set_index('label')['id']
+        f.varea(x='time_', y1=i['μ-'], y2=i['μ+'], alpha=.2, source=source)
+        f.line(x='time_', y=i['μ'], source=source)
+    else:
+        info = pd.concat([info, info.label.str.extract('^(?P<seq>.*)/(?P<stat>.*)')], 1)
+        for (seq, i), color in zip(info.groupby('seq'), cycle(Category10_10)):
+            i = i.set_index('stat')['id']
+            f.varea(x='time_', y1=i['μ-'], y2=i['μ+'], legend_label=seq, color=color, alpha=.2, source=source)
+            f.line(x='time_', y=i['μ'], legend_label=seq, color=color, source=source)
+        legend(f)
 
     default_tools(f)
     x_zeroline(f)
     styling(f)
-    legend(f)
 
     return f
