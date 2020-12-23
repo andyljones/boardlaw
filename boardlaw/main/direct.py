@@ -72,7 +72,7 @@ def optimize(network, opt, batch):
         stats.mean('loss/value', value_loss)
         stats.mean('loss/policy', policy_loss)
         stats.mean('progress/resid-var', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
-        stats.mean('progress/kl-div', -(d0.logits - d.logits).where(w.valid, zeros).mean())
+        stats.mean('progress/kl-div', -(d0.logits - d.logits).where(w.valid, zeros).sum(-1).div(w.valid.float.sum(-1)).mean())
 
         stats.mean('rel-entropy/policy', *rel_entropy(d.logits, w.valid)) 
         stats.mean('rel-entropy/targets', *rel_entropy(d0.logits, w.valid))
