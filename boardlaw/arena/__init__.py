@@ -102,10 +102,10 @@ def monitor(*args, **kwargs):
             p.terminate()
 
 def demo():
-    from boardlaw import worldfunc, agentfunc
+    from boardlaw.main.common import worldfunc, agentfunc
     from rebar import paths
     paths.clear('test')
-    arena('test', worldfunc, agentfunc, ref_runs=['2020-11-27 19-40-27 az-test'])
+    arena_periodic('test', worldfunc, agentfunc, ref_runs=['2020-11-27 19-40-27 az-test'])
 
 def fill_matchups(run_name=-1, device='cuda:1'):
     from boardlaw.main.common import worldfunc, agentfunc

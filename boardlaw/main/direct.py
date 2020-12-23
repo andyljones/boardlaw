@@ -65,8 +65,6 @@ def optimize(network, opt, batch):
     
     opt.zero_grad()
     loss.backward()
-    torch.nn.utils.clip_grad_norm_(network.policy.parameters(), 100.)
-    torch.nn.utils.clip_grad_norm_(network.value.parameters(), 100.)
 
     opt.step()
 
@@ -97,7 +95,7 @@ def run():
     agent = agentfunc()
     opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-3, amsgrad=True)
 
-    run_name = paths.timestamp('az-test')
+    run_name = paths.timestamp('no-grad-norm')
     paths.clear(run_name)
     with logging.to_dir(run_name), stats.to_dir(run_name), \
             arena.monitor(run_name, worldfunc, agentfunc):

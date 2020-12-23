@@ -69,12 +69,12 @@ def demo(run_name=-1):
     from boardlaw import mohex
     from .main.common import worldfunc, agentfunc
 
-    n_envs = 4
+    n_envs = 9
     world = worldfunc(n_envs, device='cuda:1')
     agent = agentfunc(device='cuda:1')
     agent.load_state_dict(storing.select(storing.load_latest(run_name), 'agent'))
     mhx = mohex.MoHexAgent(presearch=False, max_games=1)
-    record(world, [agent, agent], n_reps=1, N=0).notebook()
+    record(world, [agent, mhx], n_reps=1, N=0).notebook()
 
 def compare(fst_run=-1, snd_run=-1, n_envs=256, device='cuda:1'):
     import pandas as pd
@@ -99,11 +99,11 @@ def compare(fst_run=-1, snd_run=-1, n_envs=256, device='cuda:1'):
 
     return pd.DataFrame(wins/n_envs, ['black', 'white'], ['fst', 'snd'])
 
-def demo_record():
+def demo_record(run_name=-1):
     from boardlaw import mohex, analysis
     from .main.common import worldfunc, agentfunc
 
-    n_envs = 16
+    n_envs = 9
     world = worldfunc(n_envs)
     agent = agentfunc()
     mhx = mohex.MoHexAgent()
