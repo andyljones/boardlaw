@@ -7,7 +7,7 @@ from logging import getLogger
 log = getLogger(__name__)
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=7, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=9, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
