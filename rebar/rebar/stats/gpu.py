@@ -20,7 +20,8 @@ def dataframe():
         'device': 'index', 
         'compute': 'utilization.gpu', 'access': 'utilization.memory', 
         'memused': 'memory.used', 'memtotal': 'memory.total',
-        'fan': 'fan.speed', 'power': 'power.draw', 'temp': 'temperature.gpu'}
+        'fan': 'fan.speed', 'temp': 'temperature.gpu', 
+        'power': 'power.draw', 'powerlimit': 'power.limit'}
     command = f"""nvidia-smi --format=csv,nounits,noheader --query-gpu={','.join(params.values())}"""
     df = pd.read_csv(BytesIO(check_output(command, shell=True)), header=None)
     df.columns = list(params.keys())
@@ -46,9 +47,14 @@ def vitals(device=None, throttle=0):
     else:
         df = df.loc[device]
 
-    fields = ['compute', 'access', 'fan', 'power', 'temp']
-    for (device, field), value in df[fields].stack().iteritems():
-        writing.mean(f'gpu/{device}/{field}', value)
+    for device, row in df.iterrows():
+        for field, value in row.iteritems():
+            if field in ('compute', 'fan', 'access'):
+                writing.mean(f'gpu/{device}/{field}', value/100)
+            if field == 'power':
+                writing.mean(f'gpu/{device}/{field}', value/row['powerlimit'])
+            if field == 'temp':
+                writing.mean(f'gpu/{device}/{field}', value/80)
 
     for device in df.index:
-        writing.mean(f'gpu-memory/{device}/gross', 100*df.loc[device, 'memused']/df.loc[device, 'memtotal'])
+        writing.mean(f'gpu-memory/{device}/gross', df.loc[device, 'memused']/df.loc[device, 'memtotal'])
