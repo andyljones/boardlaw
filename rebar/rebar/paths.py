@@ -13,6 +13,12 @@ def timestamp(run_suffix):
         run_suffix = run_suffix.__name__
     return f'{pd.Timestamp.now().strftime("%Y-%m-%d %H-%M-%S")} {run_suffix}'
 
+def resuffix(run_name, suffix):
+    old = run_dir(resolve(run_name))
+    match = re.match(r'^(?P<date>\d\d\d\d-\d\d-\d\d \d\d-\d\d-\d\d) (?P<suffix>.*)', old.name)
+    new = old.with_name(f'{match.group("date")} {suffix}')
+    old.replace(new)
+
 def validate(*parts):
     for x in parts:
         #TODO: Why can't I have _ in a path again?
