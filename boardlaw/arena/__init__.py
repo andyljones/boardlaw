@@ -117,14 +117,17 @@ def fill_matchups(run_name=-1, device='cuda:1'):
 
     while True:
         n, w = database.symmetric_pandas(run_name, agents)
-        matchup = (n
+        zeros = (n
             .stack()
             .loc[lambda s: s == 0]
             .reset_index()
-            .loc[lambda df: df.black_name != df.white_name]
-            .sample(1)
-            .iloc[0, :2]
-            .tolist())
+            .loc[lambda df: df.black_name != df.white_name])
+
+        indices = {n: i for i, n in enumerate(n.index)}
+        diff = abs(zeros.black_name.replace(indices) - zeros.white_name.replace(indices))
+        ordered = zeros.loc[diff.sort_values().index]
+        # Sample so there's no problems if we run in parallel
+        matchup = ordered.head(10).sample(1).iloc[0, :2].tolist()
 
         log.info(f'Playing {matchup}')
         matchup = {m: agents[m] for m in matchup}
