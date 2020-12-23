@@ -86,8 +86,8 @@ def errors(run_name=-1, filter='.*'):
     corr = np.corrcoef(actual[~np.isnan(actual)], expected[~np.isnan(actual)])[0, 1]
 
     fig = plt.figure()
-    gs = plt.GridSpec(4, 2, fig, height_ratios=[20, 1, 20, 1])
-    fig.set_size_inches(12, 12)
+    gs = plt.GridSpec(4, 3, fig, height_ratios=[20, 1, 20, 1])
+    fig.set_size_inches(18, 12)
 
     # Top row
     cmap = copy.copy(plt.cm.RdBu)
@@ -102,8 +102,16 @@ def errors(run_name=-1, filter='.*'):
     im = ax.imshow(expected, **kwargs)
     ax.set_title('expected')
 
-    ax = plt.subplot(gs[1, :])
+    ax = plt.subplot(gs[1, :2])
     plt.colorbar(im, cax=ax, orientation='horizontal')
+
+    # Top right
+    ax = plt.subplot(gs[0, 2])
+    elos = analysis.elos(run_name, target=0)
+    ax.errorbar(np.arange(len(elos)), elos.μ, yerr=elos.σ, marker='.', capsize=2, linestyle='')
+    ax.set_title('elos v. first')
+    ax.grid()
+
 
     # Bottom left
     ax = plt.subplot(gs[2, 0])
