@@ -1,11 +1,17 @@
+import re
+import pandas as pd
 from contextlib import contextmanager
 from pathlib import Path
 import json
 from portalocker import RLock, AlreadyLocked
 import shutil
 import pytest
+from aljpy import humanhash
+import uuid
 
 ROOT = 'output/pavlov'
+
+### Basic file stuff
 
 def root():
     root = Path(ROOT)
@@ -41,14 +47,16 @@ def write(path, contents):
         f.write(contents)
 
 def dir(run):
-    return root() / run 
-
-def infopath(run):
-    return dir(run) / 'info.json'
+    return root() / run
 
 def delete(run):
     assert run != ''
     shutil.rmtree(dir(run))
+
+### Info file stuff
+
+def infopath(run):
+    return dir(run) / '_info.json'
 
 def info(run, val=None, create=False):
     path = infopath(run)
@@ -59,13 +67,12 @@ def info(run, val=None, create=False):
     elif create:
         assert isinstance(val, dict)
         assert_file(path, r'{}')
-        return write(path, json.dumps(val))
+        write(path, json.dumps(val))
+        return path
     else:
         assert isinstance(val, dict)
-        return write(path, json.dumps(val))
-
-def infos():
-    return {dir.name: info(dir.name) for dir in root().iterdir()}
+        write(path, json.dumps(val))
+        return path
 
 @contextmanager
 def infoupdate(run, create=False):
@@ -73,13 +80,50 @@ def infoupdate(run, create=False):
     info(run, create=create)
     # Now grab the lock and do whatever
     with RLock(infopath(run), 'r+t') as f:
-        contents = json.loads(f.read())
+        i = json.loads(f.read())
+        yield i
         f.truncate(0)
         f.seek(0)
-        writer = lambda v: f.write(json.dumps(v))
-        yield contents, writer
+        f.write(json.dumps(i))
 
-def use_test_dir(f):
+def infos():
+    return {dir: info(dir.name) for dir in root().iterdir()}
+
+### Run creation stuff
+
+def run_name(now=None):
+    now = (now or pd.Timestamp.now('UTC')).strftime('%Y-%m-%d %H-%M-%S')
+    suffix = humanhash(str(uuid.uuid4()), n=2)
+    return f'{now} {suffix}'
+
+def new_run(**kwargs):
+    now = pd.Timestamp.now('UTC')
+    run = run_name(now)
+    kwargs = {**kwargs, '_created': str(now), '_files': {}}
+    info(run, kwargs, create=True)
+    return run
+
+### File stuff
+
+def new_file(run, pattern, info={}):
+    match = re.fullmatch(r'(?P<name>.*)\.(?P<suffix>.*)', pattern)
+    salt = humanhash(str(uuid.uuid4()), n=1)
+    name = f'{match.group("name")}-{salt}.{match.group("suffix")}'
+
+    with infoupdate(run) as i:
+        assert name not in i['_files']
+        i['_files'][name] = {'_created': str(pd.Timestamp.now('UTC')), **info}
+    return dir(run) / name
+
+def fileinfos(run):
+    return info(run)['_files']
+
+def filepath(run, name):
+    return dir(run) / name
+
+### Tests
+
+def in_test_dir(f):
 
     def wrapped(*args, **kwargs):
         global ROOT
@@ -96,7 +140,7 @@ def use_test_dir(f):
     
     return wrapped
 
-@use_test_dir
+@in_test_dir
 def test_info():
 
     # Check reading from a nonexistant file errors
@@ -132,7 +176,7 @@ def test_info():
     i = info('test')
     assert i == {'a': 1}
 
-@use_test_dir
+@in_test_dir
 def test_infos():
     info('test-1', {'idx': 1}, create=True)
     info('test-2', {'idx': 2}, create=True)
@@ -141,3 +185,25 @@ def test_infos():
     assert len(i) == 2
     assert i['test-1'] == {'idx': 1}
     assert i['test-2'] == {'idx': 2}
+
+@in_test_dir
+def test_new_run():
+    run = new_run(desc='test')
+
+    i = info(run)
+    assert i['desc'] == 'test'
+    assert i['_created']
+    assert i['_files'] == {}
+
+
+@in_test_dir
+def test_new_file():
+    run = new_run()
+    path = new_file(run, 'test.txt', {'hello': 'one'})
+    name = path.name
+
+    path.write_text('contents')
+
+    i = fileinfos(run)[name]
+    assert i['hello'] == 'one'
+    assert filepath(run, name).read_text()  == 'contents'
