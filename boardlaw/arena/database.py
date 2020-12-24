@@ -69,7 +69,10 @@ def summary(run_name):
 def games(run_name):
     df = summary(run_name)
     if len(df) == 0:
-        return pd.DataFrame()
+        df = pd.DataFrame()
+        df.index.name = 'black_name'
+        df.columns.name = 'white_name'
+        return df
     return df.white_wins + df.black_wins
 
 def wins(run_name, min_games=-1):
