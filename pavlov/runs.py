@@ -62,17 +62,20 @@ def infopath(run):
 
 def info(run, val=None, create=False):
     path = infopath(run)
+    if not create and not path.exists():
+        raise ValueError(f'Run "{run}" has not been created yet')
+    if val is not None and not isinstance(val, dict):
+        raise ValueError('Info value must be None or a dict')
+
     if val is None and create:
         return json.loads(read_default(path, r'{}'))
     elif val is None:
         return json.loads(read(path, 'rt'))
     elif create:
-        assert isinstance(val, dict)
         assert_file(path, r'{}')
         write(path, json.dumps(val))
         return path
     else:
-        assert isinstance(val, dict)
         write(path, json.dumps(val))
         return path
 
@@ -88,35 +91,36 @@ def infoupdate(run, create=False):
         f.seek(0)
         f.write(json.dumps(i))
 
-def infos():
-    return {dir.name: info(dir.name) for dir in root().iterdir()}
-
 ### Run creation stuff
 
-def run_name(now=None):
+def run_name(suffix=None, now=None):
     now = (now or pd.Timestamp.now('UTC')).strftime('%Y-%m-%d %H-%M-%S')
-    suffix = humanhash(str(uuid.uuid4()), n=2)
+    suffix = suffix or humanhash(str(uuid.uuid4()), n=2)
     return f'{now} {suffix}'
 
-def new_run(**kwargs):
+def new_run(suffix=None, **kwargs):
     now = pd.Timestamp.now('UTC')
-    run = run_name(now)
+    run = run_name(suffix, now)
     kwargs = {**kwargs, '_created': str(now), '_files': {}}
     info(run, kwargs, create=True)
     return run
+
+def runs():
+    return {dir.name: info(dir.name) for dir in root().iterdir()}
 
 ### File stuff
 
 def new_file(run, pattern, info={}):
     match = re.fullmatch(r'(?P<name>.*)\.(?P<suffix>.*)', pattern)
-    salt = humanhash(str(uuid.uuid4()), n=2)
-    name = f'{match.group("name")}-{salt}.{match.group("suffix")}'
+    prefix, suffix = match.group("name"), match.group("suffix")
 
     with infoupdate(run) as i:
-        assert name not in i['_files']
+        count = len([f for _, f in i['_files'].items() if f['_pattern'] == pattern])
+        name = f'{prefix}.{count}.{suffix}'
         process = multiprocessing.current_process()
         thread = threading.current_thread()
         i['_files'][name] = {
+            '_pattern': pattern,
             '_created': str(pd.Timestamp.now('UTC')),
             '_process_id': str(process.pid),
             '_process_name': process.name,
@@ -130,6 +134,9 @@ def fileinfo(run, name):
 
 def filepath(run, name):
     return dir(run) / name
+
+def filepattern(run, pattern):
+    return [n for n, i in info(run)['_files'].items() if i['_pattern'] == pattern]
 
 ### Tests
 
@@ -187,16 +194,6 @@ def test_info():
     assert i == {'a': 1}
 
 @in_test_dir
-def test_infos():
-    info('test-1', {'idx': 1}, create=True)
-    info('test-2', {'idx': 2}, create=True)
-
-    i = infos()
-    assert len(i) == 2
-    assert i['test-1'] == {'idx': 1}
-    assert i['test-2'] == {'idx': 2}
-
-@in_test_dir
 def test_new_run():
     run = new_run(desc='test')
 
@@ -205,6 +202,15 @@ def test_new_run():
     assert i['_created']
     assert i['_files'] == {}
 
+@in_test_dir
+def test_runs():
+    fst = new_run('test-1', idx=1)
+    snd = new_run('test-2', idx=2)
+
+    i = runs()
+    assert len(i) == 2
+    assert i[fst]['idx'] == 1
+    assert i[snd]['idx'] == 2
 
 @in_test_dir
 def test_new_file():
@@ -217,3 +223,13 @@ def test_new_file():
     i = fileinfo(run, name)
     assert i['hello'] == 'one'
     assert filepath(run, name).read_text()  == 'contents'
+
+@in_test_dir
+def test_filepattern():
+    run = new_run()
+    new_file(run, 'foo.txt')
+    new_file(run, 'foo.txt')
+    new_file(run, 'bar.txt')
+
+    assert len(filepattern(run, 'foo.txt')) == 2
+    assert len(filepattern(run, 'bar.txt')) == 1
