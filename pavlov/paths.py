@@ -3,6 +3,7 @@ from pathlib import Path
 import json
 from portalocker import RLock, AlreadyLocked
 import shutil
+import pytest
 
 ROOT = 'output/pavlov'
 
@@ -55,8 +56,16 @@ def info(run, val=None, create=False):
         return json.loads(read_default(path, r'{}'))
     elif val is None:
         return json.loads(read(path, 'rt'))
-    else:
+    elif create:
+        assert isinstance(val, dict)
+        assert_file(path, r'{}')
         return write(path, json.dumps(val))
+    else:
+        assert isinstance(val, dict)
+        return write(path, json.dumps(val))
+
+def infos():
+    return {dir.name: info(dir.name) for dir in root().iterdir()}
 
 @contextmanager
 def infoupdate(run, create=False):
@@ -89,7 +98,6 @@ def use_test_dir(f):
 
 @use_test_dir
 def test_info():
-    import pytest
 
     # Check reading from a nonexistant file errors
     with pytest.raises(FileNotFoundError):
@@ -123,3 +131,13 @@ def test_info():
     # and read it back
     i = info('test')
     assert i == {'a': 1}
+
+@use_test_dir
+def test_infos():
+    info('test-1', {'idx': 1}, create=True)
+    info('test-2', {'idx': 2}, create=True)
+
+    i = infos()
+    assert len(i) == 2
+    assert i['test-1'] == {'idx': 1}
+    assert i['test-2'] == {'idx': 2}
