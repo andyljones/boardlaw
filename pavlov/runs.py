@@ -1,3 +1,5 @@
+import threading
+import multiprocessing
 import re
 import pandas as pd
 from contextlib import contextmanager
@@ -87,7 +89,7 @@ def infoupdate(run, create=False):
         f.write(json.dumps(i))
 
 def infos():
-    return {dir: info(dir.name) for dir in root().iterdir()}
+    return {dir.name: info(dir.name) for dir in root().iterdir()}
 
 ### Run creation stuff
 
@@ -107,16 +109,24 @@ def new_run(**kwargs):
 
 def new_file(run, pattern, info={}):
     match = re.fullmatch(r'(?P<name>.*)\.(?P<suffix>.*)', pattern)
-    salt = humanhash(str(uuid.uuid4()), n=1)
+    salt = humanhash(str(uuid.uuid4()), n=2)
     name = f'{match.group("name")}-{salt}.{match.group("suffix")}'
 
     with infoupdate(run) as i:
         assert name not in i['_files']
-        i['_files'][name] = {'_created': str(pd.Timestamp.now('UTC')), **info}
+        process = multiprocessing.current_process()
+        thread = threading.current_thread()
+        i['_files'][name] = {
+            '_created': str(pd.Timestamp.now('UTC')),
+            '_process_id': str(process.pid),
+            '_process_name': process.name,
+            '_thread_id': str(thread.ident),
+            '_thread_name': str(thread.name),
+            **info}
     return dir(run) / name
 
-def fileinfos(run):
-    return info(run)['_files']
+def fileinfo(run, name):
+    return info(run)['_files'][name]
 
 def filepath(run, name):
     return dir(run) / name
@@ -204,6 +214,6 @@ def test_new_file():
 
     path.write_text('contents')
 
-    i = fileinfos(run)[name]
+    i = fileinfo(run, name)
     assert i['hello'] == 'one'
     assert filepath(run, name).read_text()  == 'contents'
