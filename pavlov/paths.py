@@ -14,6 +14,7 @@ def root():
 def assert_file(path, default):
     mode = 'x+t' if isinstance(default, str) else 'x+b'
     try:
+        path.parent.mkdir(exist_ok=True, parents=True)
         with RLock(path, mode, fail_when_locked=True) as f:
             f.write(default)
     except (FileExistsError, AlreadyLocked):
@@ -25,15 +26,12 @@ def read_default(path, default):
     with RLock(path, mode) as f:
         return f.read()
 
-def index():
-    path = root() / 'index.json'
-    return json.loads(read_default(path, '[]'))
+def dir(run):
+    return root() / run 
 
-def directory(run):
-    return ROOT 
-
-def filepath(run, tags):
-    pass
+def info(run):
+    path = dir(run) / 'info.json'
+    return json.loads(read_default(path, r'{}'))
 
 def use_test_dir(f):
 
@@ -53,9 +51,8 @@ def use_test_dir(f):
     return wrapped
 
 @use_test_dir
-def test_index():
-    global ROOT
-    ROOT = 'output/pavlov-test'
-    idx = index()
-    assert isinstance(idx, list)
-    assert len(idx) == 0
+def test_info():
+    i = info('test')
+    assert isinstance(i, dict)
+    assert len(i) == 0
+    assert Path(ROOT).joinpath('test/info.json').exists()
