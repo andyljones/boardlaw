@@ -76,7 +76,8 @@ def mohex_arena(run_name, worldfunc, agentfunc, device='cuda:1'):
             if time.time() - last_load > 15:
                 last_load = time.time()
                 agents = latest_agent(run_name, agentfunc, device=device)
-                agent = list(agents.values())[0]
+                if agents:
+                    agent = list(agents.values())[0]
             
             if agent and (time.time() - last_step > 1):
                 last_step = time.time()

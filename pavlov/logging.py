@@ -66,7 +66,7 @@ class Reader:
         self._files = {}
 
     def read(self):
-        for name in runs.filepattern(self._run, 'logs.txt'):
+        for name in runs.fileglob(self._run, 'logs.txt'):
             if name not in self._files:
                 info = runs.fileinfo(self._run, name)
                 path = runs.filepath(self._run, name)

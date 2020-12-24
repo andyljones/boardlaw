@@ -72,7 +72,7 @@ def optimize(network, opt, batch):
         stats.mean('loss/value', value_loss)
         stats.mean('loss/policy', policy_loss)
         stats.mean('progress/resid-var', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
-        stats.mean('progress/kl-div', -(d0.logits - d.logits).where(w.valid, zeros).sum(-1).div(w.valid.float.sum(-1)).mean())
+        stats.mean('progress/kl-div', -(d0.logits - d.logits).where(w.valid, zeros).sum(-1).div(w.valid.float().sum(-1)).mean())
 
         stats.mean('rel-entropy/policy', *rel_entropy(d.logits, w.valid)) 
         stats.mean('rel-entropy/targets', *rel_entropy(d0.logits, w.valid))
@@ -88,14 +88,14 @@ def optimize(network, opt, batch):
 def run():
     buffer_length = 16 
     batch_size = 8192
-    n_envs = 4096
+    n_envs = 8192
     buffer_inc = batch_size//n_envs
 
     worlds = worldfunc(n_envs)
     agent = agentfunc()
     opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-3, amsgrad=True)
 
-    run_name = paths.timestamp('first-9x9')
+    run_name = paths.timestamp('residual-9x9')
     paths.clear(run_name)
     with logging.to_dir(run_name), stats.to_dir(run_name), \
             arena.monitor(run_name, worldfunc, agentfunc):
