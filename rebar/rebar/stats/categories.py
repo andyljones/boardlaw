@@ -51,7 +51,7 @@ def std(x):
         return x.resample(**kwargs).std()
     return resample
 
-@category()
+@category(plotter=plotters.log_single)
 def cumsum(total=1):
     def resample(**kwargs):
         return total.resample(**kwargs).sum().cumsum()

@@ -130,10 +130,10 @@ def legend(f):
     f.legend.location = 'top_left'
 
 
-def timeseries(source, info, **kwargs):
+def timeseries(source, info, fig_kwargs={}, **kwargs):
     y = info.id.iloc[0]
     #TODO: Work out how to apply the axes formatters to the tooltips
-    f = bop.figure(x_range=bom.DataRange1d(start=0, follow='end'), tooltips=[('', '$data_y')])
+    f = bop.figure(x_range=bom.DataRange1d(start=0, follow='end'), tooltips=[('', '$data_y')], **fig_kwargs)
     f.line(x='time_', y=y, source=source, **kwargs)
     default_tools(f)
     x_zeroline(f)
@@ -141,8 +141,8 @@ def timeseries(source, info, **kwargs):
 
     return f
 
-def timedataframe(source, info, **kwargs):
-    f = bop.figure(x_range=bom.DataRange1d(start=0, follow='end'), tooltips=[('', '$data_y')])
+def timedataframe(source, info, fig_kwargs={}, **kwargs):
+    f = bop.figure(x_range=bom.DataRange1d(start=0, follow='end'), tooltips=[('', '$data_y')], **fig_kwargs)
 
     for y, label, color in zip(info.id.tolist(), info.label.tolist(), cycle(Category10_10)):
         f.line(x='time_', y=y, legend_label=label, color=color, width=2, source=source, **kwargs)
@@ -162,7 +162,9 @@ def single(source, info, **kwargs):
         return timedataframe(source, info, **kwargs)
 
 def log_single(*args, **kwargs):
-    return single(*args, **kwargs, y_axis_type='log')
+    f = single(*args, **kwargs, fig_kwargs={'y_axis_type': 'log'})
+    f.yaxis.formatter = bom.LogTickFormatter()
+    return f
 
 def confidence(source, info):
     f = bop.figure(x_range=bom.DataRange1d(start=0, follow='end'), tooltips=[('', '$data_y')])
