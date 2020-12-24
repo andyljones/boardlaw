@@ -9,6 +9,8 @@ from portalocker import RLock, AlreadyLocked
 import shutil
 import pytest
 from aljpy import humanhash
+from fnmatch import fnmatch
+import string
 import uuid
 
 ROOT = 'output/pavlov'
@@ -98,6 +100,10 @@ def run_name(suffix=None, now=None):
     suffix = suffix or humanhash(str(uuid.uuid4()), n=2)
     return f'{now} {suffix}'
 
+def resolve(run):
+    #TODO: Implement indexing
+    return run
+
 def new_run(suffix=None, **kwargs):
     now = pd.Timestamp.now('UTC')
     run = run_name(suffix, now)
@@ -110,13 +116,20 @@ def runs():
 
 ### File stuff
 
-def new_file(run, pattern, info={}):
-    match = re.fullmatch(r'(?P<name>.*)\.(?P<suffix>.*)', pattern)
-    prefix, suffix = match.group("name"), match.group("suffix")
+def _filename(pattern, extant_files):
+    is_pattern = any(name == "n" for _, name, _, _ in string.Formatter().parse(pattern))
+    count = len([f for _, f in extant_files.items() if f['_pattern'] == pattern])
+    if is_pattern:
+        return pattern.format(n=count)
+    elif count == 0:
+        return pattern
+    else:
+        raise ValueError(f'You\'ve created a "{pattern}" file already, and that isn\'t a valid pattern')
 
+def new_file(run, pattern, **kwargs):
     with infoupdate(run) as i:
-        count = len([f for _, f in i['_files'].items() if f['_pattern'] == pattern])
-        name = f'{prefix}.{count}.{suffix}'
+        name = _filename(pattern, i['_files'])
+
         process = multiprocessing.current_process()
         thread = threading.current_thread()
         i['_files'][name] = {
@@ -126,7 +139,7 @@ def new_file(run, pattern, info={}):
             '_process_name': process.name,
             '_thread_id': str(thread.ident),
             '_thread_name': str(thread.name),
-            **info}
+            **kwargs}
     return dir(run) / name
 
 def fileinfo(run, name):
@@ -135,8 +148,8 @@ def fileinfo(run, name):
 def filepath(run, name):
     return dir(run) / name
 
-def filepattern(run, pattern):
-    return [n for n, i in info(run)['_files'].items() if i['_pattern'] == pattern]
+def fileglob(run, pattern):
+    return [n for n, i in info(run)['_files'].items() if fnmatch(n, pattern)]
 
 ### Tests
 
@@ -215,7 +228,7 @@ def test_runs():
 @in_test_dir
 def test_new_file():
     run = new_run()
-    path = new_file(run, 'test.txt', {'hello': 'one'})
+    path = new_file(run, 'test.txt', hello='one')
     name = path.name
 
     path.write_text('contents')
@@ -225,11 +238,11 @@ def test_new_file():
     assert filepath(run, name).read_text()  == 'contents'
 
 @in_test_dir
-def test_filepattern():
+def test_fileglob():
     run = new_run()
     new_file(run, 'foo.txt')
     new_file(run, 'foo.txt')
     new_file(run, 'bar.txt')
 
-    assert len(filepattern(run, 'foo.txt')) == 2
-    assert len(filepattern(run, 'bar.txt')) == 1
+    assert len(fileglob(run, 'foo.txt')) == 2
+    assert len(fileglob(run, 'bar.txt')) == 1

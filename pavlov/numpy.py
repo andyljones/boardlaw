@@ -1,6 +1,6 @@
 import numpy as np
 from numpy.lib import format as npformat
-from . import paths
+from . import runs
 from io import BytesIO
 from datetime import datetime
 from collections import defaultdict
@@ -54,23 +54,15 @@ class FileWriter:
 
 class Writer:
 
-    def __init__(self, run_name, group):
-        self._run_name = run_name
-        self._group = group
+    def __init__(self, run):
+        self._run = run
         self._writers = {}
 
-    def write(self, channel, d):
-        if channel not in self._writers:
-            path = paths.process_path(self._run_name, self._group, channel).with_suffix('.npr')
-            self._writers[channel] = FileWriter(path)
-        self._writers[channel].write(d)
-
-    def write_many(self, ds):
-        for channel, d in ds.items():
-            if channel not in self._writers:
-                path = paths.process_path(self._run_name, self._group, channel).with_suffix('.npr')
-                self._writers[channel] = FileWriter(path)
-            self._writers[channel].write(d)
+    def write(self, name, d, **kwargs):
+        if name not in self._writers:
+            path = runs.new_file(self._run, f'{name}.npr', **kwargs)
+            self._writers[name] = FileWriter(path)
+        self._writers[name].write(d)
 
     def close(self):
         for _, w in self._writers.items():
@@ -101,33 +93,32 @@ class FileReader:
 
 class Reader:
 
-    def __init__(self, run_name, group):
-        self._run_name = paths.resolve(run_name)
-        self._group = group
+    def __init__(self, run, glob='*.npr'):
+        self._run = runs.resolve(run)
+        self._glob = glob
         self._readers = {}
 
     def read(self):
-        for path in paths.subdir(self._run_name, self._group).glob('**/*.npr'):
-            parsed = paths.parse(path)
-            channel = '/'.join(parsed.parts[1:])
-            filename = parsed.filename.split('.')[0]
-            if (channel, filename) not in self._readers:
-                self._readers[channel, filename] = FileReader(path)
+        info = runs.info(self._run)
+        for name in runs.fileglob(self._run, self._glob):
+            if name not in self._readers:
+                pattern = info['_files'][name]['_pattern']
+                self._readers[name] = (pattern, FileReader(runs.filepath(self._run, name)))
 
-        results = defaultdict(lambda: [])
-        for (channel, _), reader in self._readers.items():
+        results = defaultdict(lambda: {})
+        for name, (pattern, reader) in self._readers.items():
             arr = reader.read()
             if len(arr) > 0:
-                results[channel].append(arr)
+                results[pattern][name] = arr
 
         return results
 
-
+@runs.in_test_dir
 def test_file_write_read():
     d = {'total': 65536, 'count': 14, '_time': np.datetime64('now')}
     
-    paths.clear('test', 'stats')
-    path = paths.process_path('test', 'stats', 'mean/traj-length').with_suffix('.npr')
+    run = runs.new_run()
+    path = runs.new_file(run, 'test.npr')
 
     writer = FileWriter(path)
     writer.write(d)
@@ -137,14 +128,16 @@ def test_file_write_read():
 
     assert len(r) == 1
 
+@runs.in_test_dir
 def test_write_read():
-    paths.clear('test', 'stats')
+    run = runs.new_run()
 
-    writer = Writer('test', 'stats')
-    writer.write('mean/traj-length', {'total': 65536, 'count': 14, '_time': np.datetime64('now')})
-    writer.write('max/reward', {'total': 50000.5, 'count': 50, '_time': np.datetime64('now')})
+    writer = Writer(run)
+    writer.write('traj-length', {'total': 65536, 'count': 14, '_time': np.datetime64('now')})
+    writer.write('reward', {'total': 50000.5, 'count': 50, '_time': np.datetime64('now')})
 
-    reader = Reader('test', 'stats')
+    reader = Reader(run)
     r = reader.read()
 
     assert len(r) == 2
+    print(r)
