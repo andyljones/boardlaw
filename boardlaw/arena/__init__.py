@@ -48,7 +48,7 @@ def latest_agent(run_name, agentfunc, device='cpu', **kwargs):
 
 def periodic_arena(run_name, worldfunc, agentfunc, device='cuda:1'):
     run_name = paths.resolve(run_name)
-    with logging.via_dir(run_name), stats.to_dir(run_name):
+    with logging.to_dir(run_name), stats.to_dir(run_name):
         worlds = worldfunc(device=device, n_envs=256)
 
         i = 0
