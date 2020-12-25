@@ -149,7 +149,10 @@ def filepath(run, name):
     return dir(run) / name
 
 def fileglob(run, pattern):
-    return [n for n, i in info(run)['_files'].items() if fnmatch(n, pattern)]
+    return {n: i for n, i in info(run)['_files'].items() if fnmatch(n, pattern)}
+
+def files(run):
+    return info(run)['_files']
 
 ### Tests
 

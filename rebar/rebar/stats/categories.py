@@ -1,8 +1,4 @@
 from rebar import dotdict
-import numpy as np
-import time
-import torch
-import matplotlib.pyplot as plt
 import pandas as pd
 import logging
 from . import formatters, plotters

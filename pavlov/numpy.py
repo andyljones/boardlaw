@@ -89,10 +89,9 @@ class MultiReader:
         self._readers = {}
 
     def read(self):
-        info = runs.info(self._run)
-        for name in runs.fileglob(self._run, self._glob):
+        for name, info in runs.fileglob(self._run, self._glob).items():
             if name not in self._readers:
-                pattern = info['_files'][name]['_pattern']
+                pattern = info['_pattern']
                 self._readers[name] = (pattern, Reader(runs.filepath(self._run, name)))
 
         results = defaultdict(lambda: {})
