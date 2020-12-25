@@ -87,13 +87,13 @@ def optimize(network, opt, batch):
 
 def run():
     buffer_length = 16 
-    batch_size = 32*1024
-    n_envs = 4*1024
+    batch_size = 64*1024
+    n_envs = 8*1024
     buffer_inc = batch_size//n_envs
 
     worlds = worldfunc(n_envs)
     agent = agentfunc()
-    opt = torch.optim.Adam(agent.evaluator.parameters(), lr=4e-3, amsgrad=True)
+    opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-3, amsgrad=True)
 
     run_name = paths.timestamp('big-batch-9x9')
     paths.clear(run_name)
