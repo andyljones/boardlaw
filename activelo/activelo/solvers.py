@@ -8,6 +8,9 @@ import torch.testing
 from torch import nn
 import geotorch
 from . import expectations, common
+from logging import getLogger
+
+log = getLogger(__name__)
 
 μ0 = 0
 σ0 = 10
@@ -74,6 +77,8 @@ class ELBO(nn.Module):
         return -self.expected_prior().sum() - self.expected_log_likelihood(n, w).sum() 
 
     def entropy(self):
+        if torch.logdet(self.Σ) < 0:
+            raise ValueError('Σ has become negdef')
         return 1/2*(self.N*np.log(2*np.pi*np.e) + torch.logdet(self.Σ))
 
     def forward(self, n, w):
@@ -102,7 +107,7 @@ class Solver:
         def closure():
             l = -elbo(n, w)
             if torch.isnan(l):
-                raise ValueError('Hit a nan. Σ is probably negdef.')
+                raise ValueError('Hit a nan.')
             optim.zero_grad()
             l.backward()
 
@@ -119,8 +124,11 @@ class Solver:
 
             return l
 
-        optim.step(closure)
-        closure()
+        try:
+            optim.step(closure)
+            closure()
+        except ValueError as e:
+            log.warn(f'activelo did not converge: "{str(e)}"')
 
         μd, σ2d = map(as_square, pairwise_diffs(elbo.μ, elbo.Σ))
         return arrdict.arrdict(
