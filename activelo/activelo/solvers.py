@@ -77,7 +77,7 @@ class ELBO(nn.Module):
         return -self.expected_prior().sum() - self.expected_log_likelihood(n, w).sum() 
 
     def entropy(self):
-        if torch.logdet(self.Σ) < 0:
+        if torch.isnan(torch.logdet(self.Σ)):
             raise ValueError('Σ has become negdef')
         return 1/2*(self.N*np.log(2*np.pi*np.e) + torch.logdet(self.Σ))
 
