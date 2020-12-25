@@ -33,8 +33,9 @@ class Mean:
         return numpy.MultiReader(run, pattern)
 
     @staticmethod
-    def resample(arr):
+    def init(source, read):
         pass
+
 
 class Reader:
 

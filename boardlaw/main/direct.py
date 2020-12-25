@@ -95,7 +95,7 @@ def run():
     agent = agentfunc()
     opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-3, amsgrad=True)
 
-    run_name = paths.timestamp('residual-9x9')
+    run_name = paths.timestamp('high-noise-9x9')
     paths.clear(run_name)
     with logging.to_dir(run_name), stats.to_dir(run_name), \
             arena.monitor(run_name, worldfunc, agentfunc):
