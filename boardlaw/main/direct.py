@@ -66,7 +66,9 @@ def optimize(network, opt, batch):
     opt.zero_grad()
     loss.backward()
 
+    old = torch.cat([p.flatten() for p in network.parameters()])
     opt.step()
+    new = torch.cat([p.flatten() for p in network.parameters()])
 
     with stats.defer():
         stats.mean('loss/value', value_loss)
@@ -85,6 +87,9 @@ def optimize(network, opt, batch):
         stats.cumsum('count/learner-steps', 1)
         # stats.rel_gradient_norm('rel-norm-grad', agent)
 
+        stats.mean('opt/lr', np.mean([p['lr'] for p in opt.param_groups]))
+        stats.mean('opt/step', (new - old).pow(2).mean().pow(.5))
+
 def run():
     buffer_length = 16 
     batch_size = 64*1024
@@ -93,9 +98,11 @@ def run():
 
     worlds = worldfunc(n_envs)
     agent = agentfunc()
-    opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-3, amsgrad=True)
+    opt = torch.optim.Adam(agent.evaluator.parameters(), lr=4e-3, amsgrad=True)
 
-    run_name = paths.timestamp('big-batch-w-noise-9x9')
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
+
+    run_name = paths.timestamp('annealed-high-lr-9x9')
     paths.clear(run_name)
     with logging.to_dir(run_name), stats.to_dir(run_name), \
             arena.monitor(run_name, worldfunc, agentfunc):
@@ -117,6 +124,7 @@ def run():
             chunk_stats(chunk, buffer_inc)
 
             optimize(agent.evaluator, opt, chunk[:, next(idxs)])
+            sched.step()
             log.info('learner stepped')
             
             buffer = buffer[buffer_inc:]
