@@ -51,12 +51,14 @@ class Compositor:
 _cache = (-1, None)
 def compositor():
     from IPython import get_ipython
-    new_count = get_ipython().execution_count
-    global _cache
-    old_count, _ = _cache
-    if new_count != old_count:
-        _cache = (new_count, Compositor())
-    return _cache[1]
+    with WRITE_LOCK:
+        new_count = get_ipython().execution_count
+        global _cache
+
+        old_count, _ = _cache
+        if new_count != old_count:
+            _cache = (new_count, Compositor())
+        return _cache[1]
 
 
 def test():

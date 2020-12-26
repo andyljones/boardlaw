@@ -125,7 +125,7 @@ class IPythonRenderer:
 def tail(iterable, n):
     return iter(deque(iterable, maxlen=n))
 
-def from_dir_sync(run, in_ipython=True, canceller=None):
+def from_run_sync(run, in_ipython=True, canceller=None):
     reader = Reader(run)
 
     if in_ipython:
@@ -144,19 +144,19 @@ def from_dir_sync(run, in_ipython=True, canceller=None):
 
         time.sleep(.25)
 
-def _from_dir(*args, **kwargs):
+def _from_run(*args, **kwargs):
     try:
-        from_dir_sync(*args, **kwargs)
+        from_run_sync(*args, **kwargs)
     except KeyboardInterrupt:
         log.info('Interrupting main')
         _thread.interrupt_main()
-        from_dir_sync(*args, **kwargs)
+        from_run_sync(*args, **kwargs)
 
 @contextmanager
 def from_run(run):
     try:
         canceller = threading.Event()
-        thread = threading.Thread(target=_from_dir, args=(run, in_ipython(), canceller))
+        thread = threading.Thread(target=_from_run, args=(run, in_ipython(), canceller))
         thread.start()
         yield
     finally:

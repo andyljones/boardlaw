@@ -1,4 +1,9 @@
 from contextlib import contextmanager
+from . import timeseries
+from .. import runs
+
+KINDS = {
+    **timeseries.KINDS}
 
 WRITERS = {}
 RUN = None
@@ -24,3 +29,18 @@ def writer(key, factory=None):
             WRITERS[key] = factory()
     return WRITERS[key]
         
+def _key(file):
+    # file: kind.name.0.ext
+    parts = file.split('.')
+    return '.'.join(parts[:-2])
+
+def readers(run, readers={}):
+    readers = {**readers}
+    for file, info in runs.files(run).items():
+        kind = info['kind']
+        if kind in KINDS:
+            kind = KINDS[kind]
+            k = _key(file)
+            if k not in readers:
+                readers[k] = kind.Reader(run, k)
+    return readers

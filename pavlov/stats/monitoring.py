@@ -1,6 +1,6 @@
 import time
 from .. import widgets, logging, runs, tests
-from . import run_readers
+from . import registry
 import pandas as pd
 import threading
 from contextlib import contextmanager
@@ -80,7 +80,7 @@ def treeformat(pairs):
 
     return '\n'.join(f'{k} {v}' for k, v in zip(keys, vals))
 
-def from_dir_sync(run, rule, canceller=None, throttle=1):
+def from_run_sync(run, rule, canceller=None, throttle=1):
     run = runs.resolve(run)
     out = widgets.compositor().output()
     start = pd.Timestamp(runs.info(run)['_created'])
@@ -91,7 +91,7 @@ def from_dir_sync(run, rule, canceller=None, throttle=1):
         if tests.time() > nxt:
             nxt = nxt + throttle
 
-            readers = run_readers(run, readers)
+            readers = registry.readers(run, readers)
             pairs = formatted_pairs(readers, rule)
             content = treeformat(pairs)
 
@@ -104,19 +104,19 @@ def from_dir_sync(run, rule, canceller=None, throttle=1):
 
         time.sleep(1.)
 
-def _from_dir(*args, **kwargs):
+def _from_run(*args, **kwargs):
     try:
-        from_dir_sync(*args, **kwargs)
+        from_run_sync(*args, **kwargs)
     except KeyboardInterrupt:
         log.info('Interrupting main')
         _thread.interrupt_main()
 
 @contextmanager
-def from_dir(run, rule='60s'):
+def from_run(run, rule='60s'):
     if logging.in_ipython():
         try:
             canceller = threading.Event()
-            thread = threading.Thread(target=_from_dir, args=(run, rule, canceller))
+            thread = threading.Thread(target=_from_run, args=(run, rule, canceller))
             thread.start()
             yield
         finally:
@@ -157,4 +157,4 @@ def demo_from_dir():
     with to_run(run):
         mean('test', 2)
         pass
-    from_dir_sync(run, '60s')
+    from_run_sync(run, '60s')
