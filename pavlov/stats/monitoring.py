@@ -1,5 +1,5 @@
 import time
-from .. import widgets, logging, runs
+from .. import widgets, logging, runs, tests
 from . import io
 import re
 import pandas as pd
@@ -53,16 +53,16 @@ def tdformat(td):
 def __from_dir(canceller, run, out, rule, throttle=1):
     run = runs.resolve(run)
     reader = io.Reader(run)
-    start = pd.Timestamp.now()
+    start = tests.timestamp()
 
     nxt = 0
     while True:
-        if time.time() > nxt:
+        if runs.time() > nxt:
             nxt = nxt + throttle
 
             # Base slightly into the future, else by the time the resample actually happens you're 
             # left with an almost-empty last interval.
-            base = int(time.time() % 60) + 5
+            base = int(runs.time() % 60) + 5
             df = reader.resample(rule=rule, offset=f'{base}s')
             
             if len(df) > 0:
@@ -79,7 +79,7 @@ def __from_dir(canceller, run, out, rule, throttle=1):
                 content = 'No stats yet'
 
             size = runs.size(run, 'stats')
-            age = pd.Timestamp.now() - start
+            age = tests.timestamp() - start
             out.refresh(f'{run}: {tdformat(age)} old, {rule} rule, {size:.0f}MB on disk\n\n{content}')
 
         if canceller.is_set():

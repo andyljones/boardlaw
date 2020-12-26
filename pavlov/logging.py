@@ -3,7 +3,7 @@ import time
 from collections import defaultdict, deque
 import logging.handlers
 from contextlib import contextmanager
-from . import widgets, runs
+from . import widgets, runs, tests
 import sys
 import traceback
 import _thread
@@ -99,7 +99,7 @@ class IPythonRenderer:
     def __init__(self, compositor=None):
         super().__init__()
         self._out = (compositor or widgets.compositor()).output()
-        self._next = time.time()
+        self._next = runs.time()
         self._lasts = {}
         self._buffers = defaultdict(lambda: deque(['']*self._out.lines, maxlen=self._out.lines))
 
@@ -113,14 +113,14 @@ class IPythonRenderer:
         self._out.refresh(content)
 
         for name, last in list(self._lasts.items()):
-            if time.time() - last > 120:
+            if runs.time() - last > 120:
                 del self._buffers[name]
                 del self._lasts[name]
 
     def emit(self, info, line):
         source = f'{info["_process_name"]}/#{info["_process_id"]}'
         self._buffers[source].append(line)
-        self._lasts[source] = time.time()
+        self._lasts[source] = runs.time()
         self._display()
     
     def close(self):
@@ -182,7 +182,7 @@ def via_run(run, compositor=None):
 
 ### TESTS
 
-@runs.in_test_dir
+@tests.mock_dir
 def test_in_process():
     run = runs.new_run()
     with from_run(run):
@@ -196,7 +196,7 @@ def _test_multiprocess(run):
             log.info(str(i))
             time.sleep(.5)
 
-@runs.in_test_dir
+@tests.mock_dir
 def test_multiprocess():
 
     import multiprocessing as mp
@@ -217,7 +217,7 @@ def _test_error(run_name):
         time.sleep(2)
         raise ValueError('Last gasp')
 
-@runs.in_test_dir
+@tests.mock_dir
 def test_error():
     run = runs.new_run()
 

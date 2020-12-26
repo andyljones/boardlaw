@@ -1,9 +1,11 @@
+from contextlib import contextmanager
 from .. import numpy, runs
 from functools import wraps
 
 WRITERS = {}
 RUN = None
 
+@contextmanager
 def to_run(run):
     try:
         global WRITERS, RUN

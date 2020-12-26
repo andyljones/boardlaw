@@ -1,13 +1,21 @@
+import torch
 import time
 import numpy as np
 import inspect
 import pandas as pd
 from .. import io
-from ... import numpy
+from ... import numpy, runs, tests
 
 __all__ = []
 
-TIMESERIES = {}
+def clean(x):
+    if isinstance(x, torch.Tensor):
+        x = x.detach().cpu().numpy()
+    if isinstance(x, np.ndarray) and x.ndim == 0:
+        x = x.item()
+    if isinstance(x, dict):
+        return {k: clean(v) for k, v in x.items()}
+    return 
 
 class Reader:
 
@@ -35,7 +43,7 @@ class Reader:
 
         # Base slightly into the future, else by the time the resample actually happens you're 
         # left with an almost-empty last interval.
-        base = int(time.time() % 60) + 5
+        base = int(now() % 60) + 5
 
         resampled = self._resampler(**{k: df[k] for k in df}, rule=rule, base=base)
         final = resampled.ffill(limit=1).iloc[-1]
@@ -58,8 +66,11 @@ def timeseries(f):
     kind = f.__name__
 
     def write(name, *args, **kwargs):
+        args = tuple(clean(a) for a in args)
+        kwargs = {k: clean(v) for k, v in kwargs.items()}
+
         call = inspect.getcallargs(f, *args, **kwargs)
-        call = {'_time': np.datetime64('now'), **call}
+        call = {'_time': tests.datetime64(), **call}
 
         key = f'{name}.{kind}'
         if key not in io.WRITERS:
@@ -67,7 +78,7 @@ def timeseries(f):
         io.WRITERS[key].write(call)
 
     write.Reader = lambda run, name: SingleReader(run, f'{name}.{kind}', f)
-    __all__.append(write)
+    __all__.append(kind)
 
     return write
 
@@ -75,4 +86,14 @@ def timeseries(f):
 def mean(total, count=1, **kwargs):
     return total.resample(**kwargs).mean()/count.resample(**kwargs).mean()
 
+@tests.mock_time
+@tests.mock_dir
+def test_mean():
+    run = runs.new_run()
+    with io.to_run(run):
+        tests.set_time(0)
+        mean('test', 4, 2)
+        tests.set_time(1)
+        mean('test', 8, 2)
 
+    final = mean.Reader(run, 'test').final('60s')

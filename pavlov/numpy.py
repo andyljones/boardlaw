@@ -1,6 +1,6 @@
 import numpy as np
 from numpy.lib import format as npformat
-from . import runs
+from . import runs, tests
 from io import BytesIO
 from datetime import datetime
 from collections import defaultdict
@@ -31,7 +31,7 @@ class Writer:
     def __init__(self, run, name, **kwargs):
         self._path = runs.new_file(run, f'{name}-{{n}}.npr', **kwargs)
         self._file = None
-        self._next = time.time()
+        self._next = runs.time()
         
     def _init(self, exemplar):
         self._file = self._path.open('wb', buffering=4096)
@@ -79,7 +79,6 @@ class Reader:
     def read(self):
         for name, info in runs.fileglob(self._run, f'{self._name}-*.npr').items():
             if name not in self._readers:
-                pattern = info['_pattern']
                 self._readers[name] = MonoReader(runs.filepath(self._run, name))
 
         results = {}
@@ -90,31 +89,16 @@ class Reader:
 
         return results
 
-@runs.in_test_dir
+@tests.mock_dir
 def test_write_read():
-    d = {'total': 65536, 'count': 14, '_time': np.datetime64('now')}
+    d = {'total': 65536, 'count': 14, '_time': tests.datetime64()}
     
     run = runs.new_run()
-    path = runs.new_file(run, 'test.npr')
 
-    writer = Writer(path)
+    writer = Writer(run, 'test')
     writer.write(d)
 
-    reader = Reader(path)
+    reader = Reader(run, 'test')
     r = reader.read()
 
     assert len(r) == 1
-
-@runs.in_test_dir
-def test_multi_write_read():
-    run = runs.new_run()
-
-    writer = MultiWriter(run)
-    writer.write('traj-length', {'total': 65536, 'count': 14, '_time': np.datetime64('now')})
-    writer.write('reward', {'total': 50000.5, 'count': 50, '_time': np.datetime64('now')})
-
-    reader = MultiReader(run)
-    r = reader.read()
-
-    assert len(r) == 2
-    print(r)

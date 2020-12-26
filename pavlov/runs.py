@@ -1,3 +1,5 @@
+import numpy as np
+import time as time_
 import threading
 import multiprocessing
 import re
@@ -12,8 +14,11 @@ from aljpy import humanhash
 from fnmatch import fnmatch
 import string
 import uuid
+from . import tests
 
 ROOT = 'output/pavlov'
+
+
 
 ### Basic file stuff
 
@@ -96,7 +101,7 @@ def infoupdate(run, create=False):
 ### Run creation stuff
 
 def run_name(suffix='', now=None):
-    now = (now or pd.Timestamp.now('UTC')).strftime('%Y-%m-%d %H-%M-%S')
+    now = (now or tests.timestamp()).strftime('%Y-%m-%d %H-%M-%S')
     hash = humanhash(str(uuid.uuid4()), n=2)
     return f'{now} {hash} {suffix}'
 
@@ -105,7 +110,7 @@ def resolve(run):
     return run
 
 def new_run(suffix=None, **kwargs):
-    now = pd.Timestamp.now('UTC')
+    now = tests.timestamp()
     run = run_name(suffix, now)
     kwargs = {**kwargs, '_created': str(now), '_files': {}}
     info(run, kwargs, create=True)
@@ -134,7 +139,7 @@ def new_file(run, pattern, **kwargs):
         thread = threading.current_thread()
         i['_files'][name] = {
             '_pattern': pattern,
-            '_created': str(pd.Timestamp.now('UTC')),
+            '_created': str(tests.timestamp()),
             '_process_id': str(process.pid),
             '_process_name': process.name,
             '_thread_id': str(thread.ident),
@@ -156,24 +161,7 @@ def files(run):
 
 ### Tests
 
-def in_test_dir(f):
-
-    def wrapped(*args, **kwargs):
-        global ROOT
-        old_ROOT = ROOT
-        ROOT = 'output/pavlov-test'
-        if Path(ROOT).exists():
-            shutil.rmtree(ROOT)
-
-        try:
-            result = f(*args, **kwargs)
-        finally:
-            ROOT = old_ROOT
-        return result
-    
-    return wrapped
-
-@in_test_dir
+@mock_dir
 def test_info():
 
     # Check reading from a nonexistant file errors
@@ -209,7 +197,7 @@ def test_info():
     i = info('test')
     assert i == {'a': 1}
 
-@in_test_dir
+@mock_dir
 def test_new_run():
     run = new_run(desc='test')
 
@@ -218,7 +206,7 @@ def test_new_run():
     assert i['_created']
     assert i['_files'] == {}
 
-@in_test_dir
+@mock_dir
 def test_runs():
     fst = new_run('test-1', idx=1)
     snd = new_run('test-2', idx=2)
@@ -228,7 +216,7 @@ def test_runs():
     assert i[fst]['idx'] == 1
     assert i[snd]['idx'] == 2
 
-@in_test_dir
+@mock_dir
 def test_new_file():
     run = new_run()
     path = new_file(run, 'test.txt', hello='one')
@@ -240,7 +228,7 @@ def test_new_file():
     assert i['hello'] == 'one'
     assert filepath(run, name).read_text()  == 'contents'
 
-@in_test_dir
+@mock_dir
 def test_fileglob():
     run = new_run()
     new_file(run, 'foo.txt')
