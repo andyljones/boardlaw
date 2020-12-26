@@ -72,7 +72,7 @@ class Reader:
                 self._files[name] = (info, path.open('r'))
         
         for name, (info, f) in self._files.items():
-            for line in f.readlines():
+            for line in tail(f.readlines(), 1000):
                 yield info, line.rstrip('\n')
 
 def in_ipython():
@@ -87,11 +87,11 @@ class StdoutRenderer:
     def __init__(self):
         super().__init__()
 
-    def emit(self, info, line):
+    def append(self, info, line):
         source = f'{info["_process_name"]}/#{info["_process_id"]}'
         print(f'{source}: {line}')
 
-    def close(self):
+    def display(self):
         pass
 
 class IPythonRenderer:
@@ -99,53 +99,47 @@ class IPythonRenderer:
     def __init__(self, compositor=None):
         super().__init__()
         self._out = (compositor or widgets.compositor()).output()
-        self._next = runs.time()
+        self._next = tests.time()
         self._lasts = {}
         self._buffers = defaultdict(lambda: deque(['']*self._out.lines, maxlen=self._out.lines))
+
+    def append(self, info, line):
+        source = f'{info["_process_name"]}/#{info["_process_id"]}'
+        self._buffers[source].append(line)
+        self._lasts[source] = tests.time()
 
     def _format_block(self, name):
         n_lines = max(self._out.lines//(len(self._buffers) + 2), 1)
         lines = '\n'.join(list(self._buffers[name])[-n_lines:])
         return f'{name}:\n{lines}'
 
-    def _display(self):
+    def display(self):
         content = '\n\n'.join([self._format_block(n) for n in self._buffers])
         self._out.refresh(content)
 
         for name, last in list(self._lasts.items()):
-            if runs.time() - last > 120:
+            if tests.time() - last > 120:
                 del self._buffers[name]
                 del self._lasts[name]
-
-    def emit(self, info, line):
-        source = f'{info["_process_name"]}/#{info["_process_id"]}'
-        self._buffers[source].append(line)
-        self._lasts[source] = runs.time()
-        self._display()
-    
-    def close(self):
-        self._display(force=True)
-        # Want to leave the outputs open so you can see the final messages
-        # self._out.close()
-        super().close()
 
 def tail(iterable, n):
     return iter(deque(iterable, maxlen=n))
 
-def from_dir_sync(canceller, run, in_ipython):
+def from_dir_sync(run, in_ipython=True, canceller=None):
     reader = Reader(run)
 
     if in_ipython:
         renderer = IPythonRenderer()
     else:
         renderer = StdoutRenderer()
-    # Get the last ~hundred lines of whatever's there already
 
     while True:
-        for info, line in tail(reader.read(), 100):
-            renderer.emit(info, line)
+        for info, line in reader.read():
+            renderer.append(info, line)
 
-        if canceller.is_set():
+        renderer.display()
+
+        if canceller is not None and canceller.is_set():
             break
 
         time.sleep(.25)
@@ -162,7 +156,7 @@ def _from_dir(*args, **kwargs):
 def from_run(run):
     try:
         canceller = threading.Event()
-        thread = threading.Thread(target=_from_dir, args=(canceller, run, in_ipython))
+        thread = threading.Thread(target=_from_dir, args=(run, in_ipython(), canceller))
         thread.start()
         yield
     finally:
