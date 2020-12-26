@@ -66,7 +66,7 @@ class SingleReader(Reader):
         else:
             raise ValueError() 
 
-def timeseries(f):
+def timeseries(f, reader=SingleReader):
     """f provides the signature for the write call, and resamples the saved
     data when it's read."""
     kind = f.__name__
@@ -83,14 +83,66 @@ def timeseries(f):
         w = registry.writer(key, lambda: numpy.Writer(registry.run(), key, kind=kind))
         w.write(call)
 
-    write.Reader = lambda run, key: SingleReader(run, key, f)
+    write.Reader = lambda run, key: reader(run, key, f)
     KINDS[kind] = write
 
     return write
 
 @timeseries
+def last(x, **kwargs):
+    return x.resample(**kwargs).last().ffill()
+
+@timeseries
+def max(x, **kwargs):
+    return x.resample(**kwargs).max()
+
+@timeseries
 def mean(total, count=1, **kwargs):
     return total.resample(**kwargs).mean()/count.resample(**kwargs).mean()
+
+@timeseries
+def std(x, **kwargs):
+    return x.resample(**kwargs).std()
+
+@timeseries
+def cumsum(total=1, **kwargs):
+    return total.resample(**kwargs).sum().cumsum()
+
+@timeseries
+def timeaverage(x, **kwargs):
+    # TODO: To do this properly, I need to get individual per-device streams
+    y = x.sort_index()
+    dt = y.index.to_series().diff().dt.total_seconds()
+    return (y*dt).resample(**kwargs).mean()/dt.resample(**kwargs).mean()
+
+@timeseries
+def duty(duration, **kwargs):
+    sums = duration.resample(**kwargs).sum()
+    periods = sums.index.to_series().diff().dt.total_seconds()
+    return sums/periods
+
+@timeseries
+def maxrate(duration, count=1, **kwargs):
+    return count.resample(**kwargs).mean()/duration.resample(**kwargs).mean()
+
+@timeseries
+def rate(count=1, **kwargs):
+    counts = count.resample(**kwargs).sum()
+    dt = pd.to_timedelta(counts.index.freq).total_seconds()
+    dt = min(dt, (count.index[-1] - count.index[0]).total_seconds())
+    return counts/dt
+
+@timeseries
+def period(count=1, **kwargs):
+    counts = count.resample(**kwargs).sum()
+    dt = pd.to_timedelta(counts.index.freq).total_seconds()
+    dt = min(dt, (count.index[-1] - count.index[0]).total_seconds())
+    return dt/counts
+
+#TODO:
+# * log_cumsum
+# * mean_std
+# * dist
 
 @tests.mock_time
 @tests.mock_dir
