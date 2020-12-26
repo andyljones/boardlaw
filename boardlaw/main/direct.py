@@ -88,7 +88,8 @@ def optimize(network, opt, batch):
         # stats.rel_gradient_norm('rel-norm-grad', agent)
 
         stats.mean('opt/lr', np.mean([p['lr'] for p in opt.param_groups]))
-        stats.mean('opt/step', (new - old).pow(2).mean().pow(.5))
+        stats.mean('opt/step-std', (new - old).pow(2).mean().pow(.5))
+        stats.mean('opt/step-max', (new - old).abs().max())
 
 def run():
     buffer_length = 16 
