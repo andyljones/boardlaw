@@ -27,26 +27,57 @@ class Residual(nn.Module):
         y = self.w1(y)
         return x + y
 
+class Transformer(nn.Module):
+
+    def __init__(self, boardsize, width):
+        super().__init__()
+        self.boardsize = boardsize
+        self.width = width
+        self.norm = nn.LayerNorm(width)
+        self.qkv = nn.Linear(width, 3*width)
+        self.full = nn.Linear(width, width)
+
+    def forward(self, x, *args, **kwargs):
+        T, B, H, W, C = x.shape
+        n = self.norm(x.reshape(-1, self.boardsize**2, self.width))
+        q, k, v = self.qkv(n).chunk(3, -1)
+
+        sim = torch.einsum('bqc,bkc->bqkc', q, k)
+        attn = torch.softmax(sim, 2)
+
+        attended = torch.einsum('bqkc,bkc->bqc', attn, v)
+        attended = attended.reshape(T, B, H, W, C)
+        
+        y = F.relu(self.full(attended))
+
+        return x + y
+
 class Network(nn.Module):
 
-    def __init__(self, obs_space, action_space, width=128, layers=8):
+    def __init__(self, obs_space, action_space, width=64, neckwidth=4, layers=8):
         super().__init__()
-        self.policy = heads.output(action_space, width)
+        boardsize = obs_space.dim[0]
+        self.policy = heads.output(action_space, neckwidth*boardsize**2)
         self.sampler = self.policy.sample
 
-        blocks = [heads.intake(obs_space, width)]
+        blocks = [nn.Linear(obs_space.dim[-1], width)]
         for _ in range(layers):
-            blocks.append(Residual(width, 1/layers**.5)) 
-        self.body = recurrence.Sequential(*blocks)
+            blocks.append(Transformer(boardsize, width)) 
+        blocks.append(nn.Linear(width, 4))
+        self.body = nn.Sequential(*blocks)
 
-        self.value = heads.ValueOutput(width)
+        self.value = heads.ValueOutput(neckwidth*boardsize**2)
 
     # def trace(self, world):
     #     self.policy = torch.jit.trace_module(self.policy, {'forward': (world.obs, world.valid)})
     #     self.vaue = torch.jit.trace_module(self.value, {'forward': (world.obs, world.valid, world.seats)})
 
     def forward(self, world, value=False):
-        neck = self.body(world.obs)
+        if world.obs.ndim == 4:
+            return self.forward(world[None], value).squeeze(0)
+
+        T, B, H, W, C = world.obs.shape
+        neck = self.body(world.obs).reshape(T, B, -1)
         outputs = arrdict.arrdict(
             logits=self.policy(neck, valid=world.valid))
 
@@ -78,3 +109,19 @@ def check_var():
         
         stds[n] = {'forward': sf, 'backward': obs.grad.std().item()}
     stds = pd.DataFrame(stds).T
+
+def test_transformer():
+
+    boardsize = 3
+    width = 4
+
+    model = Transformer(boardsize, width)
+
+    obs = torch.zeros((5, 7, boardsize, boardsize, width))
+    out = model(obs)
+
+    from boardlaw.main.common import worldfunc
+    worlds = worldfunc(32)
+
+    model = Network(worlds.obs_space, worlds.action_space).cuda()
+    model(worlds)

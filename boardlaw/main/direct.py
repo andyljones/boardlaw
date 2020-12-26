@@ -101,7 +101,7 @@ def run():
     agent = agentfunc()
     opt = torch.optim.Adam(agent.evaluator.parameters(), lr=4e-3, amsgrad=True)
 
-    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/1000, 1))
 
     run_name = paths.timestamp('annealed-high-lr-9x9')
     paths.clear(run_name)
