@@ -95,10 +95,10 @@ def infoupdate(run, create=False):
 
 ### Run creation stuff
 
-def run_name(suffix=None, now=None):
+def run_name(suffix='', now=None):
     now = (now or pd.Timestamp.now('UTC')).strftime('%Y-%m-%d %H-%M-%S')
-    suffix = suffix or humanhash(str(uuid.uuid4()), n=2)
-    return f'{now} {suffix}'
+    hash = humanhash(str(uuid.uuid4()), n=2)
+    return f'{now} {hash} {suffix}'
 
 def resolve(run):
     #TODO: Implement indexing
