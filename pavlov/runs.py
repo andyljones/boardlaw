@@ -103,13 +103,13 @@ def infoupdate(run, create=False):
 def run_name(suffix='', now=None):
     now = (now or tests.timestamp()).strftime('%Y-%m-%d %H-%M-%S')
     hash = humanhash(str(uuid.uuid4()), n=2)
-    return f'{now} {hash} {suffix}'
+    return f'{now} {hash} {suffix}'.strip()
 
 def resolve(run):
     #TODO: Implement indexing
     return run
 
-def new_run(suffix=None, **kwargs):
+def new_run(suffix='', **kwargs):
     now = tests.timestamp()
     run = run_name(suffix, now)
     kwargs = {**kwargs, '_created': str(now), '_files': {}}
@@ -134,6 +134,7 @@ def _filename(pattern, extant_files):
 def new_file(run, pattern, **kwargs):
     with infoupdate(run) as i:
         name = _filename(pattern, i['_files'])
+        assert re.fullmatch(r'[\w\.-]+', name), 'Filename contains invalid characters'
 
         process = multiprocessing.current_process()
         thread = threading.current_thread()
@@ -158,6 +159,10 @@ def fileglob(run, pattern):
 
 def files(run):
     return info(run)['_files']
+
+def size(run):
+    b = sum(filepath(run, name).stat().st_size for name in files(run))
+    return b/1e6
 
 ### Tests
 

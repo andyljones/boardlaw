@@ -1,7 +1,6 @@
 import time
 from .. import widgets, logging, runs, tests
-from . import io
-import re
+from . import run_readers
 import pandas as pd
 import threading
 from contextlib import contextmanager
@@ -50,57 +49,85 @@ def tdformat(td):
     else:
         return f'{h:.0f}h{m:02.0f}m{s:02.0f}s'
 
-def __from_dir(canceller, run, out, rule, throttle=1):
+def formatted_pairs(readers, rule):
+    pairs = []
+    for _, reader in readers.items():
+        if reader.ready():
+            pairs.extend(reader.format(rule))
+    return pairs
+
+def _insert(tree, path, val):
+    if len(path) == 1:
+        tree[path[0]] = val
+    else:
+        if path[0] not in tree:
+            tree[path[0]] = {}
+        _insert(tree[path[0]], path[1:], val)
+
+def _traverse(tree, depth=0):
+    for k in sorted(tree):
+        v = tree[k]
+        if isinstance(v, dict):
+            yield depth, f'{k}.', ''
+            yield from _traverse(v, depth+1)
+        else:
+            yield depth, k, v  
+
+def treeformat(pairs):
+    if len(pairs) == 0:
+        return 'No stats yet'
+
+    tree = {}
+    for k, v in pairs:
+        _insert(tree, k.split('.'), v)
+
+    keys, vals = [], []
+    for depth, k, v in _traverse(tree):
+        keys.append(' '*depth + k)
+        vals.append(v)
+
+    keylen = max(map(len, keys))
+    keys = [k + ' '*max(keylen-len(k), 0) for k in keys]
+
+    return '\n'.join(f'{k} {v}' for k, v in zip(keys, vals))
+
+def from_dir_sync(run, rule, canceller=None, throttle=1):
     run = runs.resolve(run)
-    reader = io.Reader(run)
-    start = tests.timestamp()
+    out = widgets.compositor().output()
+    start = pd.Timestamp(runs.info(run)['_created'])
+    readers = {}
 
     nxt = 0
     while True:
-        if runs.time() > nxt:
+        if tests.time() > nxt:
             nxt = nxt + throttle
 
-            # Base slightly into the future, else by the time the resample actually happens you're 
-            # left with an almost-empty last interval.
-            base = int(runs.time() % 60) + 5
-            df = reader.resample(rule=rule, offset=f'{base}s')
-            
-            if len(df) > 0:
-                final = df.ffill(limit=1).iloc[-1]
-                keys, values = [], []
-                for (category, _), group in sourceinfo(df).groupby(['category', 'title']):
-                    formatter = categories.CATEGORIES[category]['formatter']
-                    ks, vs = formatter(final, group)
-                    keys.extend(ks)
-                    values.extend(vs)
-                key_length = max([len(str(k)) for k in keys], default=0)+1
-                content = '\n'.join(f'{{:{key_length}s}} {{}}'.format(k, v) for k, v in zip(keys, values))
-            else:
-                content = 'No stats yet'
+            readers = run_readers(run, readers)
+            pairs = formatted_pairs(readers, rule)
+            content = treeformat(pairs)
 
-            size = runs.size(run, 'stats')
+            size = runs.size(run)
             age = tests.timestamp() - start
             out.refresh(f'{run}: {tdformat(age)} old, {rule} rule, {size:.0f}MB on disk\n\n{content}')
 
-        if canceller.is_set():
+        if canceller is not None and canceller.is_set():
             break
 
         time.sleep(1.)
 
 def _from_dir(*args, **kwargs):
     try:
-        __from_dir(*args, **kwargs)
+        from_dir_sync(*args, **kwargs)
     except KeyboardInterrupt:
         log.info('Interrupting main')
         _thread.interrupt_main()
 
 @contextmanager
-def from_dir(run_name, compositor=None, rule='60s'):
+def from_dir(run, rule='60s'):
     if logging.in_ipython():
         try:
             canceller = threading.Event()
-            out = (compositor or widgets.Compositor()).output()
-            thread = threading.Thread(target=_from_dir, args=(canceller, run_name, out, rule))
+            thread = threading.Thread(target=_from_dir, args=(run, rule, canceller))
             thread.start()
             yield
         finally:
@@ -116,3 +143,29 @@ def from_dir(run_name, compositor=None, rule='60s'):
     else:
         log.info('No stats emitted in console mode')
         yield
+
+def test_treeformat():
+    pairs = []
+    assert treeformat(pairs) == 'No stats yet'
+
+    pairs = [('a', 'b')]
+    assert treeformat(pairs) == 'a b'
+
+    pairs = [('a.b', 'c')]
+    assert treeformat(pairs) == 'a. \n b c'
+
+    pairs = [('a.b', 'c'), ('a.d', 'e')]
+    assert treeformat(pairs) == 'a. \n b c\n d e'
+
+    pairs = [('a.b', 'c'), ('d', 'e')]
+    assert treeformat(pairs) == 'a. \n b c\nd  e'
+    
+@tests.mock_dir
+def demo_from_dir():
+    from . import to_run, mean
+
+    run = runs.new_run()
+    with to_run(run):
+        mean('test', 2)
+        pass
+    from_dir_sync(run, '60s')

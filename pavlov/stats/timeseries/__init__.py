@@ -3,10 +3,12 @@ import time
 import numpy as np
 import inspect
 import pandas as pd
-from .. import io
+from .. import registry
 from ... import numpy, runs, tests
 
 # __all__ = []
+
+KINDS = {}
 
 def clean(x):
     if isinstance(x, torch.Tensor):
@@ -32,6 +34,9 @@ class Reader:
             self._arr = np.concatenate(parts)
         return self._arr
 
+    def ready(self):
+        return self.array() is not None
+
     def pandas(self):
         arr = self.array()
         df = pd.DataFrame.from_records(arr, index='_time')
@@ -52,11 +57,12 @@ class Reader:
 class SingleReader(Reader):
 
     def format(self, rule):
+        name = '.'.join(self._key.split('.')[1:])
         final = self.final(rule)
         if isinstance(final, int):
-            return f'{final}'
+            return [(name, f'{final}')]
         if isinstance(final, float):
-            return f'{final:.6g}'
+            return [(name, f'{final:.6g}')]
         else:
             raise ValueError() 
 
@@ -73,13 +79,12 @@ def timeseries(f):
         del call['kwargs']
         call = {'_time': tests.datetime64(), **call}
 
-        key = f'{name}.{kind}'
-        if key not in io.WRITERS:
-            io.WRITERS[key] = numpy.Writer(io.RUN, key, kind=kind)
-        io.WRITERS[key].write(call)
+        key = f'{kind}.{name}'
+        w = registry.writer(key, lambda: numpy.Writer(registry.run(), key, kind=kind))
+        w.write(call)
 
-    write.Reader = lambda run, name: SingleReader(run, f'{name}.{kind}', f)
-    # __all__.append(kind)
+    write.Reader = lambda run, key: SingleReader(run, key, f)
+    KINDS[kind] = write
 
     return write
 
@@ -90,12 +95,19 @@ def mean(total, count=1, **kwargs):
 @tests.mock_time
 @tests.mock_dir
 def test_mean():
+    from .. import to_run
+
     run = runs.new_run()
-    with io.to_run(run):
+    with to_run(run):
         tests.set_time(0)
         mean('test', 4, 2)
         tests.set_time(1)
         mean('test', 8, 2)
 
-    final = mean.Reader(run, 'test').final('60s')
+    reader = mean.Reader(run, 'test')
+    final = reader.final('60s')
     assert final == 3.
+
+    [label, value] = reader.format('60s')
+    assert label == 'test'
+    assert value == '3'

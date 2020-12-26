@@ -29,7 +29,7 @@ def make_header(dtype):
 class Writer:
 
     def __init__(self, run, name, **kwargs):
-        self._path = runs.new_file(run, f'{name}-{{n}}.npr', **kwargs)
+        self._path = runs.new_file(run, f'{name}.{{n}}.npr', **kwargs)
         self._file = None
         self._next = tests.time()
         
@@ -65,10 +65,6 @@ class MonoReader:
             self._init()
         return np.fromfile(self._file, dtype=self._dtype)
 
-    def close(self):
-        self._file.close()
-        self._file = None
-
 class Reader:
 
     def __init__(self, run, name):
@@ -77,7 +73,7 @@ class Reader:
         self._readers = {}
 
     def read(self):
-        for name, info in runs.fileglob(self._run, f'{self._name}-*.npr').items():
+        for name, info in runs.fileglob(self._run, f'{self._name}.*.npr').items():
             if name not in self._readers:
                 self._readers[name] = MonoReader(runs.filepath(self._run, name))
 
