@@ -108,7 +108,7 @@ def _from_run(*args, **kwargs):
     try:
         from_run_sync(*args, **kwargs)
     except KeyboardInterrupt:
-        log.info('Interrupting main')
+        log.debug('Interrupting main')
         _thread.interrupt_main()
 
 @contextmanager
@@ -125,7 +125,7 @@ def from_run(run, rule='60s'):
             if thread.is_alive():
                 log.error('Stat display thread won\'t die')
             else:
-                log.info('Stat display thread cancelled')
+                log.debug('Stat display thread cancelled')
 
             # Want to leave the outputs open so you can see the final stats
             # out.close()

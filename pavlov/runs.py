@@ -18,6 +18,8 @@ from . import tests
 
 ROOT = 'output/pavlov'
 
+RESOLVE = True
+
 ### Basic file stuff
 
 def root():
@@ -54,6 +56,11 @@ def write(path, contents):
         f.write(contents)
 
 def dir(run):
+    # This awkward thing is because the intelligence in the `resolve` 
+    # function depends on `dir`. So we need to turn that intelligence off
+    # when we're actually populating the `runs` that `resolve` relies on.
+    if RESOLVE:
+        run = resolve(run)
     return root() / run
 
 def delete(run):
@@ -103,10 +110,6 @@ def run_name(suffix='', now=None):
     hash = humanhash(str(uuid.uuid4()), n=2)
     return f'{now} {hash} {suffix}'.strip()
 
-def resolve(run):
-    #TODO: Implement indexing
-    return run
-
 def new_run(suffix='', **kwargs):
     now = tests.timestamp()
     run = run_name(suffix, now)
@@ -114,8 +117,42 @@ def new_run(suffix='', **kwargs):
     info(run, kwargs, create=True)
     return run
 
+_cache = {}
 def runs():
-    return {dir.name: info(dir.name) for dir in root().iterdir()}
+    global _cache, RESOLVE
+
+    cache = {}
+    for dir in root().iterdir():
+        if dir.name in _cache:
+            cache[dir.name] = _cache[dir.name]
+        else:
+            try:
+                RESOLVE = False
+                cache[dir.name] = info(dir.name) 
+            finally:
+                RESOLVE = True
+    
+    order = sorted(cache, key=lambda n: cache[n]['_created']) 
+
+    _cache = {n: cache[n] for n in order}
+    return _cache
+
+def resolve(run):
+    names = list(runs())
+    if isinstance(run, int):
+        return names[run]
+    elif run in names:
+        return run
+    else: # it's a suffix
+        hits = []
+        for n in names:
+            if n.endswith(run):
+                hits.append(n)
+        if len(hits) == 1:
+            return hits[0]
+        else:
+            raise ValueError(f'Found {len(hits)} runs that finished with "{run}"')
+
 
 ### File stuff
 

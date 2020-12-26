@@ -148,7 +148,7 @@ def _from_run(*args, **kwargs):
     try:
         from_run_sync(*args, **kwargs)
     except KeyboardInterrupt:
-        log.info('Interrupting main')
+        log.debug('Interrupting main')
         _thread.interrupt_main()
         from_run_sync(*args, **kwargs)
 
@@ -160,14 +160,14 @@ def from_run(run):
         thread.start()
         yield
     finally:
-        log.info('Cancelling log forwarding thread')
+        log.debug('Cancelling log forwarding thread')
         time.sleep(.25)
         canceller.set()
         thread.join(1)
         if thread.is_alive():
             log.error('Logging thread won\'t die')
         else:
-            log.info('Log forwarding thread cancelled')
+            log.debug('Log forwarding thread cancelled')
 
 @contextmanager
 def via_run(run, compositor=None):

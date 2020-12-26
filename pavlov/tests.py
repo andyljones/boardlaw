@@ -68,11 +68,13 @@ def convert(run):
     from aljpy import humanhash
     import json
 
+    date = run[:19]
+    suffix = run[20:]
     old = Path(f'output/traces/{run}')
-    new = Path(f'output/pavlov/{run} {humanhash(n=2)}')
+    new = Path(f'output/pavlov/{date} {humanhash(n=2)} {suffix}')
     new.mkdir(exist_ok=True, parents=True)
 
-    created = pd.to_datetime(run[:19], format='%Y-%m-%d %H-%M-%S').tz_localize('UTC')
+    created = pd.to_datetime(date, format='%Y-%m-%d %H-%M-%S').tz_localize('UTC')
 
     files, counts = {}, defaultdict(lambda: 0)
     for oldpath in old.glob('**/*.npr'):
