@@ -59,3 +59,50 @@ def mock_dir(f):
     
     return wrapped
 
+### rebar conversion
+
+def convert(run):
+    import pandas as pd
+    from pathlib import Path
+    from collections import defaultdict
+    from aljpy import humanhash
+    import json
+
+    old = Path(f'output/traces/{run}')
+    new = Path(f'output/pavlov/{run}-{humanhash(n=2)}')
+    new.mkdir(exist_ok=True, parents=True)
+
+    created = pd.to_datetime(run[:19], format='%Y-%m-%d %H-%M-%S').tz_localize('UTC')
+
+    files, counts = {}, defaultdict(lambda: 0)
+    for oldpath in old.glob('**/*.npr'):
+        parts = oldpath.relative_to(old).parts
+        kind = parts[1]
+        name = '.'.join(parts[2:-1])
+        filename = parts[-1]
+        procname = '-'.join(filename.split('-')[:-1])
+        procid = filename.split('-')[-1]
+        
+        newname = f'{kind}.{name}.{counts[kind, name]}.npr'
+        
+        counts[kind, name] += 1
+        
+        newpath = new / newname
+        newpath.write_bytes(oldpath.read_bytes())
+        
+        files[newname] = {
+            '_pattern': f'{kind}.{name}.{{n}}.npr',
+            '_created': str(created),
+            '_process_id': str(procid),
+            '_process_name': procname,
+            '_thread_id': '0',
+            '_thread_name': 'main',
+            'kind': kind}
+        
+    created = pd.to_datetime(run[:19], format='%Y-%m-%d %H-%M-%S').tz_localize('UTC')
+    info = {
+        '_created': str(created), 
+        'files': files}
+    (new / '_info.json').write_text(json.dumps(info))
+
+    return new
