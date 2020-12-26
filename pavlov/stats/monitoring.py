@@ -25,17 +25,6 @@ def expand_columns(df, category, field):
         df.columns = [(category, f'{field}/{c}') for c in df.columns]
         return df
     
-def sourceinfo(df):
-    names = df.columns.get_level_values(1)
-    tags = names.str.extract(r'^(?P<chart1>.*?)/(?P<label>.*)|(?P<chart2>.*)$')
-    tags['category'] = df.columns.get_level_values(0)
-    tags['key'] = df.columns.get_level_values(1)
-    tags['title'] = tags.chart1.combine_first(tags.chart2)
-    tags['id'] = tags['category'] + '_' + names
-    tags.index = df.columns
-    info = tags[['category', 'key', 'title', 'label', 'id']].fillna('')
-    return info
-
 def tdformat(td):
     """How is this not in Python, numpy or pandas?"""
     x = td.total_seconds()

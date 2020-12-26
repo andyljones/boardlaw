@@ -45,7 +45,7 @@ def handlers(*new_handlers):
 
 @contextmanager
 def to_run(run):
-    path = runs.new_file(run, 'logs.txt')
+    path = runs.new_file(run, 'logs.{n}.txt')
     handler = logging.FileHandler(path)
     handler.setLevel(logging.INFO)
     handler.setFormatter(logging.Formatter(
@@ -66,7 +66,7 @@ class Reader:
         self._files = {}
 
     def read(self):
-        for name, info in runs.fileglob(self._run, 'logs.txt').items():
+        for name, info in runs.fileglob(self._run, 'logs.*.txt').items():
             if name not in self._files:
                 path = runs.filepath(self._run, name)
                 self._files[name] = (info, path.open('r'))

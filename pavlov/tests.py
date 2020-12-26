@@ -98,6 +98,25 @@ def convert(run):
             '_thread_id': '0',
             '_thread_name': 'main',
             'kind': kind}
+
+    for oldpath in old.glob('**/*.txt'):
+        filename = oldpath.name
+        procname = '-'.join(filename.split('-')[:-1])
+        procid = filename.split('-')[-1]
+
+        newname = f'logs.{counts["logs"]}.txt'
+        counts['logs'] += 1
+
+        newpath = new / newname
+        newpath.write_text(oldpath.read_text())
+        files[newname] = {
+            '_pattern': 'logs.{n}.txt',
+            '_created': str(created),
+            '_process_id': str(procid),
+            '_process_name': procname,
+            '_thread_id': '0',
+            '_thread_name': 'main',
+            'kind': 'logs'}
         
     created = pd.to_datetime(run[:19], format='%Y-%m-%d %H-%M-%S').tz_localize('UTC')
     info = {
