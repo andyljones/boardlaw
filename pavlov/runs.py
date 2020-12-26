@@ -161,7 +161,7 @@ def files(run):
 
 ### Tests
 
-@mock_dir
+@tests.mock_dir
 def test_info():
 
     # Check reading from a nonexistant file errors
@@ -197,7 +197,7 @@ def test_info():
     i = info('test')
     assert i == {'a': 1}
 
-@mock_dir
+@tests.mock_dir
 def test_new_run():
     run = new_run(desc='test')
 
@@ -206,7 +206,7 @@ def test_new_run():
     assert i['_created']
     assert i['_files'] == {}
 
-@mock_dir
+@tests.mock_dir
 def test_runs():
     fst = new_run('test-1', idx=1)
     snd = new_run('test-2', idx=2)
@@ -216,7 +216,7 @@ def test_runs():
     assert i[fst]['idx'] == 1
     assert i[snd]['idx'] == 2
 
-@mock_dir
+@tests.mock_dir
 def test_new_file():
     run = new_run()
     path = new_file(run, 'test.txt', hello='one')
@@ -228,7 +228,7 @@ def test_new_file():
     assert i['hello'] == 'one'
     assert filepath(run, name).read_text()  == 'contents'
 
-@mock_dir
+@tests.mock_dir
 def test_fileglob():
     run = new_run()
     new_file(run, 'foo.txt')

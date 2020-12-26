@@ -6,7 +6,7 @@ import pandas as pd
 from .. import io
 from ... import numpy, runs, tests
 
-__all__ = []
+# __all__ = []
 
 def clean(x):
     if isinstance(x, torch.Tensor):
@@ -15,7 +15,7 @@ def clean(x):
         x = x.item()
     if isinstance(x, dict):
         return {k: clean(v) for k, v in x.items()}
-    return 
+    return x
 
 class Reader:
 
@@ -28,8 +28,8 @@ class Reader:
     def array(self):
         #TODO: If this gets slow, do amortized allocation of arrays x2 as big as needed
         for name, arr in self._reader.read().items():
-            current = [] if self._arr is None else [self._arr]
-            self._arr = np.concatenate(current + arr)
+            parts = [arr] if self._arr is None else [self._arr, arr]
+            self._arr = np.concatenate(parts)
         return self._arr
 
     def pandas(self):
@@ -41,11 +41,11 @@ class Reader:
     def final(self, rule):
         df = self.pandas()
 
-        # Base slightly into the future, else by the time the resample actually happens you're 
+        # Offset slightly into the future, else by the time the resample actually happens you're 
         # left with an almost-empty last interval.
-        base = int(now() % 60) + 5
+        offset = f'{(tests.time() % 60) + 5}s'
 
-        resampled = self._resampler(**{k: df[k] for k in df}, rule=rule, base=base)
+        resampled = self._resampler(**{k: df[k] for k in df}, rule=rule, offset=offset)
         final = resampled.ffill(limit=1).iloc[-1]
         return final
 
@@ -70,6 +70,7 @@ def timeseries(f):
         kwargs = {k: clean(v) for k, v in kwargs.items()}
 
         call = inspect.getcallargs(f, *args, **kwargs)
+        del call['kwargs']
         call = {'_time': tests.datetime64(), **call}
 
         key = f'{name}.{kind}'
@@ -78,7 +79,7 @@ def timeseries(f):
         io.WRITERS[key].write(call)
 
     write.Reader = lambda run, name: SingleReader(run, f'{name}.{kind}', f)
-    __all__.append(kind)
+    # __all__.append(kind)
 
     return write
 
@@ -97,3 +98,4 @@ def test_mean():
         mean('test', 8, 2)
 
     final = mean.Reader(run, 'test').final('60s')
+    assert final == 3.

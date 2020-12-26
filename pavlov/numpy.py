@@ -31,7 +31,7 @@ class Writer:
     def __init__(self, run, name, **kwargs):
         self._path = runs.new_file(run, f'{name}-{{n}}.npr', **kwargs)
         self._file = None
-        self._next = runs.time()
+        self._next = tests.time()
         
     def _init(self, exemplar):
         self._file = self._path.open('wb', buffering=4096)
