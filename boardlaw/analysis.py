@@ -125,3 +125,21 @@ def monitor(run_name=-1):
     with logging.from_dir(run_name, compositor), stats.from_dir(run_name, compositor):
         while True:
             time.sleep(1)
+
+def grad_noise_scale(B):
+    import pandas as pd
+
+    results = {}
+    for i, row in storing.stored_periodic('2020-12-24 16-22-48 residual-9x9').iterrows():
+        sd = torch.load(row.path, map_location='cpu')['opt.state']
+        m0 = torch.cat([s['exp_avg'].flatten() for s in sd.values()])
+        v0 = torch.cat([s['exp_avg_sq'].flatten() for s in sd.values()])
+        results[i] = (m0.sum().item(), v0.sum().item())
+
+    df = pd.DataFrame(results, index=('m', 'v')).T
+
+    G2 = df.m.pow(2)
+    s = B*(df.v - df.m.pow(2))
+    noise_scale = s.div(G2).pow(.5)
+
+    return noise_scale
