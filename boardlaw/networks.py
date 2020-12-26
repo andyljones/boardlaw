@@ -10,9 +10,9 @@ class Residual(nn.Module):
     def __init__(self, width, gain=1):
         # "Identity Mappings in Deep Residual Networks"
         super().__init__()
-        self.w0 = nn.Linear(width, width, bias=False)
+        self.w0 = nn.Linear(width, width, bias=True)
         self.n0 = nn.LayerNorm(width)
-        self.w1 = nn.Linear(width, width, bias=False)
+        self.w1 = nn.Linear(width, width, bias=True)
         self.n1 = nn.LayerNorm(width)
 
         nn.init.orthogonal_(self.w0.weight)
@@ -54,30 +54,24 @@ class Transformer(nn.Module):
 
 class Network(nn.Module):
 
-    def __init__(self, obs_space, action_space, width=32, neckwidth=4, layers=4):
+    def __init__(self, obs_space, action_space, width=128, layers=8):
         super().__init__()
-        boardsize = obs_space.dim[0]
-        self.policy = heads.output(action_space, neckwidth*boardsize**2)
+        self.policy = heads.output(action_space, width)
         self.sampler = self.policy.sample
 
-        blocks = [nn.Linear(obs_space.dim[-1], width)]
+        blocks = [heads.intake(obs_space, width)]
         for _ in range(layers):
-            blocks.append(Transformer(boardsize, width)) 
-        blocks.append(nn.Linear(width, 4))
-        self.body = nn.Sequential(*blocks)
+            blocks.append(Residual(width, 1/layers**.5)) 
+        self.body = recurrence.Sequential(*blocks)
 
-        self.value = heads.ValueOutput(neckwidth*boardsize**2)
+        self.value = heads.ValueOutput(width)
 
     # def trace(self, world):
     #     self.policy = torch.jit.trace_module(self.policy, {'forward': (world.obs, world.valid)})
     #     self.vaue = torch.jit.trace_module(self.value, {'forward': (world.obs, world.valid, world.seats)})
 
     def forward(self, world, value=False):
-        if world.obs.ndim == 4:
-            return self.forward(world[None], value).squeeze(0)
-
-        T, B, H, W, C = world.obs.shape
-        neck = self.body(world.obs).reshape(T, B, -1)
+        neck = self.body(world.obs)
         outputs = arrdict.arrdict(
             logits=self.policy(neck, valid=world.valid))
 
