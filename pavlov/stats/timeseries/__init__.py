@@ -52,7 +52,7 @@ class Reader:
 
         resampled = self._resampler(**{k: df[k] for k in df}, rule=rule, offset=offset)
         final = resampled.ffill(limit=1).iloc[-1]
-        return final
+        return final.item()
 
 class SingleReader(Reader):
 

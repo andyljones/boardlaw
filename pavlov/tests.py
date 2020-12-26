@@ -69,7 +69,7 @@ def convert(run):
     import json
 
     old = Path(f'output/traces/{run}')
-    new = Path(f'output/pavlov/{run}-{humanhash(n=2)}')
+    new = Path(f'output/pavlov/{run} {humanhash(n=2)}')
     new.mkdir(exist_ok=True, parents=True)
 
     created = pd.to_datetime(run[:19], format='%Y-%m-%d %H-%M-%S').tz_localize('UTC')
@@ -102,7 +102,7 @@ def convert(run):
     created = pd.to_datetime(run[:19], format='%Y-%m-%d %H-%M-%S').tz_localize('UTC')
     info = {
         '_created': str(created), 
-        'files': files}
+        '_files': files}
     (new / '_info.json').write_text(json.dumps(info))
 
     return new

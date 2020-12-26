@@ -68,7 +68,7 @@ def _traverse(tree, depth=0):
     for k in sorted(tree):
         v = tree[k]
         if isinstance(v, dict):
-            yield depth, f'{k}.', ''
+            yield depth, f'{k}', ''
             yield from _traverse(v, depth+1)
         else:
             yield depth, k, v  
@@ -83,7 +83,7 @@ def treeformat(pairs):
 
     keys, vals = [], []
     for depth, k, v in _traverse(tree):
-        keys.append(' '*depth + k)
+        keys.append('  '*depth + k)
         vals.append(v)
 
     keylen = max(map(len, keys))

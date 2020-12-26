@@ -18,8 +18,6 @@ from . import tests
 
 ROOT = 'output/pavlov'
 
-
-
 ### Basic file stuff
 
 def root():
