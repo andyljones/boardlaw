@@ -54,7 +54,7 @@ class Transformer(nn.Module):
 
 class Network(nn.Module):
 
-    def __init__(self, obs_space, action_space, width=64, neckwidth=4, layers=8):
+    def __init__(self, obs_space, action_space, width=32, neckwidth=4, layers=4):
         super().__init__()
         boardsize = obs_space.dim[0]
         self.policy = heads.output(action_space, neckwidth*boardsize**2)

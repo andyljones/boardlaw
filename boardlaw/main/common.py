@@ -19,7 +19,7 @@ def benchmark_experience_collection():
     # Make sure to init cuda before running this 
 
     torch.manual_seed(0)
-    n_envs = 4096
+    n_envs = 256
     worlds = worldfunc(n_envs)
     agent = agentfunc()
 
