@@ -29,7 +29,7 @@ def make_header(dtype):
 class Writer:
 
     def __init__(self, run, name, **kwargs):
-        self._path = runs.new_file(run, f'{name}.npr', **kwargs)
+        self._path = runs.new_file(run, f'{name}-{{n}}.npr', **kwargs)
         self._file = None
         self._next = time.time()
         
@@ -47,19 +47,7 @@ class Writer:
         self._file.write(row.tobytes())
         self._file.flush()
 
-class MultiWriter:
-
-    def __init__(self, run):
-        self._run = run
-        self._writers = {}
-
-    def write(self, name, d, **kwargs):
-        if name not in self._writers:
-            path = runs.new_file(self._run, f'{name}.npr', **kwargs)
-            self._writers[name] = Writer(path)
-        self._writers[name].write(d)
-
-class Reader:
+class MonoReader:
 
     def __init__(self, path):
         self._path = Path(path) if isinstance(path, str) else path
@@ -81,24 +69,24 @@ class Reader:
         self._file.close()
         self._file = None
 
-class MultiReader:
+class Reader:
 
-    def __init__(self, run, glob='*.npr'):
+    def __init__(self, run, name):
         self._run = runs.resolve(run)
-        self._glob = glob
+        self._name = name
         self._readers = {}
 
     def read(self):
-        for name, info in runs.fileglob(self._run, self._glob).items():
+        for name, info in runs.fileglob(self._run, f'{self._name}-*.npr').items():
             if name not in self._readers:
                 pattern = info['_pattern']
-                self._readers[name] = (pattern, Reader(runs.filepath(self._run, name)))
+                self._readers[name] = MonoReader(runs.filepath(self._run, name))
 
-        results = defaultdict(lambda: {})
-        for name, (pattern, reader) in self._readers.items():
+        results = {}
+        for name, reader in self._readers.items():
             arr = reader.read()
             if len(arr) > 0:
-                results[pattern][name] = arr
+                results[name] = arr
 
         return results
 
