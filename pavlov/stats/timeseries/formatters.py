@@ -7,7 +7,7 @@ def final_row(reader, rule):
     # left with an almost-empty last interval.
     offset = f'{(tests.time() % 60) + 5}s'
 
-    resampled = reader.resample(**{k: df[k] for k in df}, rule=rule, offset=offset)
+    resampled = reader.resample(**dict(df), rule=rule, offset=offset)
     return resampled.ffill(limit=1).iloc[-1]
 
 def simple(reader, rule):

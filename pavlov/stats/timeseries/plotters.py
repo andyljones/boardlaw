@@ -1,3 +1,4 @@
+import re
 import pandas as pd
 from bokeh import models as bom
 from bokeh import plotting as bop
@@ -133,8 +134,10 @@ def legend(f):
 
 
 class SeriesPlotter:
+    fig_kwargs = {}
+    line_kwargs = {}
 
-    def __init__(self, reader, rule, fig_kwargs={}, **kwargs):
+    def __init__(self, reader, rule):
         self.reader = reader
         self.rule = rule
 
@@ -142,8 +145,11 @@ class SeriesPlotter:
 
         y = info.id.iloc[0]
         #TODO: Work out how to apply the axes formatters to the tooltips
-        f = bop.figure(x_range=bom.DataRange1d(start=0, follow='end'), tooltips=[('', '$data_y')], **fig_kwargs)
-        f.line(x='time_', y=y, source=self.source, **kwargs)
+        f = bop.figure(
+            x_range=bom.DataRange1d(start=0, follow='end'), 
+            tooltips=[('', '$data_y')], 
+            **self.fig_kwargs)
+        f.line(x='time_', y=y, source=self.source, **self.line_kwargs)
         default_tools(f)
         x_zeroline(f)
         styling(f)
@@ -153,18 +159,40 @@ class SeriesPlotter:
     def refresh(self):
         pass
 
-class DataframePlotter:
+def align(readers, rule):
+    df = {}
+    for k, r in readers.items():
+        df[k] = r.resample(**dict(r.pandas()), rule=rule)
+    df = pd.concat(df, 1)
+    df.index = df.index - df.index[0]
+    return df.reset_index()
 
-    def __init__(self, readers, rule, fig_kwargs={}, **kwargs):
+class DataframePlotter:
+    fig_kwargs = {}
+    line_kwargs = {'width': 2}
+
+    def __init__(self, readers, rule):
         self.readers = readers
         self.rule = rule
 
-        self.source = bom.ColumnDataSource()
+        aligned = align(self.readers, self.rule)
 
-        f = bop.figure(x_range=bom.DataRange1d(start=0, follow='end'), tooltips=[('', '$data_y')], **fig_kwargs)
+        self.source = bom.ColumnDataSource(aligned)
 
-        for y, label, color in zip(info.id.tolist(), info.label.tolist(), cycle(Category10_10)):
-            f.line(x='time_', y=y, legend_label=label, color=color, width=2, source=self.source, **kwargs)
+        f = bop.figure(
+            x_range=bom.DataRange1d(start=0, follow='end'), 
+            tooltips=[('', '$data_y')], 
+            **self.fig_kwargs)
+
+        for key, color in zip(readers, cycle(Category10_10)):
+            match = re.fullmatch(r'(?P<subplot>.*)\.(?P<label>.*)', key)
+            f.line(
+                x='_time', 
+                y=key, 
+                legend_label=match.group('label'), 
+                color=color, 
+                source=self.source, 
+                **self.line_kwargs)
 
         default_tools(f)
         x_zeroline(f)
@@ -173,11 +201,16 @@ class DataframePlotter:
 
         self.figure = f
 
+    def refresh(self):
+        pass
+
+
+
 def simple(readers, **kwargs):
-    if isinstance(readers, (tuple, list)):
-        return DataframePlotter(readers, **kwargs)
-    else:
+    if len(readers) == 0 and list(readers)[0] == '':
         return SeriesPlotter(readers, **kwargs)
+    else:
+        return DataframePlotter(readers, **kwargs)
 
 def log(*args, **kwargs):
     f = simple(*args, **kwargs, fig_kwargs={'y_axis_type': 'log'})

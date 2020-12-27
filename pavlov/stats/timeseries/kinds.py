@@ -1,6 +1,6 @@
 import pandas as pd
 from ... import tests, runs
-from .template import timeseries
+from .factory import timeseries
 from . import formatters, plotters
 
 @timeseries()

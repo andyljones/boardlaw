@@ -21,6 +21,7 @@ class Plotter:
         self.handle = None
         self.rule = rule
 
+        bop.output_notebook(hide_banner=True)
         self.refresh()
 
     def refresh_pool(self):
@@ -55,9 +56,8 @@ class Plotter:
         if reinit:
             self.initialize(rule=self.rule)
 
-        for subplot, readers in self.readers.items():
-            for r in readers:
-                r.refresh()
+        for subplot, plotter in self.plotters.items():
+            plotter.refresh()
 
         boi.push_notebook(handle=self._handle)
 
