@@ -56,9 +56,9 @@ class SimpleTimeseriesReader(TimeseriesReader):
         name = '.'.join(self._key.split('.')[1:])
         final = self.final(rule).item()
         if isinstance(final, int):
-            return [(name, f'{final}')]
+            return [(name, f'{final:<6g}')]
         if isinstance(final, float):
-            return [(name, f'{final:.6g}')]
+            return [(name, f'{final:<6g}')]
         else:
             raise ValueError() 
 
