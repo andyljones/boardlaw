@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import inspect
 import pandas as pd
+from . import plotters, formatters
 from .. import registry
 from ... import numpy, tests
 
@@ -50,27 +51,7 @@ class TimeseriesReader:
         resampled = self._resampler(**{k: df[k] for k in df}, rule=rule, offset=offset)
         return resampled.ffill(limit=1).iloc[-1]
 
-class SimpleTimeseriesReader(TimeseriesReader):
-
-    def format(self, rule):
-        name = '.'.join(self._key.split('.')[1:])
-        final = self.final(rule).item()
-        if isinstance(final, int):
-            return [(name, f'{final:<6g}')]
-        if isinstance(final, float):
-            return [(name, f'{final:<6g}')]
-        else:
-            raise ValueError() 
-
-class ConfidenceTimeseriesReader(TimeseriesReader):
-
-    def format(self, rule):
-        name = '.'.join(self._key.split('.')[1:])
-        final = self.final(rule)
-        return [(name, f'{final.μ:.2f}±{2*final.σ:.2f}')]
-
-
-def timeseries(reader=SimpleTimeseriesReader):
+def timeseries(formatter=formatters.simple, plotter=plotters.simple):
 
     def factory(f):
         """f provides the signature for the write call, and resamples the saved
@@ -89,7 +70,15 @@ def timeseries(reader=SimpleTimeseriesReader):
             w = registry.writer(key, lambda: numpy.Writer(registry.run(), key, kind=kind))
             w.write(call)
 
-        write.Reader = lambda run, key: reader(run, key, f)
+        def __init__(self, run, key):
+            TimeseriesReader.__init__(self, run, key, f)
+        
+        reader = type(
+            f'{kind}Reader', 
+            (TimeseriesReader,),
+            {'__init__': __init__, 'format': formatter, 'plot': plotter})
+
+        write.reader = reader
         KINDS[kind] = write
 
         return write

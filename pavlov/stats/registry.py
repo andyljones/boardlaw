@@ -42,5 +42,5 @@ def readers(run, readers={}):
             kind = KINDS[kind]
             k = _key(file)
             if k not in readers:
-                readers[k] = kind.Reader(run, k)
+                readers[k] = kind.reader(run, k)
     return readers
