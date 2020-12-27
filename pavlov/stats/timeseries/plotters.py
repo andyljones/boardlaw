@@ -8,6 +8,8 @@ from bokeh import events as boe
 from bokeh.palettes import Category10_10
 from itertools import cycle
 
+from pandas.core.series import Series
+
 def timedelta_xaxis(f):
     f.xaxis.ticker = bom.tickers.DatetimeTicker()
     f.xaxis.formatter = bom.FuncTickFormatter(code="""
@@ -130,36 +132,52 @@ def legend(f):
     f.legend.location = 'top_left'
 
 
-def timeseries(source, info, fig_kwargs={}, **kwargs):
-    y = info.id.iloc[0]
-    #TODO: Work out how to apply the axes formatters to the tooltips
-    f = bop.figure(x_range=bom.DataRange1d(start=0, follow='end'), tooltips=[('', '$data_y')], **fig_kwargs)
-    f.line(x='time_', y=y, source=source, **kwargs)
-    default_tools(f)
-    x_zeroline(f)
-    styling(f)
+class SeriesPlotter:
 
-    return f
+    def __init__(self, reader, rule, fig_kwargs={}, **kwargs):
+        self.reader = reader
+        self.rule = rule
 
-def timedataframe(source, info, fig_kwargs={}, **kwargs):
-    f = bop.figure(x_range=bom.DataRange1d(start=0, follow='end'), tooltips=[('', '$data_y')], **fig_kwargs)
+        self.source = bom.ColumnDataSource()
 
-    for y, label, color in zip(info.id.tolist(), info.label.tolist(), cycle(Category10_10)):
-        f.line(x='time_', y=y, legend_label=label, color=color, width=2, source=source, **kwargs)
+        y = info.id.iloc[0]
+        #TODO: Work out how to apply the axes formatters to the tooltips
+        f = bop.figure(x_range=bom.DataRange1d(start=0, follow='end'), tooltips=[('', '$data_y')], **fig_kwargs)
+        f.line(x='time_', y=y, source=self.source, **kwargs)
+        default_tools(f)
+        x_zeroline(f)
+        styling(f)
 
-    default_tools(f)
-    x_zeroline(f)
-    styling(f)
-    legend(f)
+        self.figure = f
 
-    return f
+    def refresh(self):
+        pass
 
-def simple(source, info, **kwargs):
-    # import aljpy; aljpy.extract()
-    if (len(info) == 1) and (info.label == '').all():
-        return timeseries(source, info, **kwargs)
+class DataframePlotter:
+
+    def __init__(self, reader, rule, fig_kwargs={}, **kwargs):
+        self.reader = reader
+        self.rule = rule
+
+        self.source = bom.ColumnDataSource()
+
+        f = bop.figure(x_range=bom.DataRange1d(start=0, follow='end'), tooltips=[('', '$data_y')], **fig_kwargs)
+
+        for y, label, color in zip(info.id.tolist(), info.label.tolist(), cycle(Category10_10)):
+            f.line(x='time_', y=y, legend_label=label, color=color, width=2, source=self.source, **kwargs)
+
+        default_tools(f)
+        x_zeroline(f)
+        styling(f)
+        legend(f)
+
+        self.figure = f
+
+def simple(readers, **kwargs):
+    if isinstance(readers, (tuple, list)):
+        return DataframePlotter(readers, **kwargs)
     else:
-        return timedataframe(source, info, **kwargs)
+        return SeriesPlotter(readers, **kwargs)
 
 def log(*args, **kwargs):
     f = simple(*args, **kwargs, fig_kwargs={'y_axis_type': 'log'})
