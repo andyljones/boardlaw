@@ -155,8 +155,8 @@ class SeriesPlotter:
 
 class DataframePlotter:
 
-    def __init__(self, reader, rule, fig_kwargs={}, **kwargs):
-        self.reader = reader
+    def __init__(self, readers, rule, fig_kwargs={}, **kwargs):
+        self.readers = readers
         self.rule = rule
 
         self.source = bom.ColumnDataSource()

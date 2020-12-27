@@ -93,15 +93,15 @@ def from_run_sync(run, rule, canceller=None, throttle=1):
     run = runs.resolve(run)
     out = widgets.compositor().output()
     start = pd.Timestamp(runs.info(run)['_created'])
-    readers = {}
+    pool = registry.ReaderPool(run)
 
     nxt = 0
     while True:
         if tests.time() > nxt:
             nxt = nxt + throttle
 
-            readers = registry.readers(run, readers)
-            pairs = formatted_pairs(readers, rule)
+            pool.refresh()
+            pairs = formatted_pairs(pool.pool, rule)
             content = treeformat(pairs)
 
             size = runs.size(run)

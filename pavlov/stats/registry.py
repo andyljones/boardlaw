@@ -34,13 +34,17 @@ def _key(file):
     parts = file.split('.')
     return '.'.join(parts[:-2])
 
-def readers(run, readers={}):
-    readers = {**readers}
-    for file, info in runs.files(run).items():
-        kind = info['kind']
-        if kind in KINDS:
-            kind = KINDS[kind]
-            k = _key(file)
-            if k not in readers:
-                readers[k] = kind.reader(run, k)
-    return readers
+class ReaderPool:
+
+    def __init__(self, run):
+        self.run = run
+        self.pool = {}
+
+    def refresh(self):
+        for file, info in runs.files(self.run).items():
+            kind = info['kind']
+            if kind in KINDS:
+                kind = KINDS[kind]
+                k = _key(file)
+                if k not in self.pool:
+                    self.pool[k] = kind.reader(self.run, k)

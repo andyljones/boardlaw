@@ -62,7 +62,7 @@ def timeseries(formatter=formatters.simple, plotter=plotters.simple):
         reader = type(f'{kind}Reader', (TimeseriesReader,), {
             'resample': staticmethod(f),
             'format': staticmethod(formatter), 
-            'plot': staticmethod(plotter)})
+            'plotter': staticmethod(plotter)})
 
         write.reader = reader
         KINDS[kind] = write

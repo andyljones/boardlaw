@@ -18,8 +18,6 @@ from . import tests
 
 ROOT = 'output/pavlov'
 
-RESOLVE = True
-
 ### Basic file stuff
 
 def root():
@@ -56,11 +54,7 @@ def write(path, contents):
         f.write(contents)
 
 def dir(run):
-    # This awkward thing is because the intelligence in the `resolve` 
-    # function depends on `dir`. So we need to turn that intelligence off
-    # when we're actually populating the `runs` that `resolve` relies on.
-    if RESOLVE:
-        run = resolve(run)
+    run = resolve(run)
     return root() / run
 
 def delete(run):
@@ -114,30 +108,33 @@ def new_run(suffix='', **kwargs):
     now = tests.timestamp()
     run = run_name(suffix, now)
     kwargs = {**kwargs, '_created': str(now), '_files': {}}
-    info(run, kwargs, create=True)
+    with _no_resolve():
+        info(run, kwargs, create=True)
     return run
 
 _cache = {}
 def runs():
-    global _cache, RESOLVE
+    global _cache
 
     cache = {}
     for dir in root().iterdir():
         if dir.name in _cache:
             cache[dir.name] = _cache[dir.name]
         else:
-            try:
-                RESOLVE = False
+            with _no_resolve():
                 cache[dir.name] = info(dir.name) 
-            finally:
-                RESOLVE = True
     
     order = sorted(cache, key=lambda n: cache[n]['_created']) 
 
     _cache = {n: cache[n] for n in order}
     return _cache
 
+RESOLVE = True
+
 def resolve(run):
+    if not RESOLVE:
+        return run
+
     names = list(runs())
     if isinstance(run, int):
         return names[run]
@@ -152,6 +149,21 @@ def resolve(run):
             return hits[0]
         else:
             raise ValueError(f'Found {len(hits)} runs that finished with "{run}"')
+
+@contextmanager
+def _no_resolve():
+    # Want to disable RESOLVE when we're either creating a new dir,
+    # or we're enumerating the runs in the dir and want to avoid a cycle
+    #
+    # Better to do this with a contextmanager rather than passing in 
+    # switch because the switch'd have to pass through a lot of layers of
+    # logic
+    global RESOLVE
+    try:
+        RESOLVE = False
+        yield
+    finally:
+        RESOLVE = True
 
 
 ### File stuff
