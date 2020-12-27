@@ -53,14 +53,23 @@ def _insert(tree, path, val):
             tree[path[0]] = {}
         _insert(tree[path[0]], path[1:], val)
 
-def _traverse(tree, depth=0):
-    for k in sorted(tree):
+def _traverse(tree, path=[]):
+    for i, k in enumerate(sorted(tree)):
         v = tree[k]
+        subpath = path + [i == (len(tree)-1)]
         if isinstance(v, dict):
-            yield depth, f'{k}', ''
-            yield from _traverse(v, depth+1)
+            yield subpath, k, ''
+            yield from _traverse(v, subpath)
         else:
-            yield depth, k, v  
+            yield subpath, k, v  
+
+def padding(path):
+    chars = []
+    for p in path[1:-1]:
+        chars.append('   ' if p else '│  ')
+    if len(path) > 1:
+        chars.append('└─ ' if path[-1] else '├─ ')
+    return ''.join(chars)
 
 def treeformat(pairs):
     if len(pairs) == 0:
@@ -71,14 +80,14 @@ def treeformat(pairs):
         _insert(tree, k.split('.'), v)
 
     keys, vals = [], []
-    for depth, k, v in _traverse(tree):
-        keys.append('  '*depth + k)
+    for path, k, v in _traverse(tree):
+        keys.append(padding(path) + k)
         vals.append(v)
 
     keylen = max(map(len, keys))
     keys = [k + ' '*max(keylen-len(k), 0) for k in keys]
 
-    return '\n'.join(f'{k} {v}' for k, v in zip(keys, vals))
+    return '\n'.join(f'{k}    {v}' for k, v in zip(keys, vals))
 
 def from_run_sync(run, rule, canceller=None, throttle=1):
     run = runs.resolve(run)
