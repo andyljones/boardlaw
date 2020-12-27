@@ -40,7 +40,7 @@ class TimeseriesReader:
         # df.index.name = '_time'
         return df
 
-def timeseries(formatter=formatters.simple, plotter=plotters.simple):
+def timeseries(formatter=formatters.simple, plotter=plotters.Simple):
 
     def factory(f):
         """f provides the signature for the write call, and resamples the saved

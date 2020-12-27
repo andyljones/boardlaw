@@ -1,3 +1,4 @@
+import aljpy
 import re
 import time
 import numpy as np
@@ -10,6 +11,22 @@ from contextlib import contextmanager
 from .. import runs, tests
 from . import registry
 from collections import defaultdict
+
+def split(key):
+    parts = key.split('.')
+    if len(parts) == 2:
+        return aljpy.dotdict(
+            kind=parts[0],
+            subplot='.'.join(parts), 
+            title='.'.join(parts[1:]),
+            label='')
+    else:
+        return aljpy.dotdict(
+            kind=parts[0],
+            subplot='.'.join(parts[:-1]), 
+            title='.'.join(parts[1:-1]),
+            label=parts[-1])
+
 
 class Plotter:
 
@@ -28,12 +45,11 @@ class Plotter:
         self.pool.refresh()
         reinit = False
         for key, reader in self.pool.pool.items():
-            match = re.fullmatch(r'(?P<subplot>.*)\.(?P<label>.*)', key)
-            subplot = match.group('subplot')
-            if subplot not in self.readers:
-                self.readers[subplot] = {}
-            if key not in self.readers[subplot]:
-                self.readers[subplot][key] = reader
+            s = split(key)
+            if s.subplot not in self.readers:
+                self.readers[s.subplot] = {}
+            if key not in self.readers[s.subplot]:
+                self.readers[s.subplot][key] = reader
                 reinit = True
         return reinit
 
@@ -64,16 +80,33 @@ class Plotter:
 def review(run=-1):
     Plotter(run)
 
+def view(run=-1):
+    plotter = Plotter(run)
+    while True:
+        plotter.refresh()
+        time.sleep(1.)
 
 @tests.mock_dir
 @tests.mock_time
 def demo():
-    from . import mean
+    from . import mean, mean_std
     run = runs.new_run()
     with registry.to_run(run):
         tests.set_time(30)
-        mean('test', 1)
+        mean('single', 1)
+        mean('double.one', 2)
+        mean('double.two', 3)
+
+        mean_std('ms', 1, 1)
+
+        plotter = Plotter(run)
+
         tests.set_time(90)
-        mean('test', 2)
-    
-    plotter = Plotter(run)
+        time.sleep(1)
+        mean('single', 4)
+        mean('double.one', 5)
+        mean('double.two', 6)
+        mean('new', 7)
+
+        mean_std('ms', 1, 1)
+        plotter.refresh()

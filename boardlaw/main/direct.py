@@ -103,7 +103,7 @@ def run():
 
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/1000, 1))
 
-    run_name = paths.timestamp('simple-9x9')
+    run_name = paths.timestamp('rezero-9x9')
     paths.clear(run_name)
     with logging.to_dir(run_name), stats.to_dir(run_name), \
             arena.monitor(run_name, worldfunc, agentfunc):

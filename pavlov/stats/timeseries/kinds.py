@@ -54,7 +54,7 @@ def period(count=1, **kwargs):
     dt = min(dt, (count.index[-1] - count.index[0]).total_seconds())
     return dt/counts
 
-@timeseries(formatters.confidence, plotters.confidence)
+@timeseries(formatters.confidence, plotters.Confidence)
 def mean_std(μ, σ, **kwargs):
     μm = (μ/σ**2).resample(**kwargs).mean()/(1/σ**2).resample(**kwargs).mean()
     σm = 1/(1/σ**2).resample(**kwargs).mean()**.5

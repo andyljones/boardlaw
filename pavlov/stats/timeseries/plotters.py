@@ -10,6 +10,7 @@ from bokeh.palettes import Category10_10
 from itertools import cycle
 
 from pandas.core.series import Series
+from ..plotting import split
 
 def timedelta_xaxis(f):
     f.xaxis.ticker = bom.tickers.DatetimeTicker()
@@ -132,33 +133,6 @@ def legend(f):
     f.legend.border_line_alpha = 0.
     f.legend.location = 'top_left'
 
-
-class SeriesPlotter:
-    fig_kwargs = {}
-    line_kwargs = {}
-
-    def __init__(self, reader, rule):
-        self.reader = reader
-        self.rule = rule
-
-        self.source = bom.ColumnDataSource()
-
-        y = info.id.iloc[0]
-        #TODO: Work out how to apply the axes formatters to the tooltips
-        f = bop.figure(
-            x_range=bom.DataRange1d(start=0, follow='end'), 
-            tooltips=[('', '$data_y')], 
-            **self.fig_kwargs)
-        f.line(x='time_', y=y, source=self.source, **self.line_kwargs)
-        default_tools(f)
-        x_zeroline(f)
-        styling(f)
-
-        self.figure = f
-
-    def refresh(self):
-        pass
-
 def align(readers, rule):
     df = {}
     for k, r in readers.items():
@@ -167,7 +141,7 @@ def align(readers, rule):
     df.index = df.index - df.index[0]
     return df.reset_index()
 
-class DataframePlotter:
+class Simple:
     fig_kwargs = {}
     line_kwargs = {'width': 2}
 
@@ -176,7 +150,6 @@ class DataframePlotter:
         self.rule = rule
 
         aligned = align(self.readers, self.rule)
-
         self.source = bom.ColumnDataSource(aligned)
 
         f = bop.figure(
@@ -185,55 +158,78 @@ class DataframePlotter:
             **self.fig_kwargs)
 
         for key, color in zip(readers, cycle(Category10_10)):
-            match = re.fullmatch(r'(?P<subplot>.*)\.(?P<label>.*)', key)
+            s = split(key)
+            label = dict(legend_label=s.label) if s.label else dict()
             f.line(
                 x='_time', 
                 y=key, 
-                legend_label=match.group('label'), 
                 color=color, 
                 source=self.source, 
+                **label,
                 **self.line_kwargs)
 
         default_tools(f)
         x_zeroline(f)
         styling(f)
-        legend(f)
+
+        s = split(list(readers)[0])
+        if s.label:
+            legend(f)
+        f.title = bom.Title(text=s.title)
 
         self.figure = f
 
     def refresh(self):
-        pass
+        aligned = align(self.readers, self.rule)
+        threshold = len(self.source.data['_time'])
+        new = aligned.iloc[threshold:]
+        self.source.stream(new)
 
+class Log(Simple):
+    fig_kwargs = {'y_axis_type': 'log'}
 
+    def __init__(self, readers, rule):
+        super().__init__(readers, rule)
+        self.figure.formatter = bom.LogTickFormatter()
 
-def simple(readers, **kwargs):
-    if len(readers) == 0 and list(readers)[0] == '':
-        return SeriesPlotter(readers, **kwargs)
-    else:
-        return DataframePlotter(readers, **kwargs)
+class Confidence:
 
-def log(*args, **kwargs):
-    f = simple(*args, **kwargs, fig_kwargs={'y_axis_type': 'log'})
-    f.yaxis.formatter = bom.LogTickFormatter()
-    return f
+    def __init__(self, readers, rule):
+        self.readers = readers
+        self.rule = rule
 
-def confidence(source, info):
-    f = bop.figure(x_range=bom.DataRange1d(start=0, follow='end'), tooltips=[('', '$data_y')])
+        aligned = self.aligned()
+        self.source = bom.ColumnDataSource(aligned)
 
-    if not info.label.str.contains('/').any():
-        i = info.set_index('label')['id']
-        f.varea(x='time_', y1=i['μ-'], y2=i['μ+'], alpha=.2, source=source)
-        f.line(x='time_', y=i['μ'], source=source)
-    else:
-        info = pd.concat([info, info.label.str.extract('^(?P<seq>.*)/(?P<stat>.*)')], 1)
-        for (seq, i), color in zip(info.groupby('seq'), cycle(Category10_10)):
-            i = i.set_index('stat')['id']
-            f.varea(x='time_', y1=i['μ-'], y2=i['μ+'], legend_label=seq, color=color, alpha=.2, source=source)
-            f.line(x='time_', y=i['μ'], legend_label=seq, color=color, source=source)
-        legend(f)
+        f = bop.figure(x_range=bom.DataRange1d(start=0, follow='end'), tooltips=[('', '$data_y')])
 
-    default_tools(f)
-    x_zeroline(f)
-    styling(f)
+        for key, color in zip(readers, cycle(Category10_10)):
+            s = split(key)
+            label = dict(legend_label=s.label) if s.label else dict()
+            f.varea(
+                x='_time', y1=f'{key}.μ-', y2=f'{key}.μ+', 
+                color=color, alpha=.2, source=self.source, **label)
+            f.line(
+                x='_time', y=f'{key}.μ', 
+                color=color, source=self.source, **label)
 
-    return f
+        default_tools(f)
+        x_zeroline(f)
+        styling(f)
+        s = split(list(readers)[0])
+        if s.label:
+            legend(f)
+        f.title = bom.Title(text=s.title)
+
+        self.figure = f
+
+    def aligned(self):
+        aligned = align(self.readers, self.rule)
+        aligned.columns = ['.'.join(d for d in c if d) for c in aligned.columns]
+        return aligned
+
+    def refresh(self):
+        aligned = self.aligned()
+        threshold = len(self.source.data['_time'])
+        new = aligned.iloc[threshold:]
+        self.source.stream(new)

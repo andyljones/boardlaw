@@ -10,7 +10,7 @@ class ReZeroResidual(nn.Linear):
     def __init__(self, width):
         super().__init__(width, width)
         nn.init.orthogonal_(self.weight, gain=2**.5)
-        self.register_parameter('α', nn.Parameter(torch.zeros()))
+        self.register_parameter('α', nn.Parameter(torch.zeros(())))
 
     def forward(self, x, *args, **kwargs):
         return x + self.α*F.relu(super().forward(x))
@@ -64,7 +64,7 @@ class Transformer(nn.Module):
 
 class Network(nn.Module):
 
-    def __init__(self, obs_space, action_space, width=128, depth=8):
+    def __init__(self, obs_space, action_space, width=256, depth=8):
         super().__init__()
         self.policy = heads.output(action_space, width)
         self.sampler = self.policy.sample
