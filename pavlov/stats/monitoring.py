@@ -42,7 +42,7 @@ def formatted_pairs(readers, rule):
     pairs = []
     for _, reader in readers.items():
         if reader.ready():
-            pairs.extend(reader.format(rule))
+            pairs.extend(reader.format(reader, rule))
     return pairs
 
 def _insert(tree, path, val):

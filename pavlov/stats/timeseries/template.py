@@ -19,11 +19,10 @@ def clean(x):
 
 class TimeseriesReader:
 
-    def __init__(self, run, key, resampler):
-        self._key = key
+    def __init__(self, run, key):
+        self.key = key
         self._reader = numpy.Reader(run, key)
         self._arr = None
-        self._resampler = resampler
 
     def array(self):
         #TODO: If this gets slow, do amortized allocation of arrays x2 as big as needed
@@ -40,16 +39,6 @@ class TimeseriesReader:
         df = pd.DataFrame.from_records(arr, index='_time')
         df.index.name = 'time'
         return df
-
-    def final(self, rule):
-        df = self.pandas()
-
-        # Offset slightly into the future, else by the time the resample actually happens you're 
-        # left with an almost-empty last interval.
-        offset = f'{(tests.time() % 60) + 5}s'
-
-        resampled = self._resampler(**{k: df[k] for k in df}, rule=rule, offset=offset)
-        return resampled.ffill(limit=1).iloc[-1]
 
 def timeseries(formatter=formatters.simple, plotter=plotters.simple):
 
@@ -70,13 +59,10 @@ def timeseries(formatter=formatters.simple, plotter=plotters.simple):
             w = registry.writer(key, lambda: numpy.Writer(registry.run(), key, kind=kind))
             w.write(call)
 
-        def __init__(self, run, key):
-            TimeseriesReader.__init__(self, run, key, f)
-        
-        reader = type(
-            f'{kind}Reader', 
-            (TimeseriesReader,),
-            {'__init__': __init__, 'format': formatter, 'plot': plotter})
+        reader = type(f'{kind}Reader', (TimeseriesReader,), {
+            'resample': staticmethod(f),
+            'format': staticmethod(formatter), 
+            'plot': staticmethod(plotter)})
 
         write.reader = reader
         KINDS[kind] = write
