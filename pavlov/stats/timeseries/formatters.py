@@ -10,8 +10,11 @@ def final_row(reader, rule):
     resampled = reader.resample(**dict(df), rule=rule, offset=offset)
     return resampled.ffill(limit=1).iloc[-1]
 
+def label(key):
+    return '.'.join(key.split('.')[1:])
+
 def simple(reader, rule):
-    name = '.'.join(reader.key.split('.')[1:])
+    name = label(reader.key)
     final = final_row(reader, rule).item()
     if isinstance(final, int):
         return [(name, f'{final:<6g}')]
@@ -20,8 +23,13 @@ def simple(reader, rule):
     else:
         raise ValueError() 
 
+def percent(reader, rule):
+    name = label(reader.key)
+    final = final_row(reader, rule).item()
+    return [(name, f'{final:.2%}')]
+
 def confidence(reader, rule):
-    name = '.'.join(reader.key.split('.')[1:])
+    name = label(reader.key)
     final = final_row(reader, rule)
     return [(name, f'{final.μ:.2f}±{2*final.σ:.2f}')]
 

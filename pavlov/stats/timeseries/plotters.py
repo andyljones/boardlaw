@@ -190,7 +190,13 @@ class Log(Simple):
 
     def __init__(self, readers, rule):
         super().__init__(readers, rule)
-        self.figure.formatter = bom.LogTickFormatter()
+        self.figure.yaxis[0].formatter = bom.LogTickFormatter()
+
+class Percent(Simple):
+
+    def __init__(self, readers, rule):
+        super().__init__(readers, rule)
+        self.figure.yaxis[0].formatter = bom.NumeralTickFormatter(format="0%")
 
 class Confidence:
 

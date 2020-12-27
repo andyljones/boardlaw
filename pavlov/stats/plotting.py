@@ -89,7 +89,7 @@ def view(run=-1):
 @tests.mock_dir
 @tests.mock_time
 def demo():
-    from . import mean, mean_std
+    from . import mean, mean_std, mean_percent
     run = runs.new_run()
     with registry.to_run(run):
         tests.set_time(30)
@@ -98,6 +98,8 @@ def demo():
         mean('double.two', 3)
 
         mean_std('ms', 1, 1)
+
+        mean_percent('ms', 1, 1)
 
         plotter = Plotter(run)
 

@@ -11,8 +11,16 @@ def last(x, **kwargs):
 def max(x, **kwargs):
     return x.resample(**kwargs).max()
 
+@timeseries(formatters.percent, plotters.Percent)
+def max_percent(x, **kwargs):
+    return x.resample(**kwargs).max()
+
 @timeseries()
 def mean(total, count=1, **kwargs):
+    return total.resample(**kwargs).mean()/count.resample(**kwargs).mean()
+
+@timeseries(formatters.percent, plotters.Percent)
+def mean_percent(total, count=1, **kwargs):
     return total.resample(**kwargs).mean()/count.resample(**kwargs).mean()
 
 @timeseries()
@@ -30,7 +38,7 @@ def timeaverage(x, **kwargs):
     dt = y.index.to_series().diff().dt.total_seconds()
     return (y*dt).resample(**kwargs).mean()/dt.resample(**kwargs).mean()
 
-@timeseries()
+@timeseries(formatters.percent, plotters.Percent)
 def duty(duration, **kwargs):
     sums = duration.resample(**kwargs).sum()
     periods = sums.index.to_series().diff().dt.total_seconds()
