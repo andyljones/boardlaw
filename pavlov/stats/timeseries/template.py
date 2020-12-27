@@ -16,7 +16,7 @@ def clean(x):
         return {k: clean(v) for k, v in x.items()}
     return x
 
-class Reader:
+class TimeseriesReader:
 
     def __init__(self, run, key, resampler):
         self._key = key
@@ -48,14 +48,13 @@ class Reader:
         offset = f'{(tests.time() % 60) + 5}s'
 
         resampled = self._resampler(**{k: df[k] for k in df}, rule=rule, offset=offset)
-        final = resampled.ffill(limit=1).iloc[-1]
-        return final.item()
+        return resampled.ffill(limit=1).iloc[-1]
 
-class SingleReader(Reader):
+class SimpleTimeseriesReader(TimeseriesReader):
 
     def format(self, rule):
         name = '.'.join(self._key.split('.')[1:])
-        final = self.final(rule)
+        final = self.final(rule).item()
         if isinstance(final, int):
             return [(name, f'{final}')]
         if isinstance(final, float):
@@ -63,24 +62,36 @@ class SingleReader(Reader):
         else:
             raise ValueError() 
 
-def timeseries(f, reader=SingleReader):
-    """f provides the signature for the write call, and resamples the saved
-    data when it's read."""
-    kind = f.__name__
+class ConfidenceTimeseriesReader(TimeseriesReader):
 
-    def write(name, *args, **kwargs):
-        args = tuple(clean(a) for a in args)
-        kwargs = {k: clean(v) for k, v in kwargs.items()}
+    def format(self, rule):
+        name = '.'.join(self._key.split('.')[1:])
+        final = self.final(rule)
+        return [(name, f'{final.μ:.2f}±{2*final.σ:.2f}')]
 
-        call = inspect.getcallargs(f, *args, **kwargs)
-        del call['kwargs']
-        call = {'_time': tests.datetime64(), **call}
 
-        key = f'{kind}.{name}'
-        w = registry.writer(key, lambda: numpy.Writer(registry.run(), key, kind=kind))
-        w.write(call)
+def timeseries(reader=SimpleTimeseriesReader):
 
-    write.Reader = lambda run, key: reader(run, key, f)
-    KINDS[kind] = write
+    def factory(f):
+        """f provides the signature for the write call, and resamples the saved
+        data when it's read."""
+        kind = f.__name__
 
-    return write
+        def write(name, *args, **kwargs):
+            args = tuple(clean(a) for a in args)
+            kwargs = {k: clean(v) for k, v in kwargs.items()}
+
+            call = inspect.getcallargs(f, *args, **kwargs)
+            del call['kwargs']
+            call = {'_time': tests.datetime64(), **call}
+
+            key = f'{kind}.{name}'
+            w = registry.writer(key, lambda: numpy.Writer(registry.run(), key, kind=kind))
+            w.write(call)
+
+        write.Reader = lambda run, key: reader(run, key, f)
+        KINDS[kind] = write
+
+        return write
+    
+    return factory

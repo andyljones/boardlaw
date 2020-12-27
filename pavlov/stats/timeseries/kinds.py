@@ -1,57 +1,64 @@
 import pandas as pd
 from ... import tests, runs
-from .template import timeseries
+from .template import timeseries, ConfidenceTimeseriesReader
 
-@timeseries
+@timeseries()
 def last(x, **kwargs):
     return x.resample(**kwargs).last().ffill()
 
-@timeseries
+@timeseries()
 def max(x, **kwargs):
     return x.resample(**kwargs).max()
 
-@timeseries
+@timeseries()
 def mean(total, count=1, **kwargs):
     return total.resample(**kwargs).mean()/count.resample(**kwargs).mean()
 
-@timeseries
+@timeseries()
 def std(x, **kwargs):
     return x.resample(**kwargs).std()
 
-@timeseries
+@timeseries()
 def cumsum(total=1, **kwargs):
     return total.resample(**kwargs).sum().cumsum()
 
-@timeseries
+@timeseries()
 def timeaverage(x, **kwargs):
     # TODO: To do this properly, I need to get individual per-device streams
     y = x.sort_index()
     dt = y.index.to_series().diff().dt.total_seconds()
     return (y*dt).resample(**kwargs).mean()/dt.resample(**kwargs).mean()
 
-@timeseries
+@timeseries()
 def duty(duration, **kwargs):
     sums = duration.resample(**kwargs).sum()
     periods = sums.index.to_series().diff().dt.total_seconds()
     return sums/periods
 
-@timeseries
+@timeseries()
 def maxrate(duration, count=1, **kwargs):
     return count.resample(**kwargs).mean()/duration.resample(**kwargs).mean()
 
-@timeseries
+@timeseries()
 def rate(count=1, **kwargs):
     counts = count.resample(**kwargs).sum()
     dt = pd.to_timedelta(counts.index.freq).total_seconds()
     dt = min(dt, (count.index[-1] - count.index[0]).total_seconds())
     return counts/dt
 
-@timeseries
+@timeseries()
 def period(count=1, **kwargs):
     counts = count.resample(**kwargs).sum()
     dt = pd.to_timedelta(counts.index.freq).total_seconds()
     dt = min(dt, (count.index[-1] - count.index[0]).total_seconds())
     return dt/counts
+
+@timeseries(ConfidenceTimeseriesReader)
+def mean_std(μ, σ, **kwargs):
+    μm = (μ/σ**2).resample(**kwargs).mean()/(1/σ**2).resample(**kwargs).mean()
+    σm = 1/(1/σ**2).resample(**kwargs).mean()**.5
+    return pd.concat({'μ': μm, 'σ': σm, 'μ-': μm - 2*σm, 'μ+': μm + 2*σm}, 1)
+
 
 #TODO:
 # * log_cumsum
