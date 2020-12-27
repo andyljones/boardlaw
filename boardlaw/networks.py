@@ -5,6 +5,15 @@ from torch import nn
 from rebar import recurrence, arrdict
 from torch.nn import functional as F
 
+class SimpleResidual(nn.Linear):
+
+    def __init__(self, width, gain=1):
+        super().__init__(width, width)
+        nn.init.orthogonal_(self.weight, gain=gain)
+
+    def forward(self, x, *args, **kwargs):
+        return x + F.relu(super().forward(x))
+
 class Residual(nn.Module):
 
     def __init__(self, width, gain=1):
@@ -54,15 +63,15 @@ class Transformer(nn.Module):
 
 class Network(nn.Module):
 
-    def __init__(self, obs_space, action_space, width=128, layers=8):
+    def __init__(self, obs_space, action_space, width=128, depth=8):
         super().__init__()
         self.policy = heads.output(action_space, width)
         self.sampler = self.policy.sample
 
         blocks = [heads.intake(obs_space, width)]
-        for _ in range(layers):
-            blocks.append(Residual(width, 1/layers**.5)) 
-        self.body = recurrence.Sequential(*blocks)
+        for _ in range(depth):
+            blocks.append(SimpleResidual(width, 1/depth**.5))
+        self.body = nn.Sequential(*blocks) 
 
         self.value = heads.ValueOutput(width)
 
