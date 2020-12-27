@@ -2,17 +2,17 @@ import torch
 import pandas as pd
 from io import BytesIO
 from subprocess import check_output
-from . import stats
 import time
 import torch.cuda
 
 
 def memory(device=0):
+    from . import max_percent
     if isinstance(device, torch.device):
         device = device.index
     total_mem = torch.cuda.get_device_properties(f'cuda:{device}').total_memory
-    stats.max_percent(f'gpu-memory.{device}.reserve', torch.cuda.max_memory_reserved(device)/total_mem)
-    stats.max_percent(f'gpu-memory.{device}.alloc', torch.cuda.max_memory_allocated(device)/total_mem)
+    max_percent(f'gpu-memory.{device}.reserve', torch.cuda.max_memory_reserved(device)/total_mem)
+    max_percent(f'gpu-memory.{device}.alloc', torch.cuda.max_memory_allocated(device)/total_mem)
     torch.cuda.reset_peak_memory_stats()
 
 def dataframe():
@@ -32,6 +32,8 @@ def dataframe():
 
 _last = -1
 def gpu(device=None, throttle=0):
+    from . import max_percent, mean_percent
+
     # This is a fairly expensive op, so let's avoid doing it too often
     global _last
     if time.time() - _last < throttle:
@@ -51,12 +53,12 @@ def gpu(device=None, throttle=0):
     for device, row in df.iterrows():
         for field, value in row.iteritems():
             if field in ('compute', 'fan', 'access'):
-                stats.mean_percent(f'gpu.{device}.{field}', value/100)
+                mean_percent(f'gpu.{device}.{field}', value/100)
             if field == 'power':
-                stats.mean_percent(f'gpu.{device}.{field}', value/row['powerlimit'])
+                mean_percent(f'gpu.{device}.{field}', value/row['powerlimit'])
             if field == 'temp':
-                stats.mean_percent(f'gpu.{device}.{field}', value/80)
+                mean_percent(f'gpu.{device}.{field}', value/80)
 
     for device in df.index:
-        stats.max_percent(f'gpu-memory.{device}.gross', df.loc[device, 'memused']/df.loc[device, 'memtotal'])
+        max_percent(f'gpu-memory.{device}.gross', df.loc[device, 'memused']/df.loc[device, 'memtotal'])
         memory(device)

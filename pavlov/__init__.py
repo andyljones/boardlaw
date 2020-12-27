@@ -1,4 +1,4 @@
-from . import logging, stats
+from . import logging, stats, runs
 
 def monitor(run):
     import time
