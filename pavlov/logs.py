@@ -154,6 +154,7 @@ def _from_run(*args, **kwargs):
 
 @contextmanager
 def from_run(run):
+    run = runs.resolve(run)
     try:
         canceller = threading.Event()
         thread = threading.Thread(target=_from_run, args=(run, in_ipython(), canceller))

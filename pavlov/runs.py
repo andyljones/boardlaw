@@ -132,10 +132,12 @@ def runs():
     return _cache
 
 RESOLVE = True
+LOCK = threading.RLock()
 
 def resolve(run):
-    if not RESOLVE:
-        return run
+    with LOCK: 
+        if not RESOLVE:
+            return run
 
     names = list(runs())
     if isinstance(run, int):
@@ -161,11 +163,12 @@ def _no_resolve():
     # switch because the switch'd have to pass through a lot of layers of
     # logic
     global RESOLVE
-    try:
-        RESOLVE = False
-        yield
-    finally:
-        RESOLVE = True
+    with LOCK:
+        try:
+            RESOLVE = False
+            yield
+        finally:
+            RESOLVE = True
 
 
 ### File stuff
