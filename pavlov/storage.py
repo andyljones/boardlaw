@@ -36,10 +36,10 @@ def deepen(state_dict, depth=np.inf):
 def state_dicts(**objs):
     dicts = {}
     for k, v in objs.items():
-        if isinstance(objs, dict):
-            dicts[k] = state_dicts(objs)
-        elif hasattr(objs, 'state_dict'):
-            dicts[k] = objs.state_dict()
+        if isinstance(v, dict):
+            dicts[k] = state_dicts(**v)
+        elif hasattr(v, 'state_dict'):
+            dicts[k] = v.state_dict()
         else:
             dicts[k] = v
     return dicts
@@ -67,7 +67,7 @@ def throttled_latest(run, objs, throttle):
     if runs.filepath(run, LATEST).exists():
         last = pd.to_datetime(runs.fileinfo(run, LATEST)['_created'])
     else:
-        last = pd.Timestamp(0, unit='s')
+        last = pd.Timestamp(0, unit='s', tz='UTC')
 
     if tests.timestamp() > last + pd.Timedelta(throttle, 's'):
         latest(run, objs)
@@ -85,7 +85,7 @@ def throttled_snapshot(run, objs, throttle):
     if files:
         last = pd.to_datetime(max(f['_created'] for f in files.values()))
     else:
-        last = pd.Timestamp(0, unit='s')
+        last = pd.Timestamp(0, unit='s', tz='UTC')
 
     if tests.timestamp() > last + pd.Timedelta(throttle, 's'):
         snapshot(run, objs)

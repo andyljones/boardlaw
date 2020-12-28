@@ -113,7 +113,6 @@ def run():
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/1000, 1))
 
     run = runs.new_run('pavlov-test')
-    runs.delete(run)
     with logs.to_run(run), stats.to_run(run):
             # arena.monitor(run, worldfunc, agentfunc):
         buffer = []

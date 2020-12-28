@@ -63,11 +63,11 @@ class Plotter:
         if self.handle:
             boi.push_notebook(handle=self.handle)
 
-def review(run=-1):
-    Plotter(run)
+def review(run=-1, **kwargs):
+    Plotter(run, **kwargs)
 
-def view(run=-1):
-    plotter = Plotter(run)
+def view(run=-1, **kwargs):
+    plotter = Plotter(run, **kwargs)
     while True:
         plotter.refresh()
         time.sleep(1.)

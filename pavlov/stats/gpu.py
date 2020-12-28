@@ -10,8 +10,8 @@ def memory(device=0):
     if isinstance(device, torch.device):
         device = device.index
     total_mem = torch.cuda.get_device_properties(f'cuda:{device}').total_memory
-    max_percent(f'gpu-memory.{device}.reserve', torch.cuda.max_memory_reserved(device)/total_mem)
-    max_percent(f'gpu-memory.{device}.alloc', torch.cuda.max_memory_allocated(device)/total_mem)
+    max_percent(f'gpu-memory-{device}.reserve', torch.cuda.max_memory_reserved(device)/total_mem)
+    max_percent(f'gpu-memory-{device}.alloc', torch.cuda.max_memory_allocated(device)/total_mem)
     torch.cuda.reset_peak_memory_stats()
 
 def dataframe():
@@ -52,12 +52,12 @@ def gpu(device=None, throttle=0):
     for device, row in df.iterrows():
         for field, value in row.iteritems():
             if field in ('compute', 'fan', 'access'):
-                mean_percent(f'gpu.{device}.{field}', value/100)
+                mean_percent(f'gpu-{device}.{field}', value/100)
             if field == 'power':
-                mean_percent(f'gpu.{device}.{field}', value/row['powerlimit'])
+                mean_percent(f'gpu-{device}.{field}', value/row['powerlimit'])
             if field == 'temp':
-                mean_percent(f'gpu.{device}.{field}', value/80)
+                mean_percent(f'gpu-{device}.{field}', value/80)
 
     for device in df.index:
-        max_percent(f'gpu-memory.{device}.gross', df.loc[device, 'memused']/df.loc[device, 'memtotal'])
+        max_percent(f'gpu-memory-{device}.gross', df.loc[device, 'memused']/df.loc[device, 'memtotal'])
         memory(device)

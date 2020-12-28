@@ -45,7 +45,7 @@ def parse_channel(channel):
     if len(parts) == 1:
         return aljpy.dotdict(group=parts[0], label='')
     else:
-        return aljpy.dotdict(group=parts[0], label=parts[1])
+        return aljpy.dotdict(group=parts[0], label='.'.join(parts[1:]))
 
 def parse_prefix(prefix):
     p = re.fullmatch(PREFIX, prefix).groupdict()

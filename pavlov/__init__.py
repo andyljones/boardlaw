@@ -1,6 +1,6 @@
 from . import logs, stats, runs, tests
 
-def monitor(run):
+def monitor(run=-1):
     import time
     with logs.from_run(run), stats.from_run(run):
         while True:
