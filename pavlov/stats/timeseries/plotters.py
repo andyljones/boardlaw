@@ -139,7 +139,8 @@ def align(readers, rule):
         df[reader.prefix] = reader.resample(**dict(reader.pandas()), rule=rule)
     df = pd.concat(df, 1)
     df.index = df.index - df.index[0]
-    return df.reset_index()
+    # Drop the last row since it represents an under-full window.
+    return df.reset_index().iloc[:-1]
 
 class Simple:
     fig_kwargs = {}
@@ -207,7 +208,9 @@ class Confidence:
         aligned = self.aligned()
         self.source = bom.ColumnDataSource(aligned)
 
-        f = bop.figure(x_range=bom.DataRange1d(start=0, follow='end'), tooltips=[('', '$data_y')])
+        f = bop.figure(
+            x_range=bom.DataRange1d(start=0, follow='end'), 
+            tooltips=[('', '$data_y')])
 
         for reader, color in zip(readers, cycle(Category10_10)):
             p = registry.parse_prefix(reader.prefix)

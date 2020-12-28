@@ -1,3 +1,5 @@
+import numpy as np
+import pandas as pd
 import threading
 from contextlib import contextmanager
 from . import timeseries
@@ -87,6 +89,12 @@ def reader(run, channel):
 def array(run, channel):
     return reader(run, channel).array()
 
-def pandas(run, channel):
+def pandas(run, channel, rule='60s', **kwargs):
     r = reader(run, channel)
-    return r.pandas()
+    df = r.pandas()
+    df.index = df.index - runs.created(run)
+    # TODO: Is there a better way to get resampling of timedeltas to land on 
+    # a regular value?
+    df = pd.concat([pd.DataFrame(np.nan, [pd.Timedelta(0)], df.columns), df])
+    df = r.resample(**df, **{'rule': rule, **kwargs})
+    return df

@@ -1,8 +1,8 @@
 #!/opt/conda/bin/python
 import git
-from rebar import storing
+from pavlov import runs 
 
 commit = str(git.Repo().head.commit)[:6]
-run = storing.runs().iloc[-1]['run_name']
+run = runs.resolve(-1)
 print(f'[[Boardlaw#Ref]] (`{commit}`):')
 print(f'[[Boardlaw#Runs]] (`{commit}`, `{run}`):')

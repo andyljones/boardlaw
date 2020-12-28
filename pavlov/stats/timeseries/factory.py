@@ -38,7 +38,7 @@ class TimeseriesReader:
     def pandas(self):
         arr = self.array()
         df = pd.DataFrame.from_records(arr, index='_time')
-        # df.index.name = '_time'
+        df.index = df.index.tz_localize('UTC')
         return df
 
 def timeseries(formatter=formatters.simple, plotter=plotters.Simple):

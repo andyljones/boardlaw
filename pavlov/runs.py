@@ -1,3 +1,4 @@
+import pandas as pd
 import socket
 import threading
 import multiprocessing
@@ -124,12 +125,21 @@ def runs():
             cache[dir.name] = _cache[dir.name]
         else:
             with _no_resolve():
-                cache[dir.name] = info(dir.name) 
+                try:
+                    cache[dir.name] = info(dir.name) 
+                except ValueError:
+                    # We'll end up here if the run's dir has been created, but 
+                    # not the info file. That usually happens if we create a 
+                    # run in another process.
+                    pass
     
     order = sorted(cache, key=lambda n: cache[n]['_created']) 
 
     _cache = {n: cache[n] for n in order}
     return _cache
+
+def created(run):
+    return pd.to_datetime(info(run)['_created'])
 
 T = threading.local()
 T.RESOLVE = True

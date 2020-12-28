@@ -13,20 +13,19 @@ def set_time(s):
     assert MOCK_NOW is not None, 'Can only be called from inside a function decorated with `mock_time`'
     MOCK_NOW = s
 
-def time():
+def timestamp():
     if MOCK_NOW is None:
-        return time_.time()
-    return MOCK_NOW
+        return pd.Timestamp.now('UTC')
+    return pd.Timestamp(MOCK_NOW, unit='s', tz='UTC')
+
+def time():
+    return timestamp().value/1e9
 
 def datetime64():
-    if MOCK_NOW is None:
-        return np.datetime64('now')
-    return np.datetime64('1970') + np.timedelta64(MOCK_NOW, 's') 
-
-def timestamp(tz='UTC'):
-    if MOCK_NOW is None:
-        return pd.Timestamp.now(tz=tz)
-    return pd.Timestamp(MOCK_NOW, unit='s', tz=tz)
+    # Bit of a mess this, but I don't trust np.datetime64('now') to give
+    # me the UTC time rather than system time, and I can't find any 
+    # documentation on it. 
+    return np.datetime64(timestamp().tz_localize(None))
 
 def mock_time(f):
 
@@ -155,3 +154,10 @@ def convert(run):
     (new / '_info.json').write_text(json.dumps(info))
 
     return new
+
+def convert_all():
+    for p in Path('output/traces').iterdir():
+        
+        n_saved = len(list(p.glob('**/*.pkl')))
+        if (n_saved-1)/4 > 1:
+            convert(p.name)
