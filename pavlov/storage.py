@@ -33,7 +33,7 @@ def deepen(state_dict, depth=np.inf):
         d.setdefault(head, {})[tail] = flatten(v, depth-1)
     return d
 
-def state_dicts(objs):
+def state_dicts(**objs):
     dicts = {}
     for k, v in objs.items():
         if isinstance(objs, dict):
@@ -63,7 +63,7 @@ def latest(run, objs):
     else:
         return load(path)
 
-def throttled_latest(run, throttle, objs):
+def throttled_latest(run, objs, throttle):
     if runs.filepath(run, LATEST).exists():
         last = pd.to_datetime(runs.fileinfo(run, LATEST)['_created'])
     else:
@@ -80,7 +80,7 @@ def snapshot(run, objs):
 def snapshots(run):
     return {runs.filepath(run, fn): info for fn, info in runs.fileseq(run, SNAPSHOT).items()}
 
-def throttled_snapshot(run, throttle, objs):
+def throttled_snapshot(run, objs, throttle):
     files = snapshots(run)
     if files:
         last = pd.to_datetime(max(f['_created'] for f in files.values()))
