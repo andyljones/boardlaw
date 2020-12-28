@@ -1,3 +1,4 @@
+import threading
 from contextlib import contextmanager
 from . import timeseries
 from .. import runs
@@ -7,8 +8,9 @@ import re
 KINDS = {
     **timeseries.KINDS}
 
-WRITERS = {}
-RUN = None
+T = threading.local()
+T.WRITERS = {}
+T.RUN = None
 
 # channel: label or group.la.bel
 # prefix: stats.channel
@@ -19,23 +21,22 @@ FILENAME = r'(?P<prefix>.*)\.(?P<idx>.*)\.(?P<ext>.*)'
 @contextmanager
 def to_run(run):
     try:
-        global WRITERS, RUN
-        old = (WRITERS, RUN)
-        WRITERS, RUN = {}, run
+        old = (T.WRITERS, T.RUN)
+        T.WRITERS, T.RUN = {}, run
         yield
     finally:
-        WRITERS, RUN = old
+        T.WRITERS, T.RUN = old
 
 def run():
-    if RUN is None:
+    if T.RUN is None:
         raise ValueError('No run currently set')
-    return RUN
+    return T.RUN
 
 def writer(prefix, factory=None):
     if factory is not None:
-        if prefix not in WRITERS:
-            WRITERS[prefix] = factory()
-    return WRITERS[prefix]
+        if prefix not in T.WRITERS:
+            T.WRITERS[prefix] = factory()
+    return T.WRITERS[prefix]
 
 def make_prefix(channel):
     return f'stats.{channel}'

@@ -1,8 +1,10 @@
 from contextlib import contextmanager
 from functools import wraps
+import threading
 
-QUEUE = []
-DEFER = False
+T = threading.local()
+T.QUEUE = []
+T.DEFER = False
 
 def check(ret):
     if ret is not None:
@@ -10,22 +12,21 @@ def check(ret):
 
 @contextmanager
 def defer():
-    global DEFER, QUEUE
     try:
-        DEFER = True
+        T.DEFER = True
         yield
     finally:
-        for (f, args, kwargs) in QUEUE:
+        for (f, args, kwargs) in T.QUEUE:
             check(f(*args, **kwargs))
-        QUEUE = []
-        DEFER = False
+        T.QUEUE = []
+        T.DEFER = False
 
 def wrap(f):
     
     @wraps(f)
     def deferred(*args, **kwargs):
-        if DEFER:
-            QUEUE.append((f, args, kwargs))
+        if T.DEFER:
+            T.QUEUE.append((f, args, kwargs))
         else:
             check(f(*args, **kwargs))
     
