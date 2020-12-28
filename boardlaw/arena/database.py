@@ -1,7 +1,7 @@
 import sqlite3
 import pandas as pd
 from contextlib import contextmanager
-from rebar import paths
+from pavlov import runs
 
 DATABASE = 'output/arena.sql'
 
@@ -36,10 +36,9 @@ def store(run_name, result):
             white_wins = white_wins + ?,
             moves = moves + ?''', subs)
 
-def stored(run_name=''):
-    run_name = paths.resolve(run_name)
+def stored(run):
     with database() as c:
-        return pd.read_sql_query('select * from results where run_name like ?', c, params=(f'{run_name}%',))
+        return pd.read_sql_query('select * from results where run_name like ?', c, params=(f'{run}%',))
 
 def run_counts():
     return (stored()

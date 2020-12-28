@@ -1,7 +1,7 @@
 import time
 import numpy as np
 import torch
-from rebar import widgets, arrdict
+from rebar import arrdict
 from pavlov import stats, logs, runs, storage
 from . import hex, mcts, networks, learning, validation, analysis, arena
 from torch.nn import functional as F

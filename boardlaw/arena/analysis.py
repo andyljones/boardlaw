@@ -1,7 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-from rebar import dotdict, paths, stats
+from pavlov import runs, stats
+from rebar import dotdict
 from . import database
 import activelo
 
@@ -24,9 +25,9 @@ def mask(games, wins, filter):
     games, wins = games.loc[mask, mask], wins.loc[mask, mask]
     return games, wins
 
-def elos(run_name, target=None, filter='.*'):
-    run_name = paths.resolve(run_name)
-    games, wins = database.symmetric_pandas(run_name)
+def elos(run, target=None, filter='.*'):
+    run = runs.resolve(run)
+    games, wins = database.symmetric_pandas(run)
     games, wins = mask(games, wins, filter)
 
     soln = activelo.solve(games.values, wins.values)
@@ -54,7 +55,7 @@ def plot_elo_progress(run_names=[-1]):
             hours = df.index.total_seconds()/3600
             #df['elo-mohex/μ'].plot(ax=ax, label=run_name)
             ax.fill_between(hours, df['elo-mohex/μ-'], df['elo-mohex/μ+'], alpha=.2)
-            ax.plot(hours, df['elo-mohex/μ'], label=paths.resolve(run_name))
+            ax.plot(hours, df['elo-mohex/μ'], label=runs.resolve(run_name))
             ax.set_xlim(0, hours.max())
             ax.set_xlabel('hours')
         

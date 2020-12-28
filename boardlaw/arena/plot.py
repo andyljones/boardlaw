@@ -4,16 +4,16 @@ from rebar import dotdict
 import pandas as pd
 from . import database, analysis
 import matplotlib.pyplot as plt
-from rebar import paths
+from pavlov import runs
 import copy
 
-def periodic(run_name=-1, target=None, filter=''):
-    run_name = paths.resolve(run_name)
-    elos = analysis.elos(run_name, target, filter=filter)
+def periodic(run=-1, target=None, filter=''):
+    run = runs.resolve(run)
+    elos = analysis.elos(run, target, filter=filter)
     if target:
-        title = f'{run_name} eElo v. {target}'
+        title = f'{run} eElo v. {target}'
     else:
-        title = f'{run_name} eElo, raw'
+        title = f'{run} eElo, raw'
 
     fig, axes = plt.subplots(1, 1, squeeze=False)
 
@@ -26,10 +26,10 @@ def periodic(run_name=-1, target=None, filter=''):
 
     return elos.μ
 
-def heatmap(run_name=-1, drop=[]):
+def heatmap(run=-1, drop=[]):
     import seaborn as sns
 
-    rates = database.symmetric_wins(run_name)/database.symmetric_games(run_name)
+    rates = database.symmetric_wins(run)/database.symmetric_games(run)
     rates = (rates
         .drop(drop,  axis=0)
         .drop(drop, axis=1)
@@ -40,7 +40,7 @@ def heatmap(run_name=-1, drop=[]):
     rates.columns.name = 'challenger'
     ax = sns.heatmap(rates, cmap='RdBu', vmin=0, vmax=1, square=True)
     ax.set_facecolor('dimgrey')
-    ax.set_title(f'{paths.resolve(run_name)} winrate')
+    ax.set_title(f'{runs.resolve(run)} winrate')
 
 def nontransitivities(run_name=-1):
     import seaborn as sns
@@ -71,9 +71,9 @@ def nontransitivities(run_name=-1):
 
     return results
 
-def errors(run_name=-1, filter='.*'):
-    run_name = paths.resolve(run_name)
-    games, wins = database.symmetric_pandas(run_name)
+def errors(run=-1, filter='.*'):
+    run = runs.resolve(run)
+    games, wins = database.symmetric_pandas(run)
     games, wins = analysis.mask(games, wins, filter)
     soln = activelo.solve(games.values, wins.values)
 
@@ -107,7 +107,7 @@ def errors(run_name=-1, filter='.*'):
 
     # Top right
     ax = plt.subplot(gs[0, 2])
-    elos = analysis.elos(run_name, target=0)
+    elos = analysis.elos(run, target=0)
     ax.errorbar(np.arange(len(elos)), elos.μ, yerr=elos.σ, marker='.', capsize=2, linestyle='')
     ax.set_title('elos v. first')
     ax.grid()
