@@ -8,7 +8,8 @@ What to test?
     * 
 """
 import torch
-from rebar import arrdict, stats
+from rebar import arrdict
+from pavlov import stats
 from . import heads
 import numpy as np
 

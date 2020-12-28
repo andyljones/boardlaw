@@ -2,15 +2,15 @@ import pandas as pd
 from . import database, evaluator, analysis
 import activelo
 from logging import getLogger
-from rebar import stats
+from pavlov import stats
 
 log = getLogger(__name__)
 
-def periodic_trial(run_name, worlds, agents):
+def snapshot_trial(run_name, worlds, agents):
     n, w = database.symmetric_pandas(run_name, agents)
     log.info(f'Loaded {int(n.sum().sum())} games')
 
-    valid = n.index[n.index.str.endswith('periodic')]
+    valid = n.index[n.index.str.endswith('snapshot')]
     if len(valid) < 2:
         raise ValueError('Need at least two periodic agents for a periodic step')
     n = n.reindex(index=valid, columns=valid)

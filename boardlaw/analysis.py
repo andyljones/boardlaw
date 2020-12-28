@@ -1,7 +1,7 @@
 import time
 import numpy as np
 import torch
-from rebar import arrdict, stats, recording, storing, widgets, logging
+from rebar import arrdict, recording, widgets
 from logging import getLogger
 from . import arena
 

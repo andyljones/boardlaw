@@ -7,7 +7,7 @@ from io import BytesIO
 LATEST = 'storage.latest.pkl'
 SNAPSHOT = 'storage.snapshot.{n}.pkl'
 
-def flatten(state_dict, depth=np.inf):
+def collapse(state_dict, depth=np.inf):
     if depth == 0:
         return state_dict
     if not isinstance(state_dict, dict):
@@ -16,10 +16,10 @@ def flatten(state_dict, depth=np.inf):
     collapsed = {}
     for prefix, d in state_dict.items():
         for k, v in d.items():
-            collapsed[f'{prefix}.{k}'] = flatten(v, depth-1)
+            collapsed[f'{prefix}.{k}'] = collapse(v, depth-1)
     return collapsed
 
-def deepen(state_dict, depth=np.inf):
+def expand(state_dict, depth=np.inf):
     if depth == 0:
         return state_dict
     if not isinstance(state_dict, dict):
@@ -30,7 +30,7 @@ def deepen(state_dict, depth=np.inf):
         parts = k.split('.')
         [head] = parts[:1]
         tail = '.'.join(parts[1:])
-        d.setdefault(head, {})[tail] = flatten(v, depth-1)
+        d.setdefault(head, {})[tail] = expand(v, depth-1)
     return d
 
 def state_dicts(**objs):
@@ -51,17 +51,18 @@ def save(path, objs):
     path.with_suffix('.tmp').write_bytes(bs.getvalue())
     path.with_suffix('.tmp').rename(path)
 
-def load(path):
-    return torch.load(path, map_location='cpu')
+def load(path, device='cpu'):
+    return torch.load(path, map_location=device)
 
-def latest(run, objs):
+def save_latest(run, objs):
     path = runs.filepath(run, LATEST)
-    if objs:
-        if not path.exists():
-            runs.new_file(run, LATEST, kind='storage.latest')
-        save(path, objs)
-    else:
-        return load(path)
+    if not path.exists():
+        runs.new_file(run, LATEST)
+    save(path, objs)
+
+def load_latest(run=-1, device='cpu'):
+    path = runs.filepath(run, LATEST)
+    return load(path, device)
 
 def throttled_latest(run, objs, throttle):
     if runs.filepath(run, LATEST).exists():
@@ -70,15 +71,15 @@ def throttled_latest(run, objs, throttle):
         last = pd.Timestamp(0, unit='s', tz='UTC')
 
     if tests.timestamp() > last + pd.Timedelta(throttle, 's'):
-        latest(run, objs)
+        save_latest(run, objs)
 
 def snapshot(run, objs):
     name = 'storage.snapshot.{n}.pkl'
-    path = runs.new_file(run, name, kind='storage.snapshot')
+    path = runs.new_file(run, name)
     save(path, objs)
 
-def snapshots(run):
-    return {runs.filepath(run, fn): info for fn, info in runs.fileseq(run, SNAPSHOT).items()}
+def snapshots(run=-1):
+    return {runs.fileidx(run, fn): {**info, 'path': runs.filepath(run, fn)} for fn, info in runs.fileseq(run, SNAPSHOT).items()}
 
 def throttled_snapshot(run, objs, throttle):
     files = snapshots(run)

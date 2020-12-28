@@ -1,9 +1,7 @@
-import numpy as np
-import time as time_
+import socket
 import threading
 import multiprocessing
 import re
-import pandas as pd
 from contextlib import contextmanager
 from pathlib import Path
 import json
@@ -12,7 +10,6 @@ import shutil
 import pytest
 from aljpy import humanhash
 from fnmatch import fnmatch
-import string
 import uuid
 from . import tests
 
@@ -109,7 +106,10 @@ def run_name(suffix='', now=None):
 def new_run(suffix='', **kwargs):
     now = tests.timestamp()
     run = run_name(suffix, now)
-    kwargs = {**kwargs, '_created': str(now), '_files': {}}
+    kwargs = {**kwargs, 
+        '_created': str(now), 
+        '_host': socket.gethostname(), 
+        '_files': {}}
     with _no_resolve():
         info(run, kwargs, create=True)
     return run
@@ -211,6 +211,11 @@ def fileregex(run, regex):
 
 def fileseq(run, pattern):
     return {n: i for n, i in info(run)['_files'].items() if i['_pattern'] == pattern}
+
+def fileidx(run, fn):
+    pattern = fileinfo(run, fn)['_pattern']
+    front, back = pattern.split('{n}')
+    return int(fn[len(front):-len(back)])
 
 def files(run):
     return info(run)['_files']

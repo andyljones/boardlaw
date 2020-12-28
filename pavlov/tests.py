@@ -76,6 +76,7 @@ def convert(run):
 
     created = pd.to_datetime(date, format='%Y-%m-%d %H-%M-%S').tz_localize('UTC')
 
+    # Convert the stats files
     files, counts = {}, defaultdict(lambda: 0)
     for oldpath in old.glob('**/*.npr'):
         parts = oldpath.relative_to(old).parts
@@ -101,6 +102,7 @@ def convert(run):
             '_thread_name': 'main',
             'kind': kind}
 
+    # Convert the log files
     for oldpath in old.glob('**/*.txt'):
         filename = oldpath.name
         procname = '-'.join(filename.split('-')[:-1])
@@ -117,8 +119,34 @@ def convert(run):
             '_process_id': str(procid),
             '_process_name': procname,
             '_thread_id': '0',
-            '_thread_name': 'main',
-            'kind': 'logs'}
+            '_thread_name': 'main'}
+
+    for oldpath in old.glob('**/*.pkl'):
+        filename = oldpath.name
+        procname = '-'.join(filename.split('-')[:-1])
+        procid = filename.split('-')[-1]
+
+        if oldpath.parent.name == 'latest':
+            saved = pd.Timestamp(oldpath.lstat().st_mtime, unit='ms')
+            newname = 'storage.latest.pkl'
+            pattern = 'storage.latest.pkl'
+        else:
+            saved = pd.to_datetime(oldpath.parent.name, format='%Y-%m-%d %H-%M-%S')
+            newname = f'storage.snapshot.{counts["snapshot"]}.pkl'
+            pattern = 'storage.snapshot.{n}.pkl'
+            counts["snapshot"] += 1
+
+        newpath = new / newname
+        newpath.write_bytes(oldpath.read_bytes())
+        files[newname] = {
+            '_pattern': pattern,
+            '_created': str(saved),
+            '_process_id': str(procid),
+            '_process_name': procname,
+            '_thread_id': '0',
+            '_thread_name': 'main'}
+
+    # Convert the model files
         
     created = pd.to_datetime(run[:19], format='%Y-%m-%d %H-%M-%S').tz_localize('UTC')
     info = {

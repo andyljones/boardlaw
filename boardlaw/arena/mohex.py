@@ -4,7 +4,8 @@ import torch
 import numpy as np
 from .. import mohex, hex
 from . import database, analysis
-from rebar import arrdict, stats, paths
+from rebar import arrdict
+from pavlov import stats
 from logging import getLogger
 import activelo
 import pandas as pd
