@@ -23,11 +23,14 @@ FILENAME = r'(?P<prefix>.*)\.(?P<idx>.*)\.(?P<ext>.*)'
 @contextmanager
 def to_run(run):
     try:
-        old = (T.WRITERS, T.RUN)
-        T.WRITERS, T.RUN = {}, run
+        if hasattr(T, 'run'):
+            raise ValueError('Run already set')
+        T.WRITERS = {}
+        T.RUN = run
         yield
     finally:
-        T.WRITERS, T.RUN = old
+        del T.WRITERS
+        del T.RUN
 
 def run():
     if T.RUN is None:

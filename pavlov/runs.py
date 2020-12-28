@@ -53,8 +53,9 @@ def write(path, contents):
     with RLock(path, mode('w', contents)) as f:
         f.write(contents)
 
-def dir(run):
-    run = resolve(run)
+def dir(run, res=True):
+    if res:
+        run = resolve(run)
     return root() / run
 
 def delete(run):
@@ -63,11 +64,11 @@ def delete(run):
 
 ### Info file stuff
 
-def infopath(run):
-    return dir(run) / '_info.json'
+def infopath(run, **kwargs):
+    return dir(run, **kwargs) / '_info.json'
 
-def info(run, val=None, create=False):
-    path = infopath(run)
+def info(run, val=None, create=False, **kwargs):
+    path = infopath(run, **kwargs)
     if not create and not path.exists():
         raise ValueError(f'Run "{run}" has not been created yet')
     if val is not None and not isinstance(val, dict):
@@ -111,8 +112,7 @@ def new_run(suffix='', **kwargs):
         '_created': str(now), 
         '_host': socket.gethostname(), 
         '_files': {}}
-    with _no_resolve():
-        info(run, kwargs, create=True)
+    info(run, kwargs, create=True, res=False)
     return run
 
 _cache = {}
@@ -124,14 +124,13 @@ def runs():
         if dir.name in _cache:
             cache[dir.name] = _cache[dir.name]
         else:
-            with _no_resolve():
-                try:
-                    cache[dir.name] = info(dir.name) 
-                except ValueError:
-                    # We'll end up here if the run's dir has been created, but 
-                    # not the info file. That usually happens if we create a 
-                    # run in another process.
-                    pass
+            try:
+                cache[dir.name] = info(dir.name, res=False) 
+            except ValueError:
+                # We'll end up here if the run's dir has been created, but 
+                # not the info file. That usually happens if we create a 
+                # run in another process.
+                pass
     
     order = sorted(cache, key=lambda n: cache[n]['_created']) 
 
@@ -141,13 +140,7 @@ def runs():
 def created(run):
     return pd.to_datetime(info(run)['_created'])
 
-T = threading.local()
-T.RESOLVE = True
-
 def resolve(run):
-    if not T.RESOLVE:
-        return run
-
     names = list(runs())
     if isinstance(run, int):
         return names[run]
@@ -162,21 +155,6 @@ def resolve(run):
             return hits[0]
         else:
             raise ValueError(f'Found {len(hits)} runs that finished with "{run}"')
-
-@contextmanager
-def _no_resolve():
-    # Want to disable RESOLVE when we're either creating a new dir,
-    # or we're enumerating the runs in the dir and want to avoid a cycle
-    #
-    # Better to do this with a contextmanager rather than passing in 
-    # switch because the switch'd have to pass through a lot of layers of
-    # logic
-    try:
-        T.RESOLVE = False
-        yield
-    finally:
-        T.RESOLVE = True
-
 
 ### File stuff
 
