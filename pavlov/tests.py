@@ -47,14 +47,14 @@ def mock_dir(f):
     def wrapped(*args, **kwargs):
         from . import runs
         old_ROOT = runs.ROOT
-        ROOT = 'output/pavlov-test'
-        if Path(ROOT).exists():
-            shutil.rmtree(ROOT)
+        runs.ROOT = 'output/pavlov-test'
+        if Path(runs.ROOT).exists():
+            shutil.rmtree(runs.ROOT)
 
         try:
             result = f(*args, **kwargs)
         finally:
-            ROOT = old_ROOT
+            runs.ROOT = old_ROOT
         return result
     
     return wrapped
@@ -85,7 +85,7 @@ def convert(run):
         procname = '-'.join(filename.split('-')[:-1])
         procid = filename.split('-')[-1]
         
-        newname = f'{kind}.{name}.{counts[kind, name]}.npr'
+        newname = f'stats.{name}.{counts[kind, name]}.npr'
         
         counts[kind, name] += 1
         

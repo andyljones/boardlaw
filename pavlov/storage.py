@@ -1,7 +1,11 @@
+import pandas as pd
 import torch
 import numpy as np
 from . import runs, tests
 from io import BytesIO
+
+LATEST = 'storage.latest.pkl'
+SNAPSHOT = 'storage.snapshot.{n}.pkl'
 
 def flatten(state_dict, depth=np.inf):
     if depth == 0:
@@ -29,28 +33,59 @@ def deepen(state_dict, depth=np.inf):
         d.setdefault(head, {})[tail] = flatten(v, depth-1)
     return d
 
-def _store(run, name, objs, **kwargs):
+def state_dicts(objs):
+    dicts = {}
+    for k, v in objs.items():
+        if isinstance(objs, dict):
+            dicts[k] = state_dicts(objs)
+        elif hasattr(objs, 'state_dict'):
+            dicts[k] = objs.state_dict()
+        else:
+            dicts[k] = v
+    return dicts
+
+def save(path, objs):
     #TODO: Is there a better way to do this?
     bs = BytesIO()
     torch.save(objs, bs)
-    path = runs.filepath(run, name)
     path.with_suffix('.tmp').write_bytes(bs.getvalue())
     path.with_suffix('.tmp').rename(path)
 
-def _load(run, filename):
-    path = runs.filepath(run, filename)
+def load(path):
     return torch.load(path, map_location='cpu')
 
-def latest(run, **objs):
-    name = 'storage.latest.pkl'
+def latest(run, objs):
+    path = runs.filepath(run, LATEST)
     if objs:
-        if not runs.filepath(run, name).exists():
-            runs.new_file(run, name)
-        _store(run, name, objs, kind='storage.latest')
+        if not path.exists():
+            runs.new_file(run, LATEST, kind='storage.latest')
+        save(path, objs)
     else:
-        return _load(run, name)
+        return load(path)
 
-def snapshot(run, **objs):
+def throttled_latest(run, throttle, objs):
+    if runs.filepath(run, LATEST).exists():
+        last = pd.to_datetime(runs.fileinfo(run, LATEST)['_created'])
+    else:
+        last = pd.Timestamp(0, unit='s')
+
+    if tests.timestamp() > last + pd.Timedelta(throttle, 's'):
+        latest(run, objs)
+
+def snapshot(run, objs):
     name = 'storage.snapshot.{n}.pkl'
-    runs.new_file(run, name)
-    _store(run, name, objs, kind='storage.snapshot')
+    path = runs.new_file(run, name, kind='storage.snapshot')
+    save(path, objs)
+
+def snapshots(run):
+    return {runs.filepath(run, fn): info for fn, info in runs.fileseq(run, SNAPSHOT).items()}
+
+def throttled_snapshot(run, throttle, objs):
+    files = snapshots(run)
+    if files:
+        last = pd.to_datetime(max(f['_created'] for f in files.values()))
+    else:
+        last = pd.Timestamp(0, unit='s')
+
+    if tests.timestamp() > last + pd.Timedelta(throttle, 's'):
+        snapshot(run, objs)

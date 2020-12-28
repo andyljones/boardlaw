@@ -171,7 +171,7 @@ def _no_resolve():
 ### File stuff
 
 def _filename(pattern, extant_files):
-    is_pattern = any(name == "n" for _, name, _, _ in string.Formatter().parse(pattern))
+    is_pattern = '{n}' in pattern
     count = len([f for _, f in extant_files.items() if f['_pattern'] == pattern])
     if is_pattern:
         return pattern.format(n=count)
@@ -203,8 +203,14 @@ def fileinfo(run, filename):
 def filepath(run, filename):
     return dir(run) / filename
 
-def fileglob(run, pattern):
-    return {n: i for n, i in info(run)['_files'].items() if fnmatch(n, pattern)}
+def fileglob(run, glob):
+    return {n: i for n, i in info(run)['_files'].items() if fnmatch(n, glob)}
+
+def fileregex(run, regex):
+    return {n: i for n, i in info(run)['_files'].items() if re.fullmatch(regex, n)}
+
+def fileseq(run, pattern):
+    return {n: i for n, i in info(run)['_files'].items() if i['_pattern'] == pattern}
 
 def files(run):
     return info(run)['_files']
