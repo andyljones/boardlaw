@@ -1,4 +1,4 @@
-import re
+import numpy as np
 import pandas as pd
 from bokeh import models as bom
 from bokeh import plotting as bop
@@ -136,9 +136,9 @@ def legend(f):
 def align(readers, rule):
     df = {}
     for reader in readers:
-        df[reader.prefix] = reader.resample(**dict(reader.pandas()), rule=rule)
+        df[reader.prefix] = reader.resample(rule=rule)
     df = pd.concat(df, 1)
-    df.index = df.index - df.index[0]
+    df.index.name = '_time'
     # Drop the last row since it represents an under-full window.
     return df.reset_index().iloc[:-1]
 

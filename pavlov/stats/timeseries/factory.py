@@ -4,7 +4,7 @@ import inspect
 import pandas as pd
 from . import plotters, formatters
 from .. import registry
-from ... import numpy, tests
+from ... import numpy, tests, runs
 
 KINDS = {}
 
@@ -20,6 +20,7 @@ def clean(x):
 class TimeseriesReader:
 
     def __init__(self, run, prefix):
+        self._created = runs.created(run)
         self.prefix = prefix
         self._reader = numpy.Reader(run, prefix)
         self._arr = None
@@ -38,8 +39,14 @@ class TimeseriesReader:
     def pandas(self):
         arr = self.array()
         df = pd.DataFrame.from_records(arr, index='_time')
-        df.index = df.index.tz_localize('UTC')
+        df.index = df.index.tz_localize('UTC') - self._created
         return df
+
+    def resample(self, rule, **kwargs):
+        raw = self.pandas()
+        raw = pd.concat([pd.DataFrame(np.nan, [pd.Timedelta(0)], raw.columns), raw])
+        raw.index.name = '_time'
+        return self.resampler(**raw, rule=rule, **kwargs)
 
 def timeseries(formatter=formatters.simple, plotter=plotters.Simple):
 
@@ -61,7 +68,7 @@ def timeseries(formatter=formatters.simple, plotter=plotters.Simple):
             w.write(call)
 
         reader = type(f'{kind}Reader', (TimeseriesReader,), {
-            'resample': staticmethod(f),
+            'resampler': staticmethod(f),
             'format': staticmethod(formatter), 
             'plotter': staticmethod(plotter)})
 

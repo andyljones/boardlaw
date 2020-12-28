@@ -94,10 +94,4 @@ def array(run, channel):
 
 def pandas(run, channel, rule='60s', **kwargs):
     r = reader(run, channel)
-    df = r.pandas()
-    df.index = df.index - runs.created(run)
-    # TODO: Is there a better way to get resampling of timedeltas to land on 
-    # a regular value?
-    df = pd.concat([pd.DataFrame(np.nan, [pd.Timedelta(0)], df.columns), df])
-    df = r.resample(**df, **{'rule': rule, **kwargs})
-    return df
+    return r.resample(rule, **kwargs)
