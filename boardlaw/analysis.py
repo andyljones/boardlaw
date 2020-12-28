@@ -67,7 +67,7 @@ def record(world, agents, N=0, **kwargs):
 
 def demo(run_name=-1):
     from boardlaw import mohex
-    from .main.common import worldfunc, agentfunc
+    from .main import worldfunc, agentfunc
 
     n_envs = 9
     world = worldfunc(n_envs, device='cuda:1')
@@ -78,7 +78,7 @@ def demo(run_name=-1):
 
 def compare(fst_run=-1, snd_run=-1, n_envs=256, device='cuda:1'):
     import pandas as pd
-    from .main.common import worldfunc, agentfunc
+    from .main import worldfunc, agentfunc
 
     world = worldfunc(n_envs, device=device)
 
@@ -101,7 +101,7 @@ def compare(fst_run=-1, snd_run=-1, n_envs=256, device='cuda:1'):
 
 def demo_record(run_name=-1):
     from boardlaw import mohex, analysis
-    from .main.common import worldfunc, agentfunc
+    from .main import worldfunc, agentfunc
 
     n_envs = 9
     world = worldfunc(n_envs)

@@ -92,7 +92,7 @@ class Network(nn.Module):
         return outputs
 
 def check_var():
-    from boardlaw.main.common import worldfunc
+    from boardlaw.main import worldfunc
     import pandas as pd
 
     worlds = worldfunc(256)
@@ -124,7 +124,7 @@ def test_transformer():
     obs = torch.zeros((5, 7, boardsize, boardsize, width))
     out = model(obs)
 
-    from boardlaw.main.common import worldfunc
+    from boardlaw.main import worldfunc
     worlds = worldfunc(32)
 
     model = Network(worlds.obs_space, worlds.action_space).cuda()
