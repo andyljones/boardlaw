@@ -66,7 +66,7 @@ class Reader:
         self._files = {}
 
     def read(self):
-        for name, info in runs.fileglob(self._run, 'logs.*.txt').items():
+        for name, info in runs.fileseq(self._run, 'logs.{n}.txt').items():
             if name not in self._files:
                 path = runs.filepath(self._run, name)
                 self._files[name] = (info, path.open('r'))

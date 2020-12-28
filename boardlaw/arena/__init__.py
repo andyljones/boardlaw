@@ -46,7 +46,7 @@ def latest_agent(run_name, agentfunc, device='cpu', **kwargs):
     try:
         sd = storage.load_latest(run_name, device=device)
         return {'latest': assemble_agent(agentfunc, sd, device=device, **kwargs)}
-    except ValueError:
+    except FileNotFoundError:
         return {}
 
 def snapshot_arena(run, worldfunc, agentfunc, device='cuda:1'):

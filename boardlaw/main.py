@@ -113,8 +113,8 @@ def run():
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/1000, 1))
 
     run = runs.new_run('pavlov-test')
-    with logs.to_run(run), stats.to_run(run):
-            # arena.monitor(run, worldfunc, agentfunc):
+    with logs.to_run(run), stats.to_run(run), \
+            arena.monitor(run, worldfunc, agentfunc):
         buffer = []
         idxs = cycle(learning.batch_indices(buffer_length, n_envs, batch_size, worlds.device))
         while True:
