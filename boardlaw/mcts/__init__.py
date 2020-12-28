@@ -23,7 +23,7 @@ def dirichlet_noise(logits, valid, alpha=None, eps=.25):
 
 class MCTS:
 
-    def __init__(self, world, n_nodes, c_puct=5., noise_eps=.05):
+    def __init__(self, world, n_nodes, c_puct=1.25, noise_eps=.05):
         """
         c_puct high: concentrates on prior
         c_puct low: concentrates on value

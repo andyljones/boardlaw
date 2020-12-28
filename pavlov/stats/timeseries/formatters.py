@@ -2,13 +2,10 @@ from ... import tests
 from .. import registry
 
 def final_row(reader, rule):
-    df = reader.pandas()
-
     # Offset slightly into the future, else by the time the resample actually happens you're 
     # left with an almost-empty last interval.
     offset = f'{(tests.time() % 60) + 5}s'
-
-    resampled = reader.resample(**dict(df), rule=rule, offset=offset)
+    resampled = reader.resample(rule=rule, offset=offset)
     return resampled.ffill(limit=1).iloc[-1]
 
 def channel(reader):
