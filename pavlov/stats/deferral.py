@@ -10,13 +10,14 @@ def check(ret):
 
 @contextmanager
 def defer():
-    global DEFER
+    global DEFER, QUEUE
     try:
         DEFER = True
         yield
     finally:
         for (f, args, kwargs) in QUEUE:
             check(f(*args, **kwargs))
+        QUEUE = []
         DEFER = False
 
 def wrap(f):

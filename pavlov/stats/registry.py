@@ -85,3 +85,7 @@ def reader(run, channel):
 
 def array(run, channel):
     return reader(run, channel).array()
+
+def pandas(run, channel):
+    r = reader(run, channel)
+    return r.pandas()

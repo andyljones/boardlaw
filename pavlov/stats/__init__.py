@@ -1,7 +1,7 @@
 from .registry import to_run
 from .monitoring import from_run, from_run_sync
 from .plotting import review, view
-from .registry import KINDS, array
+from .registry import KINDS, array, pandas
 from .gpu import gpu
 from .deferral import defer, wrap
 
