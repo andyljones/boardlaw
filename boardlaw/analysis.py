@@ -143,3 +143,26 @@ def grad_noise_scale(B):
     noise_scale = s.div(G2).pow(.5)
 
     return noise_scale
+
+def grad_student_descent():
+    import pandas as pd
+    from rebar import stats, paths
+    import matplotlib.pyplot as plt
+
+    valid = paths.runs().query('created > "2020-12-23 09:52"')
+
+    results = {}
+    for name in valid.run_name:
+        s = stats.dataframe(name, 'elo-mohex')
+        if len(s) > 60:
+            results[name] = s['mean_std']['elo-mohex/μ']
+    df = pd.concat(results, 1)
+    df = df.ffill().where(df.bfill().notnull())
+
+    with plt.style.context('seaborn-poster'):
+        ax = df.plot(cmap='viridis')
+        ax.set_facecolor('whitesmoke')
+        ax.grid(axis='y')
+        ax.set_ylim(-13, -2)
+        ax.set_ylabel('eElo')
+        ax.set_title('grad student descent')

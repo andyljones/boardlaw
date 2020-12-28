@@ -108,7 +108,7 @@ def demo():
     paths.clear('test')
     arena_periodic('test', worldfunc, agentfunc, ref_runs=['2020-11-27 19-40-27 az-test'])
 
-def fill_matchups(run_name=-1, device='cuda:1'):
+def fill_matchups(run_name=-1, device='cuda:1', count=1):
     from boardlaw.main.common import worldfunc, agentfunc
     from boardlaw.arena import evaluator, periodic_agents, database, log
 
@@ -120,7 +120,7 @@ def fill_matchups(run_name=-1, device='cuda:1'):
         n, w = database.symmetric_pandas(run_name, agents)
         zeros = (n
             .stack()
-            .loc[lambda s: s == 0]
+            .loc[lambda s: s < count]
             .reset_index()
             .loc[lambda df: df.black_name != df.white_name])
 
