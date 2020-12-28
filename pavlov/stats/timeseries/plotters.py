@@ -10,7 +10,7 @@ from bokeh.palettes import Category10_10
 from itertools import cycle
 
 from pandas.core.series import Series
-from ..plotting import split
+from .. import registry
 
 def timedelta_xaxis(f):
     f.xaxis.ticker = bom.tickers.DatetimeTicker()
@@ -135,8 +135,8 @@ def legend(f):
 
 def align(readers, rule):
     df = {}
-    for k, r in readers.items():
-        df[k] = r.resample(**dict(r.pandas()), rule=rule)
+    for reader in readers:
+        df[reader.prefix] = reader.resample(**dict(reader.pandas()), rule=rule)
     df = pd.concat(df, 1)
     df.index = df.index - df.index[0]
     return df.reset_index()
@@ -157,12 +157,12 @@ class Simple:
             tooltips=[('', '$data_y')], 
             **self.fig_kwargs)
 
-        for key, color in zip(readers, cycle(Category10_10)):
-            s = split(key)
-            label = dict(legend_label=s.label) if s.label else dict()
+        for reader, color in zip(readers, cycle(Category10_10)):
+            p = registry.parse_prefix(reader.prefix)
+            label = dict(legend_label=p.label) if p.label else dict()
             f.line(
                 x='_time', 
-                y=key, 
+                y=reader.prefix, 
                 color=color, 
                 source=self.source, 
                 **label,
@@ -172,10 +172,10 @@ class Simple:
         x_zeroline(f)
         styling(f)
 
-        s = split(list(readers)[0])
-        if s.label:
+        p = registry.parse_prefix(readers[0].prefix)
+        if p.label:
             legend(f)
-        f.title = bom.Title(text=s.title)
+        f.title = bom.Title(text=p.group)
 
         self.figure = f
 
@@ -209,23 +209,23 @@ class Confidence:
 
         f = bop.figure(x_range=bom.DataRange1d(start=0, follow='end'), tooltips=[('', '$data_y')])
 
-        for key, color in zip(readers, cycle(Category10_10)):
-            s = split(key)
-            label = dict(legend_label=s.label) if s.label else dict()
+        for reader, color in zip(readers, cycle(Category10_10)):
+            p = registry.parse_prefix(reader.prefix)
+            label = dict(legend_label=p.label) if p.label else dict()
             f.varea(
-                x='_time', y1=f'{key}.μ-', y2=f'{key}.μ+', 
+                x='_time', y1=f'{reader.prefix}.μ-', y2=f'{reader.prefix}.μ+', 
                 color=color, alpha=.2, source=self.source, **label)
             f.line(
-                x='_time', y=f'{key}.μ', 
+                x='_time', y=f'{reader.prefix}.μ', 
                 color=color, source=self.source, **label)
 
         default_tools(f)
         x_zeroline(f)
         styling(f)
-        s = split(list(readers)[0])
-        if s.label:
+        p = registry.parse_prefix(readers[0].prefix)
+        if p.label:
             legend(f)
-        f.title = bom.Title(text=s.title)
+        f.title = bom.Title(text=p.group)
 
         self.figure = f
 

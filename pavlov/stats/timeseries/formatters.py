@@ -1,4 +1,5 @@
 from ... import tests
+from .. import registry
 
 def final_row(reader, rule):
     df = reader.pandas()
@@ -10,27 +11,24 @@ def final_row(reader, rule):
     resampled = reader.resample(**dict(df), rule=rule, offset=offset)
     return resampled.ffill(limit=1).iloc[-1]
 
-def label(key):
-    return '.'.join(key.split('.')[1:])
+def channel(reader):
+    return registry.parse_prefix(reader.prefix).channel
 
 def simple(reader, rule):
-    name = label(reader.key)
     final = final_row(reader, rule).item()
     if isinstance(final, int):
-        return [(name, f'{final:<6g}')]
+        return [(channel(reader), f'{final:<6g}')]
     if isinstance(final, float):
-        return [(name, f'{final:<6g}')]
+        return [(channel(reader), f'{final:<6g}')]
     else:
         raise ValueError() 
 
 def percent(reader, rule):
-    name = label(reader.key)
     final = final_row(reader, rule).item()
-    return [(name, f'{final:.2%}')]
+    return [(channel(reader), f'{final:.2%}')]
 
 def confidence(reader, rule):
-    name = label(reader.key)
     final = final_row(reader, rule)
-    return [(name, f'{final.μ:.2f}±{2*final.σ:.2f}')]
+    return [(channel(reader), f'{final.μ:.2f}±{2*final.σ:.2f}')]
 
 

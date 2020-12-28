@@ -5,7 +5,6 @@ from subprocess import check_output
 import time
 import torch.cuda
 
-
 def memory(device=0):
     from . import max_percent
     if isinstance(device, torch.device):

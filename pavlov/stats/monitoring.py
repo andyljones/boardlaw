@@ -1,12 +1,13 @@
 import time
-from .. import widgets, logging, runs, tests
+from .. import widgets, logs, runs, tests
 from . import registry
 import pandas as pd
 import threading
 from contextlib import contextmanager
 import _thread
+from logging import getLogger
 
-log = logging.getLogger(__name__)
+log = getLogger(__name__)
 
 def adaptive_rule(df):
     timespan = (df.index[-1] - df.index[0]).total_seconds()
@@ -93,7 +94,7 @@ def from_run_sync(run, rule, canceller=None, throttle=1):
     run = runs.resolve(run)
     out = widgets.compositor().output()
     start = pd.Timestamp(runs.info(run)['_created'])
-    pool = registry.ReaderPool(run)
+    pool = registry.StatsReaders(run)
 
     nxt = 0
     while True:
@@ -101,7 +102,7 @@ def from_run_sync(run, rule, canceller=None, throttle=1):
             nxt = nxt + throttle
 
             pool.refresh()
-            pairs = formatted_pairs(pool.pool, rule)
+            pairs = formatted_pairs(pool._pool, rule)
             content = treeformat(pairs)
 
             size = runs.size(run)
@@ -122,7 +123,7 @@ def _from_run(*args, **kwargs):
 
 @contextmanager
 def from_run(run, rule='60s'):
-    if logging.in_ipython():
+    if logs.in_ipython():
         try:
             canceller = threading.Event()
             thread = threading.Thread(target=_from_run, args=(run, rule, canceller))

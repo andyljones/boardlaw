@@ -18,6 +18,8 @@ from . import tests
 
 ROOT = 'output/pavlov'
 
+FILENAME_ORIGIN = r'(?P<origin>.*?)\..*'
+
 ### Basic file stuff
 
 def root():
@@ -180,12 +182,12 @@ def _filename(pattern, extant_files):
 
 def new_file(run, pattern, **kwargs):
     with infoupdate(run) as i:
-        name = _filename(pattern, i['_files'])
-        assert re.fullmatch(r'[\w\.-]+', name), 'Filename contains invalid characters'
+        filename = _filename(pattern, i['_files'])
+        assert re.fullmatch(r'[\w\.-]+', filename), 'Filename contains invalid characters'
 
         process = multiprocessing.current_process()
         thread = threading.current_thread()
-        i['_files'][name] = {
+        i['_files'][filename] = {
             '_pattern': pattern,
             '_created': str(tests.timestamp()),
             '_process_id': str(process.pid),
@@ -193,13 +195,13 @@ def new_file(run, pattern, **kwargs):
             '_thread_id': str(thread.ident),
             '_thread_name': str(thread.name),
             **kwargs}
-    return dir(run) / name
+    return dir(run) / filename
 
-def fileinfo(run, name):
-    return info(run)['_files'][name]
+def fileinfo(run, filename):
+    return info(run)['_files'][filename]
 
-def filepath(run, name):
-    return dir(run) / name
+def filepath(run, filename):
+    return dir(run) / filename
 
 def fileglob(run, pattern):
     return {n: i for n, i in info(run)['_files'].items() if fnmatch(n, pattern)}
@@ -208,8 +210,13 @@ def files(run):
     return info(run)['_files']
 
 def size(run):
-    b = sum(filepath(run, name).stat().st_size for name in files(run))
+    b = sum(filepath(run, filename).stat().st_size for filename in files(run))
     return b/1e6
+
+def origin(filename):
+    if isinstance(filename, Path):
+        filename = filename.name
+    return re.fullmatch(FILENAME_ORIGIN, filename).group('origin')
 
 ### Tests
 

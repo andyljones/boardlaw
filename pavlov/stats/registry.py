@@ -1,12 +1,20 @@
 from contextlib import contextmanager
 from . import timeseries
 from .. import runs
+import aljpy
+import re
 
 KINDS = {
     **timeseries.KINDS}
 
 WRITERS = {}
 RUN = None
+
+# channel: label or group.la.bel
+# prefix: stats.channel
+# filename: prefix.3.npr
+PREFIX = r'(?P<origin>.*?)\.(?P<channel>.*)'
+FILENAME = r'(?P<prefix>.*)\.(?P<idx>.*)\.(?P<ext>.*)'
 
 @contextmanager
 def to_run(run):
@@ -23,28 +31,57 @@ def run():
         raise ValueError('No run currently set')
     return RUN
 
-def writer(key, factory=None):
+def writer(prefix, factory=None):
     if factory is not None:
-        if key not in WRITERS:
-            WRITERS[key] = factory()
-    return WRITERS[key]
-        
-def _key(file):
-    # file: kind.name.0.ext
-    parts = file.split('.')
-    return '.'.join(parts[:-2])
+        if prefix not in WRITERS:
+            WRITERS[prefix] = factory()
+    return WRITERS[prefix]
 
-class ReaderPool:
+def make_prefix(channel):
+    return f'stats.{channel}'
+
+def parse_channel(channel):
+    parts = channel.split('.')
+    if len(parts) == 1:
+        return aljpy.dotdict(group=parts[0], label='')
+    else:
+        return aljpy.dotdict(group=parts[0], label=parts[1])
+
+def parse_prefix(prefix):
+    p = re.fullmatch(PREFIX, prefix).groupdict()
+    return aljpy.dotdict(**p, **parse_channel(p['channel']))
+
+def parse_filename(filename):
+    p = re.fullmatch(FILENAME, filename).groupdict()
+    return aljpy.dotdict(**p, **parse_prefix(p['prefix']))
+
+class StatsReaders:
 
     def __init__(self, run):
-        self.run = run
-        self.pool = {}
+        self._run = run
+        self._pool = {}
 
     def refresh(self):
-        for file, info in runs.files(self.run).items():
-            kind = info['kind']
-            if kind in KINDS:
-                kind = KINDS[kind]
-                k = _key(file)
-                if k not in self.pool:
-                    self.pool[k] = kind.reader(self.run, k)
+        for filename, info in runs.files(self._run).items():
+            if runs.origin(filename) == 'stats':
+                prefix = parse_filename(filename).prefix
+                kind = info['kind']
+                if (kind in KINDS) and (prefix not in self._pool):
+                    reader = KINDS[kind].reader(self._run, prefix)
+                    self._pool[prefix] = reader
+
+    def __getitem__(self, prefix):
+        return self._pool[prefix]
+
+    def __iter__(self):
+        return iter(self._pool)
+        
+def reader(run, channel):
+    #TODO: This won't generalise!
+    prefix = make_prefix(channel)
+    kind = runs.fileinfo(run, f'{prefix}.0.npr')['kind']
+    reader = KINDS[kind].reader(run, prefix)
+    return reader
+
+def array(run, channel):
+    return reader(run, channel).array()

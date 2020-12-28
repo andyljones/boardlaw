@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from . import runs
+from . import runs, tests
 from io import BytesIO
 
 def flatten(state_dict, depth=np.inf):
@@ -41,10 +41,16 @@ def _load(run, filename):
     path = runs.filepath(run, filename)
     return torch.load(path, map_location='cpu')
 
-def latest(run, val=None):
+def latest(run, **objs):
     name = 'storage.latest.pkl'
-    if val is None:
-        return _load(run, name)
+    if objs:
+        if not runs.filepath(run, name).exists():
+            runs.new_file(run, name)
+        _store(run, name, objs, kind='storage.latest')
     else:
-        filename = runs.new_file(run, name)
-        _store(run, filename, val, kind='storage.latest')
+        return _load(run, name)
+
+def snapshot(run, **objs):
+    name = 'storage.snapshot.{n}.pkl'
+    runs.new_file(run, name)
+    _store(run, name, objs, kind='storage.snapshot')
