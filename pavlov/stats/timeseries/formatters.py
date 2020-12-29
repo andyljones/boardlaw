@@ -5,7 +5,9 @@ def final_row(reader, rule):
     # Offset slightly into the future, else by the time the resample actually happens you're 
     # left with an almost-empty last interval.
     offset = f'{(tests.time() % 60) + 5}s'
-    resampled = reader.resample(rule=rule, offset=offset)
+    df = reader.pandas()
+    df.index = df.index + reader._created
+    resampled = reader.resampler(**df, rule=rule, offset=offset)
     return resampled.ffill(limit=1).iloc[-1]
 
 def channel(reader):

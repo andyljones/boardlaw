@@ -1,5 +1,5 @@
 import time
-from .. import widgets, logs, runs, tests
+from .. import widgets, logs, runs, tests, files
 from . import registry
 import pandas as pd
 import threading
@@ -105,7 +105,7 @@ def from_run_sync(run, rule, canceller=None, throttle=1):
             pairs = formatted_pairs(pool._pool, rule)
             content = treeformat(pairs)
 
-            size = runs.size(run)
+            size = files.size(run)
             age = tests.timestamp() - start
             out.refresh(f'{run}: {tdformat(age)} old, {rule} rule, {size:.0f}MB on disk\n\n{content}')
 
