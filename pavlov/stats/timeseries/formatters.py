@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from ... import tests
 from .. import registry
@@ -12,14 +13,15 @@ def final_row(reader, rule):
     resampled = resampled.iloc[:-1].ffill(limit=1) # Drop that almost-empty last interval
     if len(resampled) > 0: 
         return resampled.iloc[-1]
-    else:
-        return pd.Series(np.nan, resampled.index)
 
 def channel(reader):
     return registry.parse_prefix(reader.prefix).channel
 
 def simple(reader, rule):
-    final = final_row(reader, rule).item()
+    final = final_row(reader, rule)
+    if final is None:
+        return []
+    final = final.item()
     if isinstance(final, int):
         return [(channel(reader), f'{final:<6g}')]
     if isinstance(final, float):
@@ -28,11 +30,15 @@ def simple(reader, rule):
         raise ValueError() 
 
 def percent(reader, rule):
-    final = final_row(reader, rule).item()
-    return [(channel(reader), f'{final:.2%}')]
+    final = final_row(reader, rule)
+    if final is None:
+        return []
+    return [(channel(reader), f'{final.item():.2%}')]
 
 def confidence(reader, rule):
     final = final_row(reader, rule)
+    if final is None:
+        return []
     return [(channel(reader), f'{final.μ:.2f}±{2*final.σ:.2f}')]
 
 

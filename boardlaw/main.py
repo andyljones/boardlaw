@@ -109,19 +109,19 @@ def warm_start(agent, opt, parent):
     return parent
 
 def run():
-    buffer_length = 16 
-    batch_size = 64*1024
+    buffer_length = 64 
+    batch_size = 128*1024
     n_envs = 8*1024
     buffer_inc = batch_size//n_envs
 
     worlds = worldfunc(n_envs)
     agent = agentfunc()
     opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-2, amsgrad=True)
-    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/1000, 1))
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('v-low-cpuct', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('big-buffer', boardsize=worlds.boardsize, parent=parent)
     with logs.to_run(run), stats.to_run(run), \
             arena.monitor(run, worldfunc, agentfunc):
         buffer = []
@@ -152,18 +152,26 @@ def run():
             storage.throttled_snapshot(run, sd, 900)
             stats.gpu(worlds.device, 15)
 
-def benchmark_experience_collection():
-    # Make sure to init cuda before running this 
+def benchmark_experience_collection(n_envs=8192, T=16):
+    import pandas as pd
+    # Make sure to init cuda before profiling this 
+    from rebar import timer
+
+    if n_envs is None:
+        ns = np.logspace(0, 15, 16, base=2, dtype=int)
+        return pd.Series({n: benchmark_experience_collection(n) for n in ns})
 
     torch.manual_seed(0)
-    n_envs = 256
     worlds = worldfunc(n_envs)
     agent = agentfunc()
 
     with timer.timer(cuda=True) as t:
-        for _ in range(16):
+        for _ in range(T):
             decisions = agent(worlds, value=True)
             new_worlds, transition = worlds.step(decisions.actions)
             worlds = new_worlds
             log.info('actor stepped')
-    print(f'{t/(16*n_envs)}/sample')
+    time = t.time()/(T*n_envs)
+    print(f'{n_envs}: {time}/sample')
+
+    return time

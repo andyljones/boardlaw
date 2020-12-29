@@ -18,7 +18,7 @@ def _filename(pattern, extant_files):
         raise ValueError(f'You\'ve created a "{pattern}" file already, and that isn\'t a valid pattern')
 
 def new_file(run, pattern, **kwargs):
-    with runs.infoupdate(run) as i:
+    with runs.update(run) as i:
         filename = _filename(pattern, i['_files'])
         assert re.fullmatch(r'[\w\.-]+', filename), 'Filename contains invalid characters'
 
