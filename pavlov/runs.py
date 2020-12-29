@@ -64,32 +64,31 @@ def delete(run):
 
 ### Info file stuff
 
-def infopath(run, **kwargs):
-    return dir(run, **kwargs) / '_info.json'
+def infopath(run, res=True):
+    return dir(run, res) / '_info.json'
 
-def info(run, val=None, create=False, **kwargs):
-    path = infopath(run, **kwargs)
-    if not create and not path.exists():
+def info(run, create=False, res=True):
+    path = infopath(run, res)
+    if not path.exists():
         raise ValueError(f'Run "{run}" has not been created yet')
-    if val is not None and not isinstance(val, dict):
-        raise ValueError('Info value must be None or a dict')
+    return json.loads(read(path, 'rt'))
 
-    if val is None and create:
-        return json.loads(read_default(path, r'{}'))
-    elif val is None:
-        return json.loads(read(path, 'rt'))
-    elif create:
-        assert_file(path, r'{}')
-        write(path, json.dumps(val))
-        return path
-    else:
-        write(path, json.dumps(val))
-        return path
+def new_info(run, val={}, res=True):
+    path = infopath(run, res)
+    if path.exists():
+        raise ValueError('Info file already exists')
+    if not isinstance(val, dict):
+        raise ValueError('Info value must be a dict')
+
+    assert_file(path, r'{}')
+    write(path, json.dumps(val))
+    return path
 
 @contextmanager
 def infoupdate(run, create=False):
     # Make sure it's created
-    info(run, create=create)
+    if not infopath(run).exists():
+        new_info(run, {})
     # Now grab the lock and do whatever
     with RLock(infopath(run), 'r+t') as f:
         i = json.loads(f.read())
@@ -112,7 +111,7 @@ def new_run(suffix='', **kwargs):
         '_created': str(now), 
         '_host': socket.gethostname(), 
         '_files': {}}
-    info(run, kwargs, create=True, res=False)
+    new_info(run, kwargs, res=False)
     return run
 
 _cache = {}
@@ -136,6 +135,15 @@ def runs():
 
     _cache = {n: cache[n] for n in order}
     return _cache
+
+def pandas():
+    df = {}
+    for run, info in runs().items():
+        df[run] = {k: v for k, v in info.items() if k != '_files'}
+    df = pd.DataFrame.from_dict(df, orient='index')
+    df['_created'] = pd.to_datetime(df['_created'])
+    df.index.name = 'run'
+    return df
 
 def created(run):
     return pd.to_datetime(info(run)['_created'])
@@ -232,7 +240,7 @@ def test_info():
             pass
 
     # Check we can create a file
-    i = info('test', create=True)
+    i = new_info('test')
     assert i == {}
     # and read from it
     i = info('test')

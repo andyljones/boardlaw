@@ -146,14 +146,14 @@ def grad_noise_scale(B):
 
 def grad_student_descent():
     import pandas as pd
-    from rebar import stats, paths
+    from pavlov import stats, runs
     import matplotlib.pyplot as plt
 
-    valid = paths.runs().query('created > "2020-12-23 09:52"')
+    valid = runs.pandas().query('_created > "2020-12-23 09:52"')
 
     results = {}
     for name in valid.run_name:
-        s = stats.dataframe(name, 'elo-mohex')
+        s = stats.pandas(name, 'elo-mohex')
         if len(s) > 60:
             results[name] = s['mean_std']['elo-mohex/μ']
     df = pd.concat(results, 1)
