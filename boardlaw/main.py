@@ -105,14 +105,17 @@ def run():
     batch_size = 64*1024
     n_envs = 8*1024
     buffer_inc = batch_size//n_envs
+    parent = 'low-cpuct'
 
     worlds = worldfunc(n_envs)
     agent = agentfunc()
-    opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-2, amsgrad=True)
+    opt = torch.optim.Adam(agent.evaluator.parameters(), lr=3e-4, amsgrad=True)
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
 
-    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/1000, 1))
+    sd = storage.load_latest(parent, device='cuda')
+    agent.load_state_dict(sd['agent'])
 
-    run = runs.new_run('low-cpuct', boardsize=worlds.boardsize)
+    run = runs.new_run('fine-tune', boardsize=worlds.boardsize, parent=runs.resolve(parent))
     with logs.to_run(run), stats.to_run(run), \
             arena.monitor(run, worldfunc, agentfunc):
         buffer = []
