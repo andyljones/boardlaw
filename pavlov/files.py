@@ -34,26 +34,34 @@ def new_file(run, pattern, **kwargs):
             **kwargs}
     return runs.dir(run) / filename
 
-def fileinfo(run, filename):
+def info(run, filename):
     return runs.info(run)['_files'][filename]
 
-def filepath(run, filename):
+def path(run, filename):
     return runs.dir(run) / filename
 
 def exists(run, filename):
-    return filepath(run, filename).exists()
+    return path(run, filename).exists()
 
-def fileglob(run, glob):
+def assure(run, filename, default):
+    with runs.lock(run):
+        isstr = isinstance(default, str)
+        p = path(run, filename)
+        if not p.exists():
+            p.write_text(default) if isstr else p.write_bytes(default)
+        return p.read_text() if isstr else p.read_bytes()
+
+def glob(run, glob):
     return {n: i for n, i in runs.info(run)['_files'].items() if fnmatch.fnmatch(n, glob)}
 
-def fileregex(run, regex):
+def regex(run, regex):
     return {n: i for n, i in runs.info(run)['_files'].items() if re.fullmatch(regex, n)}
 
-def fileseq(run, pattern):
+def seq(run, pattern):
     return {n: i for n, i in runs.info(run)['_files'].items() if i['_pattern'] == pattern}
 
-def fileidx(run, fn):
-    pattern = fileinfo(run, fn)['_pattern']
+def idx(run, fn):
+    pattern = info(run, fn)['_pattern']
     front, back = pattern.split('{n}')
     return int(fn[len(front):-len(back)])
 
@@ -61,7 +69,7 @@ def files(run):
     return runs.info(run)['_files']
 
 def size(run):
-    b = sum(filepath(run, filename).stat().st_size for filename in files(run))
+    b = sum(path(run, filename).stat().st_size for filename in files(run))
     return b/1e6
 
 
@@ -78,9 +86,9 @@ def test_new_file():
 
     path.write_text('contents')
 
-    i = fileinfo(run, name)
+    i = info(run, name)
     assert i['hello'] == 'one'
-    assert filepath(run, name).read_text()  == 'contents'
+    assert path(run, name).read_text()  == 'contents'
 
 @tests.mock_dir
 def test_fileglob():
@@ -89,5 +97,5 @@ def test_fileglob():
     new_file(run, 'foo.txt')
     new_file(run, 'bar.txt')
 
-    assert len(fileglob(run, 'foo.txt')) == 2
-    assert len(fileglob(run, 'bar.txt')) == 1
+    assert len(glob(run, 'foo.txt')) == 2
+    assert len(glob(run, 'bar.txt')) == 1

@@ -72,9 +72,9 @@ class Reader:
         self._readers = {}
 
     def read(self):
-        for name, info in files.fileseq(self._run, self._pattern).items():
+        for name, info in files.seq(self._run, self._pattern).items():
             if name not in self._readers:
-                self._readers[name] = MonoReader(files.filepath(self._run, name))
+                self._readers[name] = MonoReader(files.path(self._run, name))
 
         results = {}
         for name, reader in self._readers.items():

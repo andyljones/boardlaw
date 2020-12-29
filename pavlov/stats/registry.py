@@ -88,7 +88,7 @@ def reader(run, channel):
     exemplar = f'{prefix}.0.npr'
     if not files.exists(run, exemplar):
         raise IOError(f'Run "{run}" has no "{channel}" files')
-    kind = files.fileinfo(run, exemplar)['kind']
+    kind = files.info(run, exemplar)['kind']
     reader = KINDS[kind].reader(run, prefix)
     return reader
 

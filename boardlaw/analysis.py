@@ -162,7 +162,7 @@ def grad_student_descent():
     df = df.ffill().where(df.bfill().notnull())
 
     with plt.style.context('seaborn-poster'):
-        ax = df.plot(cmap='viridis')
+        ax = df.plot(cmap='viridis', legend=False)
         ax.set_facecolor('whitesmoke')
         ax.grid(axis='y')
         ax.set_ylim(-13, -2)

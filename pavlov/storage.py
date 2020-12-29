@@ -55,18 +55,18 @@ def load(path, device='cpu'):
     return torch.load(path, map_location=device)
 
 def save_latest(run, objs):
-    path = files.filepath(run, LATEST)
+    path = files.path(run, LATEST)
     if not path.exists():
         files.new_file(run, LATEST)
     save(path, objs)
 
 def load_latest(run=-1, device='cpu'):
-    path = files.filepath(run, LATEST)
+    path = files.path(run, LATEST)
     return load(path, device)
 
 def throttled_latest(run, objs, throttle):
-    if files.filepath(run, LATEST).exists():
-        last = pd.to_datetime(files.fileinfo(run, LATEST)['_created'])
+    if files.path(run, LATEST).exists():
+        last = pd.to_datetime(files.info(run, LATEST)['_created'])
     else:
         last = pd.Timestamp(0, unit='s', tz='UTC')
 
@@ -79,7 +79,7 @@ def snapshot(run, objs):
     save(path, objs)
 
 def snapshots(run=-1):
-    return {files.fileidx(run, fn): {**info, 'path': files.filepath(run, fn)} for fn, info in files.fileseq(run, SNAPSHOT).items()}
+    return {files.idx(run, fn): {**info, 'path': files.path(run, fn)} for fn, info in files.seq(run, SNAPSHOT).items()}
 
 def throttled_snapshot(run, objs, throttle):
     files = snapshots(run)
