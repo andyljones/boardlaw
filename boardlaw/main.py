@@ -98,7 +98,7 @@ def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
     network = networks.Network(worlds.obs_space, worlds.action_space).to(worlds.device)
     # network.trace(worlds)
-    return mcts.MCTSAgent(network, n_nodes=256)
+    return mcts.MCTSAgent(network, n_nodes=128)
 
 def warm_start(agent, opt, parent):
     if parent:
@@ -117,7 +117,7 @@ def run():
     worlds = worldfunc(n_envs)
     agent = agentfunc()
     opt = torch.optim.Adam(agent.evaluator.parameters(), lr=3e-4, amsgrad=True)
-    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/1000, 1))
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e, 1))
 
     parent = warm_start(agent, opt, '')
 
