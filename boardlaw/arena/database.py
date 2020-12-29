@@ -1,7 +1,18 @@
 import pandas as pd
 from pavlov import json
+from pathlib import Path
+import json as json_
 
 PREFIX = 'arena'
+
+KEYS = ['black_name', 'white_name']
+
+def _to_dict(l):
+    # This indirection is because we can't store multi-part keys in a JSON. Ugh.
+    return {tuple(r[n] for n in KEYS): {k: v for k, v in r.items() if k not in KEYS} for r in l}
+
+def _to_list(d):
+    return [{**dict(zip(KEYS, k)), **v} for k, v in d.items()]
 
 def save(run, result):
     if isinstance(result, list):
@@ -9,17 +20,28 @@ def save(run, result):
             save(run, r)
 
     json.assure(run, PREFIX, {})
-    with json.update(run, PREFIX) as d:
-        key = tuple(result.names)
-        if key not in d:
-            d[key] = {'black_wins': 0, 'white_wins': 0, 'moves': 0}
-        current = d[key]
-        current['black_wins'] += result.wins[0]
-        current['white_wins'] += result.wins[1]
-        current['moves'] += result.moves
+    with json.update(run, PREFIX) as l:
+        d = _to_dict(l)
+        k = tuple(result.names)
+        if k not in d:
+            d[k] = {'black_wins': 0, 'white_wins': 0, 'moves': 0}
+        v = d[k]
+        v['black_wins'] += result.wins[0]
+        v['white_wins'] += result.wins[1]
+        v['moves'] += result.moves
+
+        l[:] = _to_list(d)
 
 def pandas(run):
-    return pd.DataFrame.from_dict(json.read(run, PREFIX))
+    # Need to come up with a better way of handling 'special' runs
+    if run.startswith('mohex'):
+        contents = json_.loads(Path(f'output/arena/{run}.json').read_text())
+    else:
+        contents = json.read(run, PREFIX, [])
+    if contents:
+        return pd.DataFrame(contents).set_index(KEYS)
+    else:
+        return pd.DataFrame(columns=['black_name', 'white_name', 'black_wins', 'white_wins', 'moves']).set_index(KEYS)
 
 def summary(run):
     raw = pandas(run)
@@ -80,5 +102,3 @@ def symmetric(run, agents=None):
         games = games.reindex(index=agents, columns=agents).fillna(0)
         wins = wins.reindex(index=agents, columns=agents).fillna(0)
     return games, wins
-
-

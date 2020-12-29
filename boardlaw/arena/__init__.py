@@ -69,6 +69,7 @@ def snapshot_arena(run, worldfunc, agentfunc, device='cuda:1'):
 
 def mohex_arena(run, worldfunc, agentfunc, device='cuda:1'):
     run = runs.resolve(run)
+    log.info(f'Running arena for "{run}"')
     with logs.to_run(run), stats.to_run(run):
         trialer = mohex.Trialer(worldfunc, device)
         
@@ -81,9 +82,12 @@ def mohex_arena(run, worldfunc, agentfunc, device='cuda:1'):
                 agents = latest_agent(run, agentfunc, device=device)
                 if agents:
                     agent = list(agents.values())[0]
+                else:
+                    log.info('No agents yet')
             
             if agent and (time.time() - last_step > 1):
                 last_step = time.time()
+                log.info('Running trial')
                 trialer.trial(agent)
                 i += 1
 
@@ -114,7 +118,7 @@ def fill_matchups(run=-1, device='cuda:1', count=1):
     worlds = worldfunc(device=device, n_envs=256)
 
     while True:
-        n, w = database.symmetric_pandas(run, agents)
+        n, w = database.symmetric(run, agents)
         zeros = (n
             .stack()
             .loc[lambda s: s < count]
@@ -133,4 +137,4 @@ def fill_matchups(run=-1, device='cuda:1', count=1):
 
         wins, games = int(results[0].wins[0] + results[1].wins[1]), int(sum(r.games for r in results))
         log.info(f'Storing. {wins} wins in {games} games for {list(matchup)[0]} ')
-        database.store(run, results)
+        database.save(run, results)

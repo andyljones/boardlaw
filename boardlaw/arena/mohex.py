@@ -78,7 +78,7 @@ def run(boardsize):
                 boardsize=worlds.boardsize)
 
             log.info(f'Storing {result.names[0]} v {result.names[1]}, {result.wins[0]}-{result.wins[1]} in {result.moves} moves')
-            database.store(run_name, result)
+            database.save(run_name, result)
 
             moves[idx] = 0
 

@@ -7,7 +7,7 @@ from pavlov import stats
 log = getLogger(__name__)
 
 def snapshot_trial(run_name, worlds, agents):
-    n, w = database.symmetric_pandas(run_name, agents)
+    n, w = database.symmetric(run_name, agents)
     log.info(f'Loaded {int(n.sum().sum())} games')
 
     valid = n.index[n.index.str.endswith('snapshot')]
@@ -27,10 +27,10 @@ def snapshot_trial(run_name, worlds, agents):
 
     wins, games = int(results[0].wins[0] + results[1].wins[1]), int(sum(r.games for r in results))
     log.info(f'Storing. {wins} wins in {games} games for {list(agents)[0]} ')
-    database.store(run_name, results)
+    database.save(run_name, results)
 
 def mohex_trial(run_name, worlds, agents):
-    n, w = database.symmetric_pandas(run_name, agents)
+    n, w = database.symmetric(run_name, agents)
     log.info(f'Loaded {int(n.sum().sum())} games')
 
     valid = n.index[n.index.str.endswith('periodic') | (n.index == 'mohex')]
@@ -54,12 +54,12 @@ def mohex_trial(run_name, worlds, agents):
     moves = int(sum(r.moves for r in results))
     log.info(f'Storing. {wins} wins in {games} games for {list(agents)[0]}; {moves/(2*games):.1f} average moves per player')
     stats.mean('moves-mohex', moves, 2*games)
-    database.store(run_name, results)
+    database.save(run_name, results)
 
 _latest_matchup = None
 _latest_results = []
 def latest_trial(run_name, worlds, agents):
-    n, w = database.symmetric_pandas(run_name, agents)
+    n, w = database.symmetric(run_name, agents)
     log.info(f'Loaded {int(n.sum().sum())} games')
 
     [latest] = n.index[n.index.str.endswith('latest')]

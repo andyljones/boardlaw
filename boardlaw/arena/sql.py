@@ -110,3 +110,21 @@ def symmetric_pandas(run_name, agents=None):
         wins = wins.reindex(index=agents, columns=agents).fillna(0)
     return games, wins
 
+def convert():
+    from . import sql
+    import json
+    from pathlib import Path
+    rs = [f'mohex-{n}' for n in [3, 5, 7, 9, 11]]
+    for r in rs:
+        js = list(sql
+            .stored(r)
+            .drop(['run_name', 'boardsize'], 1)
+            .set_index(['black_name', 'white_name'])
+            .astype(int)
+            .reset_index()
+            .to_dict(orient='index')
+            .values())
+        
+        p = Path(f'output/arena/{r}.json')
+        p.parent.mkdir(exist_ok=True, parents=True)
+        p.write_text(json.dumps(js))
