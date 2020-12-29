@@ -100,23 +100,28 @@ def agentfunc(device='cuda'):
     # network.trace(worlds)
     return mcts.MCTSAgent(network, n_nodes=64)
 
+def warm_start(agent, opt, parent):
+    if parent:
+        parent = runs.resolve(parent)
+        sd = storage.load_latest(parent, device='cuda')
+        agent.load_state_dict(sd['agent'])
+        opt.load_state_dict(sd['opt'])
+    return parent
+
 def run():
     buffer_length = 16 
     batch_size = 64*1024
     n_envs = 8*1024
     buffer_inc = batch_size//n_envs
-    parent = 'low-cpuct'
 
     worlds = worldfunc(n_envs)
     agent = agentfunc()
     opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-2, amsgrad=True)
-    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/1000, 1))
 
-    sd = storage.load_latest(parent, device='cuda')
-    agent.load_state_dict(sd['agent'])
-    opt.load_state_dict(sd['opt'])
+    parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('fine-tune v-low-cpuct', boardsize=worlds.boardsize, parent=runs.resolve(parent))
+    run = runs.new_run('v-low-cpuct', boardsize=worlds.boardsize, parent=parent)
     with logs.to_run(run), stats.to_run(run), \
             arena.monitor(run, worldfunc, agentfunc):
         buffer = []
