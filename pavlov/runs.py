@@ -1,3 +1,4 @@
+from multiprocessing import Value, context
 import pandas as pd
 import socket
 import threading
@@ -24,29 +25,6 @@ def root():
         root.mkdir(exist_ok=True, parents=True)
     return root
 
-def mode(prefix, x):
-    if isinstance(x, str):
-        return prefix + 't'
-    if isinstance(x, bytes):
-        return prefix + 'b'
-    raise ValueError()
-
-def assure(path, default):
-    try:
-        path.parent.mkdir(exist_ok=True, parents=True)
-        with RLock(path, mode('x+', default), fail_when_locked=True) as f:
-            f.write(default)
-    except (FileExistsError, AlreadyLocked):
-        pass
-
-def read(path, mode):
-    with RLock(path, mode) as f:
-        return f.read()
-
-def write(path, contents):
-    with RLock(path, mode('w', contents)) as f:
-        f.write(contents)
-
 def dir(run, res=True):
     if res:
         run = resolve(run)
@@ -56,40 +34,50 @@ def delete(run):
     assert run != ''
     shutil.rmtree(dir(run))
 
+@contextmanager
+def lock(run, res=True):
+    # It's tempting to lock on the _info.json file, since that's where 
+    # all the run state is kept. But that leads to some confusion about 
+    # how to handle race conditions when *creating* the _info.json file,
+    # and also about how to handle global operations that aren't exclusively
+    # about that file.
+    # 
+    # Better to just lock on a purpose-made lock file.
+    path = dir(run, res)
+    if not path.exists():
+        raise ValueError('Can\'t take lock as run doesn\'t exist')
+    with RLock(path / '_lock'):
+        yield
+
 ### Info file stuff
 
 def infopath(run, res=True):
     return dir(run, res) / '_info.json'
 
-def info(run, create=False, res=True):
-    path = infopath(run, res)
-    if not path.exists():
-        raise ValueError(f'Run "{run}" has not been created yet')
-    return json.loads(read(path, 'rt'))
+def info(run, res=True):
+    with lock(run, res):
+        path = infopath(run, res)
+        if not path.exists():
+            raise ValueError(f'Run "{run}" info file has not been created yet')
+        return json.loads(path.read_text())
 
 def new_info(run, val={}, res=True):
-    path = infopath(run, res)
-    if path.exists():
-        raise ValueError('Info file already exists')
-    if not isinstance(val, dict):
-        raise ValueError('Info value must be a dict')
-
-    assure(path, r'{}')
-    write(path, json.dumps(val))
-    return path
+    with lock(run, res):
+        path = infopath(run, res)
+        if path.exists():
+            raise ValueError('Info file already exists')
+        if not isinstance(val, dict):
+            raise ValueError('Info value must be a dict')
+        path.write_text(json.dumps(val))
+        return path
 
 @contextmanager
-def update(run, create=False):
-    # Make sure it's created
-    if not infopath(run).exists():
-        new_info(run, {})
-    # Now grab the lock and do whatever
-    with RLock(infopath(run), 'r+t') as f:
-        i = json.loads(f.read())
+def update(run):
+    with lock(run):
+        path = infopath(run)
+        i = json.loads(path.read_text())
         yield i
-        f.truncate(0)
-        f.seek(0)
-        f.write(json.dumps(i))
+        path.write_text(json.dumps(i))
 
 ### Run stuff
 

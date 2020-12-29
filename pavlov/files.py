@@ -18,13 +18,13 @@ def _filename(pattern, extant_files):
         raise ValueError(f'You\'ve created a "{pattern}" file already, and that isn\'t a valid pattern')
 
 def new_file(run, pattern, **kwargs):
-    with runs.update(run) as i:
-        filename = _filename(pattern, i['_files'])
+    with runs.update(run) as info:
+        filename = _filename(pattern, info['_files'])
         assert re.fullmatch(r'[\w\.-]+', filename), 'Filename contains invalid characters'
 
         process = multiprocessing.current_process()
         thread = threading.current_thread()
-        i['_files'][filename] = {
+        info['_files'][filename] = {
             '_pattern': pattern,
             '_created': str(tests.timestamp()),
             '_process_id': str(process.pid),
@@ -39,6 +39,9 @@ def fileinfo(run, filename):
 
 def filepath(run, filename):
     return runs.dir(run) / filename
+
+def exists(run, filename):
+    return filepath(run, filename).exists()
 
 def fileglob(run, glob):
     return {n: i for n, i in runs.info(run)['_files'].items() if fnmatch.fnmatch(n, glob)}
@@ -60,6 +63,7 @@ def files(run):
 def size(run):
     b = sum(filepath(run, filename).stat().st_size for filename in files(run))
     return b/1e6
+
 
 def origin(filename):
     if isinstance(filename, Path):
