@@ -1,57 +1,28 @@
-import sqlite3
 import pandas as pd
-from contextlib import contextmanager
-from pavlov import runs
+from pavlov import json
 
-DATABASE = 'output/arena.sql'
+PREFIX = 'arena'
 
-@contextmanager
-def database():
-    with sqlite3.connect(DATABASE) as conn:
-        results_table = '''
-            create table if not exists results(
-                run_name text, 
-                black_name text, white_name text, 
-                black_wins real, white_wins real,
-                moves real,
-                boardsize real,
-                PRIMARY KEY (run_name, black_name, white_name))'''
-        conn.execute(results_table)
-        yield conn
-
-def store(run_name, result):
+def save(run, result):
     if isinstance(result, list):
         for r in result:
-            store(run_name, r)
-        return 
-    # upsert: https://stackoverflow.com/questions/2717590/sqlite-insert-on-duplicate-key-update-upsert
-    with database() as conn:
-        subs = (run_name, *result.names, *result.wins, result.moves, result.boardsize,
-            *result.wins, result.moves)
-        conn.execute('''
-            insert into results 
-            values (?,?,?,?,?,?,?)
-            on conflict(run_name, black_name, white_name) do update set 
-            black_wins = black_wins + ?,
-            white_wins = white_wins + ?,
-            moves = moves + ?''', subs)
+            save(run, r)
 
-def stored(run):
-    with database() as c:
-        return pd.read_sql_query('select * from results where run_name like ?', c, params=(f'{run}%',))
+    json.assure(run, PREFIX, {})
+    with json.update(run, PREFIX) as d:
+        key = tuple(result.names)
+        if key not in d:
+            d[key] = {'black_wins': 0, 'white_wins': 0, 'moves': 0}
+        current = d[key]
+        current['black_wins'] += result.wins[0]
+        current['white_wins'] += result.wins[1]
+        current['moves'] += result.moves
 
-def run_counts():
-    return (stored()
-                .groupby('run_name')
-                [['black_wins', 'white_wins']]
-                .sum().sum(1))
-    
-def delete(run_name):
-    with database() as c:
-        c.execute('delete from results where run_name=?', (run_name,))
+def pandas(run):
+    return pd.DataFrame.from_dict(json.read(run, PREFIX))
 
-def summary(run_name):
-    raw = stored(run_name)
+def summary(run):
+    raw = pandas(run)
     if len(raw) == 0:
         columns = pd.MultiIndex.from_product([['black_wins', 'white_wins',], []])
         return pd.DataFrame(columns=columns)
@@ -65,8 +36,8 @@ def summary(run_name):
     df = df.reindex(index=names).reindex(columns=names, level=1)
     return df.fillna(0)
 
-def games(run_name):
-    df = summary(run_name)
+def games(run):
+    df = summary(run)
     if len(df) == 0:
         df = pd.DataFrame()
         df.index.name = 'black_name'
@@ -74,39 +45,40 @@ def games(run_name):
         return df
     return df.white_wins + df.black_wins
 
-def wins(run_name, min_games=-1):
-    df = summary(run_name)
+def wins(run, min_games=-1):
+    df = summary(run)
     if len(df) == 0:
         return pd.DataFrame()
     return df.black_wins
 
-def moves(run_name):
-    df = summary(run_name)
+def moves(run):
+    df = summary(run)
     if len(df) == 0:
         return pd.DataFrame()
     return df.moves
 
-def symmetric_games(run_name):
-    g = games(run_name)
+def symmetric_games(run):
+    g = games(run)
     return g + g.T
 
-def symmetric_wins(run_name, min_games=-1):
-    games = symmetric_games(run_name)
-    df = summary(run_name)
+def symmetric_wins(run, min_games=-1):
+    games = symmetric_games(run)
+    df = summary(run)
     if len(df) == 0:
         return pd.DataFrame()
     return (df.black_wins + df.white_wins.T).where(games > min_games)
 
-def symmetric_moves(run_name):
-    m = moves(run_name)
+def symmetric_moves(run):
+    m = moves(run)
     return m + m.T
 
-def symmetric_pandas(run_name, agents=None):
-    games = symmetric_games(run_name)
-    wins = symmetric_wins(run_name)
+def symmetric(run, agents=None):
+    games = symmetric_games(run)
+    wins = symmetric_wins(run)
     if agents is not None:
         agents = list(agents)
         games = games.reindex(index=agents, columns=agents).fillna(0)
         wins = wins.reindex(index=agents, columns=agents).fillna(0)
     return games, wins
+
 

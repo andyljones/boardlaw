@@ -20,8 +20,15 @@ def new(run, prefix):
 def update(run, prefix):
     with lock(run, prefix):
         contents = path(run, prefix).read_text()
-        yield contents
-        path.write_text(contents)
+        yield json.loads(contents)
+        path.write_text(json.dumps(contents))
+
+def assure(run, prefix, default):
+    with lock(run, prefix):
+        p = path(run, prefix)
+        if not p.exists():
+            new(run, prefix)
+            p.write_text(json.dumps(default))
 
 def read(run, prefix):
     with lock(run, prefix):
