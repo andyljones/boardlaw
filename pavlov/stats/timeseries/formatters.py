@@ -10,7 +10,7 @@ def final_row(reader, rule):
     df = reader.pandas()
     df.index = df.index + reader._created
     resampled = reader.resampler(**df, rule=rule, offset=offset)
-    resampled = resampled.loc[resampled.index < tests.timestamp()]
+    resampled = resampled.loc[resampled.index < tests.timestamp() - pd.Timedelta(rule)]
     if len(resampled) > 0: 
         return resampled.iloc[-1]
 
