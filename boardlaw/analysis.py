@@ -149,13 +149,15 @@ def grad_student_descent():
     from pavlov import stats, runs
     import matplotlib.pyplot as plt
 
-    valid = runs.pandas().query('_created > "2020-12-23 09:52"')
+    # date of the first 9x9 run
+    valid = runs.pandas().query('_created > "2020-12-23 09:52Z"')
 
     results = {}
-    for name in valid.run_name:
-        s = stats.pandas(name, 'elo-mohex')
-        if len(s) > 60:
-            results[name] = s['mean_std']['elo-mohex/μ']
+    for name in valid.index:
+        if stats.exists(name, 'elo-mohex'):
+            s = stats.pandas(name, 'elo-mohex')
+            if len(s) > 60:
+                results[name] = s.μ
     df = pd.concat(results, 1)
     df = df.ffill().where(df.bfill().notnull())
 

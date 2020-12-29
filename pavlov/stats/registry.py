@@ -85,9 +85,17 @@ class StatsReaders:
 def reader(run, channel):
     #TODO: This won't generalise!
     prefix = make_prefix(channel)
-    kind = files.fileinfo(run, f'{prefix}.0.npr')['kind']
+    exemplar = f'{prefix}.0.npr'
+    if not files.exists(run, exemplar):
+        raise IOError(f'Run "{run}" has no "{channel}" files')
+    kind = files.fileinfo(run, exemplar)['kind']
     reader = KINDS[kind].reader(run, prefix)
     return reader
+
+def exists(run, channel):
+    prefix = make_prefix(channel)
+    exemplar = f'{prefix}.0.npr'
+    return files.exists(run, exemplar)
 
 def array(run, channel):
     return reader(run, channel).array()

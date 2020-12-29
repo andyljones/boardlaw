@@ -1,6 +1,6 @@
 from .monitoring import from_run, from_run_sync
 from .plotting import review, view
-from .registry import to_run, KINDS, array, pandas, compare
+from .registry import to_run, KINDS, array, pandas, compare, exists
 from .gpu import gpu
 from .deferral import defer, wrap
 
