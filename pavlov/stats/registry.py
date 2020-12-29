@@ -95,3 +95,6 @@ def array(run, channel):
 def pandas(run, channel, rule='60s', **kwargs):
     r = reader(run, channel)
     return r.resample(rule, **kwargs)
+
+def compare(rs, *args, **kwargs):
+    return pd.concat({runs.resolve(r): pandas(r, *args, **kwargs) for r in rs}, 1)
