@@ -119,9 +119,9 @@ def run():
     opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-2, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
 
-    parent = warm_start(agent, opt, '')
+    parent = warm_start(agent, opt, 'feisty-noun big-buffer')
 
-    run = runs.new_run('big-buffer', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('big-buffer fine-tune', boardsize=worlds.boardsize, parent=parent)
     with logs.to_run(run), stats.to_run(run), \
             arena.monitor(run, worldfunc, agentfunc):
         buffer = []

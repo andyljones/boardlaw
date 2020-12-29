@@ -62,8 +62,9 @@ def info(run, res=True):
         return json.loads(path.read_text())
 
 def new_info(run, val={}, res=True):
+    path = infopath(run, res)
+    path.parent.mkdir(exist_ok=True, parents=True)
     with lock(run, res):
-        path = infopath(run, res)
         if path.exists():
             raise ValueError('Info file already exists')
         if not isinstance(val, dict):
@@ -81,14 +82,14 @@ def update(run):
 
 ### Run stuff
 
-def run_name(suffix='', now=None):
+def new_name(suffix='', now=None):
     now = (now or tests.timestamp()).strftime('%Y-%m-%d %H-%M-%S')
     hash = humanhash(str(uuid.uuid4()), n=2)
     return f'{now} {hash} {suffix}'.strip()
 
 def new_run(suffix='', **kwargs):
     now = tests.timestamp()
-    run = run_name(suffix, now)
+    run = new_name(suffix, now)
     kwargs = {**kwargs, 
         '_created': str(now), 
         '_host': socket.gethostname(), 
