@@ -98,7 +98,7 @@ def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
     network = networks.Network(worlds.obs_space, worlds.action_space).to(worlds.device)
     # network.trace(worlds)
-    return mcts.MCTSAgent(network, n_nodes=64)
+    return mcts.MCTSAgent(network, n_nodes=256)
 
 def warm_start(agent, opt, parent):
     if parent:
@@ -116,12 +116,12 @@ def run():
 
     worlds = worldfunc(n_envs)
     agent = agentfunc()
-    opt = torch.optim.Adam(agent.evaluator.parameters(), lr=3e-4, amsgrad=True)
-    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
+    opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-2, amsgrad=True)
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/1000, 1))
 
-    parent = warm_start(agent, opt, 'feisty-noun big-buffer')
+    parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('big-buffer fine-tune', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('more-sims', boardsize=worlds.boardsize, parent=parent)
     with logs.to_run(run), stats.to_run(run), \
             arena.monitor(run, worldfunc, agentfunc):
         buffer = []
