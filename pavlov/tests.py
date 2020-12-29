@@ -93,7 +93,7 @@ def convert(run):
         newpath.write_bytes(oldpath.read_bytes())
         
         files[newname] = {
-            '_pattern': f'{kind}.{name}.{{n}}.npr',
+            '_pattern': f'stats.{name}.{{n}}.npr',
             '_created': str(created),
             '_process_id': str(procid),
             '_process_name': procname,
@@ -120,6 +120,7 @@ def convert(run):
             '_thread_id': '0',
             '_thread_name': 'main'}
 
+    # Convert the saved models
     for oldpath in old.glob('**/*.pkl'):
         filename = oldpath.name
         procname = '-'.join(filename.split('-')[:-1])
@@ -156,6 +157,10 @@ def convert(run):
     return new
 
 def convert_all():
+    from pavlov import runs
+    for i in runs.pandas().query('_created < "2020-12-27 18:49:04+00:00"').index:
+        runs.delete(i)
+
     for p in Path('output/traces').iterdir():
         
         n_saved = len(list(p.glob('**/*.pkl')))

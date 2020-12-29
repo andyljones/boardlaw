@@ -94,6 +94,8 @@ def array(run, channel):
 
 def pandas(run, channel, rule='60s', **kwargs):
     r = reader(run, channel)
+    if not r.ready():
+        raise ValueError(f'Reader for "{run}" "{channel}" is not ready')
     return r.resample(rule, **kwargs)
 
 def compare(rs, *args, **kwargs):

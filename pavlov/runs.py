@@ -31,7 +31,7 @@ def mode(prefix, x):
         return prefix + 'b'
     raise ValueError()
 
-def assert_file(path, default):
+def assure(path, default):
     try:
         path.parent.mkdir(exist_ok=True, parents=True)
         with RLock(path, mode('x+', default), fail_when_locked=True) as f:
@@ -42,10 +42,6 @@ def assert_file(path, default):
 def read(path, mode):
     with RLock(path, mode) as f:
         return f.read()
-
-def read_default(path, default):
-    assert_file(path, default)
-    return read(path, mode('r', default))
 
 def write(path, contents):
     with RLock(path, mode('w', contents)) as f:
@@ -78,12 +74,12 @@ def new_info(run, val={}, res=True):
     if not isinstance(val, dict):
         raise ValueError('Info value must be a dict')
 
-    assert_file(path, r'{}')
+    assure(path, r'{}')
     write(path, json.dumps(val))
     return path
 
 @contextmanager
-def infoupdate(run, create=False):
+def update(run, create=False):
     # Make sure it's created
     if not infopath(run).exists():
         new_info(run, {})
@@ -174,7 +170,7 @@ def test_info():
 
     # Check trying to write to a nonexistant file errors
     with pytest.raises(FileNotFoundError):
-        with infoupdate('test') as (i, writer):
+        with update('test') as (i, writer):
             pass
 
     # Check we can create a file
@@ -185,7 +181,7 @@ def test_info():
     assert i == {}
 
     # Check we can write to an already-created file
-    with infoupdate('test') as (i, writer):
+    with update('test') as (i, writer):
         assert i == {}
         writer({'a': 1})
     # and read it back
@@ -194,7 +190,7 @@ def test_info():
 
     # Check we can write to a not-yet created file
     delete('test')
-    with infoupdate('test', create=True) as (i, writer):
+    with update('test', create=True) as (i, writer):
         assert i == {}
         writer({'a': 1})
     # and read it back

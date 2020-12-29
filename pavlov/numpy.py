@@ -2,10 +2,9 @@ import numpy as np
 from numpy.lib import format as npformat
 from . import runs, tests, files
 from io import BytesIO
-from datetime import datetime
-from collections import defaultdict
 from pathlib import Path
-import time
+
+FILEPATTERN = '{prefix}.{{n}}.npr'
 
 def infer_dtype(exemplar):
     return np.dtype([(k, v.dtype if isinstance(v, np.generic) else type(v)) for k, v in exemplar.items()])
@@ -28,8 +27,8 @@ def make_header(dtype):
 
 class Writer:
 
-    def __init__(self, run, name, **kwargs):
-        self._path = files.new_file(run, f'{name}.{{n}}.npr', **kwargs)
+    def __init__(self, run, prefix, **kwargs):
+        self._path = files.new_file(run, FILEPATTERN.format(prefix=prefix), **kwargs)
         self._file = None
         self._next = tests.time()
         
@@ -67,13 +66,13 @@ class MonoReader:
 
 class Reader:
 
-    def __init__(self, run, name):
+    def __init__(self, run, prefix):
         self._run = runs.resolve(run)
-        self._name = name
+        self._pattern = FILEPATTERN.format(prefix=prefix)
         self._readers = {}
 
     def read(self):
-        for name, info in files.fileglob(self._run, f'{self._name}.*.npr').items():
+        for name, info in files.fileseq(self._run, self._pattern).items():
             if name not in self._readers:
                 self._readers[name] = MonoReader(files.filepath(self._run, name))
 
