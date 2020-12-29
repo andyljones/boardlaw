@@ -3,7 +3,7 @@ import pandas as pd
 import threading
 from contextlib import contextmanager
 from . import timeseries
-from .. import runs
+from .. import runs, files
 import aljpy
 import re
 
@@ -68,8 +68,8 @@ class StatsReaders:
         self._pool = {}
 
     def refresh(self):
-        for filename, info in runs.files(self._run).items():
-            if runs.origin(filename) == 'stats':
+        for filename, info in files.files(self._run).items():
+            if files.origin(filename) == 'stats':
                 prefix = parse_filename(filename).prefix
                 kind = info['kind']
                 if (kind in KINDS) and (prefix not in self._pool):
@@ -85,7 +85,7 @@ class StatsReaders:
 def reader(run, channel):
     #TODO: This won't generalise!
     prefix = make_prefix(channel)
-    kind = runs.fileinfo(run, f'{prefix}.0.npr')['kind']
+    kind = files.fileinfo(run, f'{prefix}.0.npr')['kind']
     reader = KINDS[kind].reader(run, prefix)
     return reader
 

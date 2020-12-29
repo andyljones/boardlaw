@@ -3,7 +3,7 @@ import time
 from collections import defaultdict, deque
 import logging.handlers
 from contextlib import contextmanager
-from . import widgets, runs, tests
+from . import widgets, runs, tests, files
 import sys
 import traceback
 import _thread
@@ -45,7 +45,7 @@ def handlers(*new_handlers):
 
 @contextmanager
 def to_run(run):
-    path = runs.new_file(run, 'logs.{n}.txt')
+    path = files.new_file(run, 'logs.{n}.txt')
     handler = logging.FileHandler(path)
     handler.setLevel(logging.INFO)
     handler.setFormatter(logging.Formatter(
@@ -66,9 +66,9 @@ class Reader:
         self._files = {}
 
     def read(self):
-        for name, info in runs.fileseq(self._run, 'logs.{n}.txt').items():
+        for name, info in files.fileseq(self._run, 'logs.{n}.txt').items():
             if name not in self._files:
-                path = runs.filepath(self._run, name)
+                path = files.filepath(self._run, name)
                 self._files[name] = (info, path.open('r'))
         
         for name, (info, f) in self._files.items():

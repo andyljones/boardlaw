@@ -1,6 +1,6 @@
 import numpy as np
 from numpy.lib import format as npformat
-from . import runs, tests
+from . import runs, tests, files
 from io import BytesIO
 from datetime import datetime
 from collections import defaultdict
@@ -29,7 +29,7 @@ def make_header(dtype):
 class Writer:
 
     def __init__(self, run, name, **kwargs):
-        self._path = runs.new_file(run, f'{name}.{{n}}.npr', **kwargs)
+        self._path = files.new_file(run, f'{name}.{{n}}.npr', **kwargs)
         self._file = None
         self._next = tests.time()
         
@@ -73,9 +73,9 @@ class Reader:
         self._readers = {}
 
     def read(self):
-        for name, info in runs.fileglob(self._run, f'{self._name}.*.npr').items():
+        for name, info in files.fileglob(self._run, f'{self._name}.*.npr').items():
             if name not in self._readers:
-                self._readers[name] = MonoReader(runs.filepath(self._run, name))
+                self._readers[name] = MonoReader(files.filepath(self._run, name))
 
         results = {}
         for name, reader in self._readers.items():

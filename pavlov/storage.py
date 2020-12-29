@@ -1,7 +1,7 @@
 import pandas as pd
 import torch
 import numpy as np
-from . import runs, tests
+from . import runs, files, tests
 from io import BytesIO
 
 LATEST = 'storage.latest.pkl'
@@ -55,18 +55,18 @@ def load(path, device='cpu'):
     return torch.load(path, map_location=device)
 
 def save_latest(run, objs):
-    path = runs.filepath(run, LATEST)
+    path = files.filepath(run, LATEST)
     if not path.exists():
-        runs.new_file(run, LATEST)
+        files.new_file(run, LATEST)
     save(path, objs)
 
 def load_latest(run=-1, device='cpu'):
-    path = runs.filepath(run, LATEST)
+    path = files.filepath(run, LATEST)
     return load(path, device)
 
 def throttled_latest(run, objs, throttle):
-    if runs.filepath(run, LATEST).exists():
-        last = pd.to_datetime(runs.fileinfo(run, LATEST)['_created'])
+    if files.filepath(run, LATEST).exists():
+        last = pd.to_datetime(files.fileinfo(run, LATEST)['_created'])
     else:
         last = pd.Timestamp(0, unit='s', tz='UTC')
 
@@ -75,11 +75,11 @@ def throttled_latest(run, objs, throttle):
 
 def snapshot(run, objs):
     name = 'storage.snapshot.{n}.pkl'
-    path = runs.new_file(run, name)
+    path = files.new_file(run, name)
     save(path, objs)
 
 def snapshots(run=-1):
-    return {runs.fileidx(run, fn): {**info, 'path': runs.filepath(run, fn)} for fn, info in runs.fileseq(run, SNAPSHOT).items()}
+    return {files.fileidx(run, fn): {**info, 'path': files.filepath(run, fn)} for fn, info in files.fileseq(run, SNAPSHOT).items()}
 
 def throttled_snapshot(run, objs, throttle):
     files = snapshots(run)
