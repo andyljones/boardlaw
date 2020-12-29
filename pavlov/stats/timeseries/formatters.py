@@ -1,3 +1,4 @@
+import pandas as pd
 from ... import tests
 from .. import registry
 
@@ -8,8 +9,11 @@ def final_row(reader, rule):
     df = reader.pandas()
     df.index = df.index + reader._created
     resampled = reader.resampler(**df, rule=rule, offset=offset)
-    resampled = resampled.iloc[:-1] # Drop that almost-empty last interval
-    return resampled.ffill(limit=1).iloc[-1]
+    resampled = resampled.iloc[:-1].ffill(limit=1) # Drop that almost-empty last interval
+    if len(resampled) > 0: 
+        return resampled.iloc[-1]
+    else:
+        return pd.Series(np.nan, resampled.index)
 
 def channel(reader):
     return registry.parse_prefix(reader.prefix).channel

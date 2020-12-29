@@ -160,7 +160,8 @@ def resolve(run):
         if len(hits) == 1:
             return hits[0]
         else:
-            raise ValueError(f'Found {len(hits)} runs that finished with "{run}"')
+            recent = ', '.join(f'"{h}"' for h in hits[-3:])
+            raise ValueError(f'Found {len(hits)} runs that finished with "{run}", such as: {recent}')
 
 ### Tests
 
