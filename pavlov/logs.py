@@ -1,3 +1,4 @@
+import pandas as pd
 import logging
 import time
 from collections import defaultdict, deque
@@ -58,6 +59,14 @@ def to_run(run):
         except:
             log.info(f'Trace:\n{traceback.format_exc()}')
             raise
+
+def pandas(run=-1):
+    d = {n: {**i, '_path': files.path(run, n)} for n, i in files.seq(run, 'logs.{n}.txt').items()}
+    return pd.DataFrame.from_dict(d, orient='index')
+
+def procpaths(run=-1, proc='MainProcess'):
+    return pandas(run).loc[lambda df: df._process_name == proc]._path.tolist()
+
 
 class Reader:
 

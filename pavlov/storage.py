@@ -64,6 +64,9 @@ def load_latest(run=-1, device='cpu'):
     path = files.path(run, LATEST)
     return load(path, device)
 
+def timestamp_latest(run=-1):
+    return pd.Timestamp(files.path(run, LATEST).stat().st_mtime, unit='s')
+
 def throttled_latest(run, objs, throttle):
     if files.path(run, LATEST).exists():
         last = pd.to_datetime(files.info(run, LATEST)['_created'])
