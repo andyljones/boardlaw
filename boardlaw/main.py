@@ -116,12 +116,12 @@ def run():
 
     worlds = worldfunc(n_envs)
     agent = agentfunc()
-    opt = torch.optim.Adam(agent.evaluator.parameters(), lr=3e-4, amsgrad=True)
-    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e, 1))
+    opt = torch.optim.Adam(agent.evaluator.parameters(), lr=3e-3, amsgrad=True)
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e, 1000))
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('more-sims', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('more-sims high-lr', boardsize=worlds.boardsize, parent=parent)
     with logs.to_run(run), stats.to_run(run), \
             arena.monitor(run, worldfunc, agentfunc):
         buffer = []
