@@ -64,5 +64,14 @@ def suggest():
     viable = o.query('gpu_name == "RTX 2080 Ti" & num_gpus == 1')
     return viable.sort_values('dph_total').iloc[0]
 
-def launch():
+def launch(label):
     s = suggest()
+    resp = invoke(f'create instance {s.id}'
+        '--image andyljones/boardlaw'
+        f'--label {label}'
+        '--raw') 
+    assert resp == ''
+
+def status():
+    js = json.loads(invoke('show instances --raw').decode())
+    return pd.DataFrame.from_dict(js)
