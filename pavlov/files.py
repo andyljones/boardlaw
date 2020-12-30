@@ -1,3 +1,4 @@
+import pandas as pd
 import re
 import multiprocessing 
 import threading
@@ -72,11 +73,16 @@ def size(run):
     b = sum(path(run, filename).stat().st_size for filename in files(run))
     return b/1e6
 
-
 def origin(filename):
     if isinstance(filename, Path):
         filename = filename.name
     return re.fullmatch(FILENAME_ORIGIN, filename).group('origin')
+
+def pandas(run=-1):
+    df = pd.DataFrame.from_dict(files(run), orient='index')
+    df['_created'] = pd.to_datetime(df['_created'])
+    df['_origin'] = df.index.map(origin)
+    return df.sort_index().sort_index(axis=1)
 
 @tests.mock_dir
 def test_new_file():

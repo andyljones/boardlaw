@@ -6,7 +6,7 @@ from .. import registry
 def final_row(reader, rule):
     # Offset slightly into the past, else by the time the resample actually happens you're 
     # left with an almost-empty last interval.
-    offset = f'{((tests.time() - 5) % 60)}s'
+    offset = f'{((tests.time() - 5) % 60):.0f}s'
     df = reader.pandas()
     df.index = df.index + reader._created
     resampled = reader.resampler(**df, rule=rule, offset=offset)
