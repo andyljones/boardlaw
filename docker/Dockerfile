@@ -107,6 +107,11 @@ RUN curl https://raw.githubusercontent.com/toobaz/ipynb_output_filter/master/ipy
     git config --global filter.ipynb_output_filter.clean "python /bin/ipynb_output_filter.py" && \
     git config --global filter.ipynb_output_filter.smudge cat
 
+# Install the vast CLI
+RUN cd /usr/bin/ && \
+    wget https://raw.githubusercontent.com/vast-ai/vast-python/master/vast.py -O vast && \
+    chmod +x vast
+
 # Set up the entrypoint script
 ADD dev.sh /usr/bin/
 
