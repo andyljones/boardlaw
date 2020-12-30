@@ -2,7 +2,7 @@ import time
 import numpy as np
 import torch
 from rebar import arrdict
-from pavlov import stats, logs, runs, storage
+from pavlov import stats, logs, runs, storage, git
 from . import hex, mcts, networks, learning, validation, analysis, arena
 from torch.nn import functional as F
 from logging import getLogger
@@ -122,6 +122,9 @@ def run():
     parent = warm_start(agent, opt, '')
 
     run = runs.new_run('more-sims high-lr', boardsize=worlds.boardsize, parent=parent)
+
+    git.tag(run)
+
     with logs.to_run(run), stats.to_run(run), \
             arena.monitor(run, worldfunc, agentfunc):
         buffer = []
