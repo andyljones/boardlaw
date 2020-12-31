@@ -11,6 +11,8 @@ from pathlib import Path
 import aljpy
 
 DISK = 10
+MAX_DPH = .5
+MAX_INSTANCES = 3
 
 def set_key():
     target = Path('~/.vast_api_key').expanduser()
@@ -67,7 +69,8 @@ def suggest():
 
 def launch():
     s = suggest()
-    assert s.dph_total < .5
+    assert s.dph_total < MAX_DPH
+    assert len(status()) < MAX_INSTANCES
     label = aljpy.humanhash(n=2)
     resp = invoke(f'create instance {s.id}'
         ' --image andyljones/boardlaw'
@@ -76,7 +79,10 @@ def launch():
         ' --raw') 
     resp = json.loads(resp)
     assert resp['success']
-    return resp
+
+def destroy(label):
+    resp = invoke(f'destroy instance {label} --raw')
+    assert resp.decode().startswith('destroying instance')
 
 def status():
     js = json.loads(invoke('show instances --raw').decode())
