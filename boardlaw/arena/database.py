@@ -18,8 +18,9 @@ def save(run, result):
     if isinstance(result, list):
         for r in result:
             save(run, r)
+        return
 
-    json.assure(run, PREFIX, {})
+    json.assure(run, PREFIX, [])
     with json.update(run, PREFIX) as l:
         d = _to_dict(l)
         k = tuple(result.names)

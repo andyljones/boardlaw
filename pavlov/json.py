@@ -8,6 +8,7 @@ def path(run, prefix):
 
 @contextmanager
 def lock(run, prefix):
+    #TODO: This hangs sometimes because it seems to be... not actually recurrent?
     lockpath = path(run, prefix).with_suffix('.json.lock')
     with RLock(lockpath):
         yield
@@ -19,16 +20,16 @@ def new(run, prefix):
 @contextmanager
 def update(run, prefix):
     with lock(run, prefix):
-        contents = path(run, prefix).read_text()
-        yield json.loads(contents)
-        path.write_text(json.dumps(contents))
+        p = path(run, prefix)
+        contents = json.loads(p.read_text())
+        yield contents
+        p.write_text(json.dumps(contents))
 
 def assure(run, prefix, default):
-    #TODO: This hangs because it seems to be... not actually recurrent?
     with lock(run, prefix):
         p = path(run, prefix)
         if not p.exists():
-            new(run, prefix)
+            files.new_file(run, f'{prefix}.json')
             p.write_text(json.dumps(default))
 
 def read(run, prefix, default=None):
