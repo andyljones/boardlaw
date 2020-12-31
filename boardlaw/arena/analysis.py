@@ -27,7 +27,7 @@ def mask(games, wins, filter):
 
 def elos(run, target=None, filter='.*'):
     run = runs.resolve(run)
-    games, wins = database.symmetric_pandas(run)
+    games, wins = database.symmetric(run)
     games, wins = mask(games, wins, filter)
 
     soln = activelo.solve(games.values, wins.values)

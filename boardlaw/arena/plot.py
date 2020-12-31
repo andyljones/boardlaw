@@ -73,7 +73,7 @@ def nontransitivities(run_name=-1):
 
 def errors(run=-1, filter='.*'):
     run = runs.resolve(run)
-    games, wins = database.symmetric_pandas(run)
+    games, wins = database.symmetric(run)
     games, wins = analysis.mask(games, wins, filter)
     soln = activelo.solve(games.values, wins.values)
 
@@ -115,7 +115,7 @@ def errors(run=-1, filter='.*'):
 
     # Bottom left
     ax = plt.subplot(gs[2, 0])
-    im = ax.imshow(actual - expected, vmin=-1, vmax=+1, aspect=1, cmap='RdBu')
+    im = ax.imshow(actual - expected, vmin=-1, vmax=+1, aspect=1, cmap=cmap)
     ax.set_title('error')
 
     ax = plt.subplot(gs[3, 0])

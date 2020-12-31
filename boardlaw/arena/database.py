@@ -1,5 +1,5 @@
 import pandas as pd
-from pavlov import json
+from pavlov import json, runs
 from pathlib import Path
 import json as json_
 
@@ -35,7 +35,7 @@ def save(run, result):
 
 def pandas(run):
     # Need to come up with a better way of handling 'special' runs
-    if run.startswith('mohex'):
+    if isinstance(run, str) and run.startswith('mohex'):
         contents = json_.loads(Path(f'output/arena/{run}.json').read_text())
     else:
         contents = json.read(run, PREFIX, [])
