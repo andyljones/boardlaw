@@ -8,8 +8,9 @@ import pandas as pd
 import json
 from subprocess import check_output
 from pathlib import Path
+import aljpy
 
-STORAGE = 10
+DISK = 10
 
 def set_key():
     target = Path('~/.vast_api_key').expanduser()
@@ -56,7 +57,7 @@ def offers():
     total_flops:            float     total TFLOPs from all GPUs
     verified:               bool      is the machine verified
     """
-    js = json.loads(invoke(f'search offers --raw --storage {STORAGE}').decode())
+    js = json.loads(invoke(f'search offers --raw --storage {DISK}').decode())
     return pd.DataFrame.from_dict(js)
 
 def suggest():
@@ -64,13 +65,18 @@ def suggest():
     viable = o.query('gpu_name == "RTX 2080 Ti" & num_gpus == 1')
     return viable.sort_values('dph_total').iloc[0]
 
-def launch(label):
+def launch():
     s = suggest()
+    assert s.dph_total < .5
+    label = aljpy.humanhash(n=2)
     resp = invoke(f'create instance {s.id}'
-        '--image andyljones/boardlaw'
-        f'--label {label}'
-        '--raw') 
-    assert resp == ''
+        ' --image andyljones/boardlaw'
+        f' --disk {DISK}'
+        f' --label {label}'
+        ' --raw') 
+    resp = json.loads(resp)
+    assert resp['success']
+    return resp
 
 def status():
     js = json.loads(invoke('show instances --raw').decode())
