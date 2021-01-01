@@ -25,14 +25,14 @@ def root():
         root.mkdir(exist_ok=True, parents=True)
     return root
 
-def dir(run, res=True):
+def path(run, res=True):
     if res:
         run = resolve(run)
     return root() / run
 
 def delete(run):
     assert run != ''
-    shutil.rmtree(dir(run))
+    shutil.rmtree(path(run))
 
 @contextmanager
 def lock(run, res=True):
@@ -43,16 +43,16 @@ def lock(run, res=True):
     # about that file.
     # 
     # Better to just lock on a purpose-made lock file.
-    path = dir(run, res)
-    if not path.exists():
+    p = path(run, res)
+    if not p.exists():
         raise ValueError('Can\'t take lock as run doesn\'t exist')
-    with RLock(path / '_lock'):
+    with RLock(p / '_lock'):
         yield
 
 ### Info file stuff
 
 def infopath(run, res=True):
-    return dir(run, res) / '_info.json'
+    return path(run, res) / '_info.json'
 
 def info(run, res=True):
     with lock(run, res):
@@ -147,6 +147,13 @@ def resolve(run):
         else:
             recent = ', '.join(f'"{h}"' for h in hits[-3:])
             raise ValueError(f'Found {len(hits)} runs that finished with "{run}", such as: {recent}')
+
+def resuffix(old, new):
+    oldpath = path(old)
+    date, time, salt = oldpath.name.split(' ')[:3]
+    newpath = oldpath.parent / f'{date} {time} {salt} {new}'
+    oldpath.rename(newpath)
+    
 
 ### Tests
 

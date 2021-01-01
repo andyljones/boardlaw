@@ -100,11 +100,14 @@ def exists(run, channel):
 def array(run, channel):
     return reader(run, channel).array()
 
-def pandas(run, channel, rule='60s', **kwargs):
+def pandas(run, channel, field=None, rule='60s', **kwargs):
     r = reader(run, channel)
     if not r.ready():
         raise ValueError(f'Reader for "{run}" "{channel}" is not ready')
-    return r.resample(rule, **kwargs)
+    df = r.resample(rule, **kwargs)
+    if field is not None:
+        df = df[field]
+    return df
 
 def compare(rs, *args, **kwargs):
     return pd.concat({runs.resolve(r): pandas(r, *args, **kwargs) for r in rs}, 1)

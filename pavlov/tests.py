@@ -158,7 +158,7 @@ def convert(run):
 
 def convert_all():
     from pavlov import runs
-    for i in runs.pandas().query('_created < "2020-12-27 18:49:04+00:00"').index:
+    for i in runs.pandas().query('_created <= "2020-12-27 18:49:04+00:00"').index:
         runs.delete(i)
 
     for p in Path('output/traces').iterdir():

@@ -33,13 +33,13 @@ def new_file(run, pattern, **kwargs):
             '_thread_id': str(thread.ident),
             '_thread_name': str(thread.name),
             **kwargs}
-    return runs.dir(run) / filename
+    return runs.path(run) / filename
 
 def info(run, filename):
     return runs.info(run)['_files'][filename]
 
 def path(run, filename):
-    return runs.dir(run) / filename
+    return runs.path(run) / filename
 
 def exists(run, filename):
     return path(run, filename).exists()
