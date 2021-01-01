@@ -78,15 +78,12 @@ def ssh_command(label):
     s = status(label)
     print(f'SSH_AUTH_SOCK="" ssh {s.ssh_host} -p {s.ssh_port} -o StrictHostKeyChecking=no -i /root/.ssh/vast_rsa')
 
-
-
 def setup(label):
     conn = connection(label)
     conn.run('touch /root/.no_auto_tmux')
     conn.run('rm /etc/banner')
     conn.run('echo PermitUserEnvironment yes >> /etc/ssh/sshd_config')
     conn.run(r"""sed -n "s/PATH='\(.*\)'/PATH=\1:\$PATH/p" ~/.bashrc >> ~/.ssh/environment""")
-
     
 def deploy(label):
     conn = connection(label)

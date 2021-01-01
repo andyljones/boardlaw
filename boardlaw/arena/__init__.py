@@ -49,7 +49,7 @@ def latest_agent(run_name, agentfunc, device='cpu', **kwargs):
     except FileNotFoundError:
         return {}
 
-def snapshot_arena(run, worldfunc, agentfunc, device='cuda:1'):
+def snapshot_arena(run, worldfunc, agentfunc, device='cuda'):
     run = runs.resolve(run)
     with logs.to_run(run), stats.to_run(run):
         worlds = worldfunc(device=device, n_envs=256)
@@ -67,7 +67,7 @@ def snapshot_arena(run, worldfunc, agentfunc, device='cuda:1'):
                 trials.snapshot_trial(run, worlds, agents)
                 i += 1
 
-def mohex_arena(run, worldfunc, agentfunc, device='cuda:1'):
+def mohex_arena(run, worldfunc, agentfunc, device='cuda'):
     run = runs.resolve(run)
     log.info(f'Running arena for "{run}"')
     with logs.to_run(run), stats.to_run(run):
@@ -109,7 +109,7 @@ def monitor(*args, **kwargs):
             log.info('Abruptly terminating arena monitor; it should have shut down naturally!')
             p.terminate()
 
-def fill_matchups(run=-1, device='cuda:1', count=1):
+def fill_matchups(run=-1, device='cuda', count=1):
     from boardlaw.main import worldfunc, agentfunc
     from boardlaw.arena import evaluator, snapshot_agents, database, log
 

@@ -108,13 +108,13 @@ def warm_start(agent, opt, parent):
         opt.load_state_dict(sd['opt'])
     return parent
 
-def run():
+def run(device='cuda'):
     buffer_length = 64 
     batch_size = 128*1024
     n_envs = 8*1024
     buffer_inc = batch_size//n_envs
 
-    worlds = worldfunc(n_envs)
+    worlds = worldfunc(n_envs, device=device)
     agent = agentfunc()
     opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-2, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/1000, 1))
@@ -126,7 +126,7 @@ def run():
     git.tag(run)
 
     with logs.to_run(run), stats.to_run(run), \
-            arena.monitor(run, worldfunc, agentfunc):
+            arena.monitor(run, worldfunc, agentfunc, device=worlds.device):
         buffer = []
         idxs = cycle(learning.batch_indices(buffer_length, n_envs, batch_size, worlds.device))
         while True:
