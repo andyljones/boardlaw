@@ -1,5 +1,8 @@
 from . import runs
-from git import Repo
+from git import Repo, exc
+from logging import getLogger
+
+log = getLogger(__name__)
 
 def tag_working_dir(tagname):
     #TODO: This doesn't handle deleted files properly right now; when I check the 
@@ -24,10 +27,16 @@ def tag_working_dir(tagname):
     r.git.checkout('_pavlov', '--', '.')
     r.git.branch('-D', '_pavlov')
 
-def tag(run):
+def tag(run, error=True):
     run = runs.resolve(run)
     #TODO: Sanitise this properly
     tagname = run.replace(' ', '_')
-    tag_working_dir(tagname)
-    with runs.update(run) as i:
-        i['tag'] = tagname
+    try:
+        tag_working_dir(tagname)
+        with runs.update(run) as i:
+            i['tag'] = tagname
+    except exc.InvalidGitRepositoryError:
+        if error:
+            raise
+        else:
+            log.warn('No git repo found; skipping tagging')

@@ -1,5 +1,9 @@
 #!/opt/conda/bin/python
 from pavlov import runs 
-
+import git
+ 
+commit = str(git.Repo().head.commit)[:6]
+print(f'[[Boardlaw#Ref]] `{commit}`:')
 run = runs.resolve(-1)
 print(f'[[Boardlaw#Runs]] `{run}`:')
+

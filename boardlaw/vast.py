@@ -19,15 +19,15 @@ MAX_INSTANCES = 3
 def set_key():
     target = Path('~/.vast_api_key').expanduser()
     if not target.exists():
-        key = json.loads(Path('credentials.yml').read_text())['vast']
+        key = json.loads(Path('credentials.json').read_text())['vast']
         target.write_text(key)
 
 def invoke(command):
     set_key()
-    return check_output(f'vast {command}', shell=True)
+    return check_output(f'vast {command}', shell=True).decode()
 
 def offers():
-    js = json.loads(invoke(f'search offers --raw --storage {DISK}').decode())
+    js = json.loads(invoke(f'search offers --raw --storage {DISK}'))
     return pd.DataFrame.from_dict(js)
 
 def suggest():
@@ -42,9 +42,13 @@ def launch():
     label = aljpy.humanhash(n=2)
     resp = invoke(f'create instance {s.id}'
         ' --image andyljones/boardlaw'
+        ' --onstart-cmd "tini -- dev.sh"'
         f' --disk {DISK}'
         f' --label {label}'
         ' --raw') 
+    # Need to slice off the first chars of 'Started.', which are for some reason
+    # printed along with the json. 
+    # resp = resp[8:]
     resp = json.loads(resp)
     assert resp['success']
     return label
@@ -52,7 +56,7 @@ def launch():
 def destroy(label):
     id = status(label).id
     resp = invoke(f'destroy instance {id} --raw')
-    assert resp.decode().startswith('destroying instance')
+    assert resp.startswith('destroying instance')
 
 def status(label=None):
     if label:
@@ -61,7 +65,7 @@ def status(label=None):
             raise ValueError('No instances')
         else:
             return s.loc[label]
-    js = json.loads(invoke('show instances --raw').decode())
+    js = json.loads(invoke('show instances --raw'))
     if js:
         return pd.DataFrame.from_dict(js).set_index('label')
 
@@ -77,21 +81,39 @@ def connection(label):
     
 def ssh_command(label):
     s = status(label)
-    print(f'SSH_AUTH_SOCK="" ssh {s.ssh_host} -p {s.ssh_port} -o StrictHostKeyChecking=no -i /root/.ssh/vast_rsa')
+    print(f'SSH_AUTH_SOCK="" ssh root@{s.ssh_host} -p {s.ssh_port} -o StrictHostKeyChecking=no -i /root/.ssh/vast_rsa')
 
 def setup(label):
     conn = connection(label)
     conn.run('touch /root/.no_auto_tmux')
     conn.run('rm /etc/banner')
-    conn.run('echo PermitUserEnvironment yes >> /etc/ssh/sshd_config')
-    conn.run(r"""sed -n "s/PATH='\(.*\)'/PATH=\1:\$PATH/p" ~/.bashrc >> ~/.ssh/environment""")
     
 def deploy(label):
     conn = connection(label)
-    resp = rsync(conn, 
+    rsync(conn, 
         source='.',
         target='/code',
         exclude=('.*', 'output', '**/__pycache__', '*.egg-info'),
+        include=('output/arena/mohex-*',),
         strict_host_keys=False)
+
+def install(label):
+    conn = connection(label)
     conn.run('pip install -e /code/rebar')
     conn.run('pip install -e /code/activelo')
+
+def run(label):
+    conn = connection(label)
+    conn.run('cd /code && python -c "from boardlaw.main import *; run()"')
+
+def fetch(label):
+    # TODO
+    pass
+
+def demo():
+    label = launch()
+
+    setup(label)
+    deploy(label)
+    install(label)
+    run(label)

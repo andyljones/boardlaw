@@ -123,7 +123,7 @@ def run(device='cuda'):
 
     run = runs.new_run('variability', boardsize=worlds.boardsize, parent=parent)
 
-    git.tag(run)
+    git.tag(run, error=False)
 
     with logs.to_run(run), stats.to_run(run), \
             arena.monitor(run, worldfunc, agentfunc, device=worlds.device):
