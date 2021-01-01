@@ -9,6 +9,8 @@ import json
 from subprocess import check_output
 from pathlib import Path
 import aljpy
+from fabric import Connection
+from patchwork.transfers import rsync
 
 DISK = 10
 MAX_DPH = .5
@@ -25,40 +27,6 @@ def invoke(command):
     return check_output(f'vast {command}', shell=True)
 
 def offers():
-    """
-    compute_cap:            int       cuda compute capability*100  (ie:  650 for 6.5, 700 for 7.0)
-    cpu_cores:              int       # virtual cpus
-    cpu_cores_effective:    float     # virtual cpus you get
-    cpu_ram:                float     system RAM in gigabytes
-    cuda_vers:              float     cuda version
-    disk_bw:                float     disk read bandwidth, in MB/s
-    disk_space:             float     disk storage space, in GB
-    dlperf:                 float     DL-perf score  (see FAQ for explanation)
-    dlperf_usd:             float     DL-perf/$
-    dph:                    float     $/hour rental cost
-    duration:               float     max rental duration in days
-    external:               bool      show external offers
-    flops_usd:              float     TFLOPs/$
-    gpu_mem_bw:             float     GPU memory bandwidth in GB/s
-    gpu_ram:                float     GPU RAM in GB
-    gpu_frac:               float     Ratio of GPUs in the offer to gpus in the system
-    has_avx:                bool      CPU supports AVX instruction set.
-    id:                     int       instance unique ID
-    inet_down:              float     internet download speed in Mb/s
-    inet_down_cost:         float     internet download bandwidth cost in $/GB
-    inet_up:                float     internet upload speed in Mb/s
-    inet_up_cost:           float     internet upload bandwidth cost in $/GB
-    min_bid:                float     current minimum bid price in $/hr for interruptible
-    num_gpus:               int       # of GPUs
-    pci_gen:                float     PCIE generation
-    pcie_bw:                float     PCIE bandwidth (CPU to GPU)
-    reliability:            float     machine reliability score (see FAQ for explanation)
-    rentable:               bool      is the instance currently rentable
-    rented:                 bool      is the instance currently rented
-    storage_cost:           float     storage cost in $/GB/month
-    total_flops:            float     total TFLOPs from all GPUs
-    verified:               bool      is the machine verified
-    """
     js = json.loads(invoke(f'search offers --raw --storage {DISK}').decode())
     return pd.DataFrame.from_dict(js)
 
@@ -79,11 +47,53 @@ def launch():
         ' --raw') 
     resp = json.loads(resp)
     assert resp['success']
+    return label
 
 def destroy(label):
-    resp = invoke(f'destroy instance {label} --raw')
+    id = status(label).id
+    resp = invoke(f'destroy instance {id} --raw')
     assert resp.decode().startswith('destroying instance')
 
-def status():
+def status(label=None):
+    if label:
+        s = status()
+        if len(s): 
+            return s.set_index('label').loc[label]
+        else:
+            raise KeyError(f'No instance with label "{label}"')
     js = json.loads(invoke('show instances --raw').decode())
     return pd.DataFrame.from_dict(js)
+
+def connection(label):
+    # Get the vast key into place: `docker cp ~/.ssh/vast_rsa boardlaw:/root/.ssh/`
+    # Would be better to use SSH agent forwarding, if vscode's worked reliably :(
+    s = status(label)
+    return Connection(
+        host=s.ssh_host, 
+        user='root', 
+        port=int(s.ssh_port), 
+        connect_kwargs={'key_filename': ['/root/.ssh/vast_rsa']})
+    
+def ssh_command(label):
+    s = status(label)
+    print(f'SSH_AUTH_SOCK="" ssh {s.ssh_host} -p {s.ssh_port} -o StrictHostKeyChecking=no -i /root/.ssh/vast_rsa')
+
+
+
+def setup(label):
+    conn = connection(label)
+    conn.run('touch /root/.no_auto_tmux')
+    conn.run('rm /etc/banner')
+    conn.run('echo PermitUserEnvironment yes >> /etc/ssh/sshd_config')
+    conn.run(r"""sed -n "s/PATH='\(.*\)'/PATH=\1:\$PATH/p" ~/.bashrc >> ~/.ssh/environment""")
+
+    
+def deploy(label):
+    conn = connection(label)
+    resp = rsync(conn, 
+        source='.',
+        target='/code',
+        exclude=('.*', 'output', '**/__pycache__', '*.egg-info'),
+        strict_host_keys=False)
+    conn.run('pip install -e /code/rebar')
+    conn.run('pip install -e /code/activelo')

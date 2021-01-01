@@ -7,6 +7,8 @@ RUN apt-get update && \
         curl ca-certificates bzip2 procps \
         # Needed for profiling
         nsight-compute-2020.2.1 nsight-systems-2020.3.4
+        # Needed for remote work
+        rsync
 
 # Set up conda
 RUN curl -o ~/miniconda.sh -O https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
@@ -39,7 +41,7 @@ RUN git config --global user.name "Andrew Jones" && \
 # Install Jupyter 7.5 because 7.6.1 has a bunch of lag with autoreload 
 RUN pip install  \
         # Core reqs
-        numpy torch torchvision tqdm matplotlib beautifulsoup4 psutil ninja pytest b2sdk sympy portalocker \ 
+        numpy torch torchvision tqdm matplotlib beautifulsoup4 psutil ninja pytest b2sdk sympy portalocker fabric \ 
         # Things I find useful
         pandas jupyter seaborn bokeh setproctitle wurlitzer ipython av flake8 gitpython networkx \ 
         # Docs
