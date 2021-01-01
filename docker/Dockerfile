@@ -18,8 +18,8 @@ RUN curl -o ~/miniconda.sh -O https://repo.anaconda.com/miniconda/Miniconda3-lat
 ENV PATH /opt/conda/bin:/opt/nvidia/nsight-compute/2020.2.1/:/opt/nvidia/nsight-systems/2020.3.4/bin/:$PATH
 
 # Set up SSH server
-ADD boardlaw_rsa.pub ~/.ssh/boardlaw_rsa.pub
-RUN mkdir ~/.ssh && echo ~/.ssh/boardlaw_rsa.pub > ~/.ssh/authorized_keys && \
+ADD boardlaw_rsa.pub /root/.ssh/boardlaw_rsa.pub
+RUN mkdir -p ~/.ssh && cat ~/.ssh/boardlaw_rsa.pub > ~/.ssh/authorized_keys && \
     echo PermitUserEnvironment yes >> /etc/ssh/sshd_config
 EXPOSE 22
 
@@ -106,6 +106,9 @@ RUN DEBIAN_FRONTEND=noninteractive TZ=Europe/London \
     cmake ../ && \
     make -j4 && \
     ln -s /mohex/build/src/mohex/mohex /bin/mohex
+
+# Something upstream of here breaks Jupyter. 
+RUN pip install --upgrade ipython
 
 # Only commit the input cells of notebooks
 # https://stackoverflow.com/questions/18734739/using-ipython-notebooks-under-version-control

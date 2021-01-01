@@ -38,7 +38,7 @@ def suggest():
 def launch():
     s = suggest()
     assert s.dph_total < MAX_DPH
-    assert len(status()) < MAX_INSTANCES
+    assert status() is None or len(status()) < MAX_INSTANCES
     label = aljpy.humanhash(n=2)
     resp = invoke(f'create instance {s.id}'
         ' --image andyljones/boardlaw'
@@ -57,12 +57,13 @@ def destroy(label):
 def status(label=None):
     if label:
         s = status()
-        if len(s): 
-            return s.set_index('label').loc[label]
+        if s is None: 
+            raise ValueError('No instances')
         else:
-            raise KeyError(f'No instance with label "{label}"')
+            return s.loc[label]
     js = json.loads(invoke('show instances --raw').decode())
-    return pd.DataFrame.from_dict(js)
+    if js:
+        return pd.DataFrame.from_dict(js).set_index('label')
 
 def connection(label):
     # Get the vast key into place: `docker cp ~/.ssh/boardlaw_rsa boardlaw:/root/.ssh/`

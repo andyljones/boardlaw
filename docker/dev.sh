@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "Setting up SSH server"
-env | grep _ >> /etc/environment
+env | egrep -v "^(HOME=|USER=|MAIL=|LC_ALL=|LS_COLORS=|LANG=|HOSTNAME=|PWD=|TERM=|SHLVL=|LANGUAGE=|_=)" >> /etc/environment
 service ssh start
 
 echo "Launching MPS"
