@@ -1,5 +1,9 @@
 #!/bin/bash
 
+echo "Setting up SSH server"
+env | grep _ >> /etc/environment
+service ssh start
+
 echo "Launching MPS"
 nvidia-cuda-mps-control -d
 

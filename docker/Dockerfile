@@ -6,9 +6,9 @@ RUN apt-get update && \
         # Needed for conda
         curl ca-certificates bzip2 procps \
         # Needed for profiling
-        nsight-compute-2020.2.1 nsight-systems-2020.3.4
-        # Needed for remote work
-        rsync
+        nsight-compute-2020.2.1 nsight-systems-2020.3.4 \
+        # Needed for vast work
+        openssh-server rsync
 
 # Set up conda
 RUN curl -o ~/miniconda.sh -O https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
@@ -16,6 +16,12 @@ RUN curl -o ~/miniconda.sh -O https://repo.anaconda.com/miniconda/Miniconda3-lat
     ~/miniconda.sh -b -p/opt/conda && \
     rm ~/miniconda.sh 
 ENV PATH /opt/conda/bin:/opt/nvidia/nsight-compute/2020.2.1/:/opt/nvidia/nsight-systems/2020.3.4/bin/:$PATH
+
+# Set up SSH server
+ADD boardlaw_rsa.pub ~/.ssh/boardlaw_rsa.pub
+RUN mkdir ~/.ssh && echo ~/.ssh/boardlaw_rsa.pub > ~/.ssh/authorized_keys && \
+    echo PermitUserEnvironment yes >> /etc/ssh/sshd_config
+EXPOSE 22
 
 WORKDIR /code
 

@@ -65,7 +65,7 @@ def status(label=None):
     return pd.DataFrame.from_dict(js)
 
 def connection(label):
-    # Get the vast key into place: `docker cp ~/.ssh/vast_rsa boardlaw:/root/.ssh/`
+    # Get the vast key into place: `docker cp ~/.ssh/boardlaw_rsa boardlaw:/root/.ssh/`
     # Would be better to use SSH agent forwarding, if vscode's worked reliably :(
     s = status(label)
     return Connection(
