@@ -18,7 +18,7 @@ def tag_working_dir(tagname):
 
     r.git.add('*')
     r.git.checkout('-b', '_pavlov')
-    r.git.commit('-a', '-m', 'pavlov checkpoint')
+    r.git.commit('-a', '-m', '"pavlov checkpoint"', '--allow-empty')
     r.git.tag(f'pavlov_{tagname}')
     r.git.checkout(branch)
     r.git.checkout('_pavlov', '--', '.')

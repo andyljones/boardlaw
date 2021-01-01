@@ -98,7 +98,7 @@ def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
     network = networks.Network(worlds.obs_space, worlds.action_space).to(worlds.device)
     # network.trace(worlds)
-    return mcts.MCTSAgent(network, n_nodes=32)
+    return mcts.MCTSAgent(network, n_nodes=64)
 
 def warm_start(agent, opt, parent):
     if parent:
