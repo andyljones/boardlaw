@@ -61,7 +61,7 @@ class Streamed(nn.Module):
         return y
 
 @profiling.profilable
-def benchmark(cls, features=256, layers=8, models=8, envs=8192, T=64, device='cuda'):
+def benchmark(cls, features=256, layers=8, models=8, envs=64*1024, T=64, device='cuda'):
     assert envs % models == 0
 
     x = torch.zeros((envs, features), device=device)

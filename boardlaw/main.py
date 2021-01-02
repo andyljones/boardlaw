@@ -109,6 +109,8 @@ def warm_start(agent, opt, parent):
         opt.load_state_dict(sd['opt'])
     return parent
 
+
+
 def run(device='cuda'):
     buffer_length = 32 
     batch_size = 64*1024
@@ -119,6 +121,8 @@ def run(device='cuda'):
     agent = agentfunc(device)
     opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-2, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
+
+    snapshots = []
 
     parent = warm_start(agent, opt, '')
 
