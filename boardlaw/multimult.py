@@ -1,45 +1,76 @@
+"""I want to do many small matrix multiplications as fast as possible. Below are some possible approaches, 
+and a benchmark function. On my RTX 2080 Ti, I get 
+```
+ideal          8ms
+naive        191ms
+streamed     188ms
+broadcast    551ms
+```
+
+* The `ideal` approach is the hypothetical upper bound, if there were only one set of weights being used rather than many.
+* The `naive` approach does each multiplication separately, one after another
+* The `streamed` approach tries to use CUDA streams to do them all in parallel
+* The `broadcast` approach expands the weights to match the batchsize, then uses a batched matrix mult.
+
+I've two questions:
+* Why is the `streamed` approach no faster than `naive`?
+* Are there any other approaches that get closer to the `ideal` performance?
+"""
 import pandas as pd
 import torch
 import time
+from rebar import profiling as prof
+from . import cuda
 
-def ideal(X, W, idxs, streams, repeats):
+@prof.nvtx
+def ideal(X, W, slices, streams, repeats):
     for _ in range(repeats):
         X = X @ W[0]
 
-def naive(X, W, idxs, streams, repeats):
+@prof.nvtx
+def naive(X, W, slices, streams, repeats):
     for i, w in enumerate(W):
         for _ in range(repeats):
-            X[idxs == i] = X[idxs == i] @ w
+            X[slices[i]] = X[slices[i]] @ w
     
-def streamed(X, W, idxs, streams, repeats):
+@prof.nvtx
+def streamed(X, W, slices, streams, repeats):
     for i, (w, s) in enumerate(zip(W, streams)):
         with torch.cuda.stream(s):
             for _ in range(repeats):
-                X[idxs == i] = X[idxs == i] @ w
+                X[slices[i]] = X[slices[i]] @ w
 
-def broadcast(X, W, idxs, streams, repeats):
-    for _ in range(repeats):
-        X[:] = torch.bmm(X[:, None, :], W[idxs]).squeeze(1)
-
-def benchmark(batchsize=64*1024, n_models=32, dim=128, n_repeats=32):
-    assert batchsize % n_models == 0
+@prof.profilable
+def benchmark(batchsize=64*1024, n_weights=16, dim=256, n_repeats=16):
+    assert batchsize % n_weights == 0
     X = torch.zeros((batchsize, dim)).cuda()
-    W = torch.zeros((n_models, dim, dim)).cuda()
+    W = torch.zeros((n_weights, dim, dim)).cuda()
 
-    streams = [torch.cuda.Stream() for _ in range(n_models)]
-    idxs = torch.arange(batchsize).cuda() % n_models
+    streams = [torch.cuda.Stream() for _ in range(n_weights)]
+    chunk = batchsize // n_weights
+    slices = [slice(i, i+chunk) for i in range(0, batchsize, chunk)]
+
+    cstreamed = prof.nvtx(cuda.load(__package__).mul)
 
     times = {}
-    for f in [ideal, naive, streamed, broadcast]:    
-        torch.cuda.synchronize()
-        start = time.time()
+    for f in [ideal, naive, streamed, cstreamed]:
+        for _ in range(10):
+            torch.cuda.synchronize()
+            start = time.time()
 
-        times[f.__name__] = f(X, W, idxs, streams, n_repeats)
+            if f == cstreamed:
+                f(X, W, [s.start for s in slices], [s.stop for s in slices], n_repeats)
+            else:
+                f(X, W, slices, streams, n_repeats)
 
-        torch.cuda.synchronize()
-        end = time.time()
+            torch.cuda.synchronize()
+            end = time.time()
 
-        times[f.__name__] = end - start
+            times.setdefault(f.__name__, []).append(end - start)
 
-    times = pd.Series(times).mul(1000)
-    return times.round(2)
+    times = pd.DataFrame(times).median().mul(1000)
+    print(times.map(lambda t: f'{t:.0f}ms'))
+
+if __name__ == '__main__':
+    with torch.autograd.profiler.emit_nvtx():
+        benchmark()
