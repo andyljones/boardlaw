@@ -15,14 +15,19 @@ def rollout(worlds, agents, n_steps=None, n_trajs=None, n_reps=None):
     steps, trajs = 0, 0
     reps = torch.zeros(worlds.n_envs, device=worlds.device)
     while True:
-        actions = torch.full((worlds.n_envs,), -1, device=worlds.device)
+        outputs = []
         for i, agent in enumerate(agents):
             mask = worlds.seats == i
             if mask.any():
-                actions[mask] = agent(worlds[mask]).actions
-        worlds, transitions = worlds.step(actions)
+                outputs.append([mask, agent(worlds[mask])])
+
+        decisions = arrdict.cat([d for m, d in outputs])
+        for m, d in outputs:
+            decisions[m] = d
+        
+        worlds, transitions = worlds.step(decisions.actions)
         trace.append(arrdict.arrdict(
-            actions=actions,
+            decisions=decisions,
             transitions=transitions,
             worlds=worlds))
         steps += 1

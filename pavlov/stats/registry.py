@@ -22,6 +22,7 @@ FILENAME = r'(?P<prefix>.*)\.(?P<idx>.*)\.(?P<ext>.*)'
 
 @contextmanager
 def to_run(run):
+    run = runs.resolve(run)
     try:
         if hasattr(T, 'run'):
             raise ValueError('Run already set')

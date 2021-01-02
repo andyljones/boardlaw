@@ -74,7 +74,8 @@ def optimize(network, opt, batch):
         stats.mean('loss.value', value_loss)
         stats.mean('loss.policy', policy_loss)
         stats.mean('progress.resid-var', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
-        stats.mean('progress.kl-div', -(d0.logits - d.logits).where(w.valid, zeros).sum(-1).div(w.valid.float().sum(-1)).mean())
+        stats.mean('progress.target-kl-div', -(d0.logits - d.logits).where(w.valid, zeros).sum(-1).div(w.valid.float().sum(-1)).mean())
+        stats.mean('progress.prior-kl-div', -(d0.prior - d.logits).mul(d0.prior.exp()).where(w.valid, zeros).sum(-1))
 
         stats.mean('rel-entropy.policy', *rel_entropy(d.logits, w.valid)) 
         stats.mean('rel-entropy.targets', *rel_entropy(d0.logits, w.valid))
@@ -117,11 +118,11 @@ def run(device='cuda'):
     worlds = worldfunc(n_envs, device=device)
     agent = agentfunc(device)
     opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-2, amsgrad=True)
-    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/1000, 1))
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('variability', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('fast-anneal', boardsize=worlds.boardsize, parent=parent)
 
     git.tag(run, error=False)
 

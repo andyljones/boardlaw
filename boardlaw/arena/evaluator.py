@@ -44,7 +44,7 @@ def evaluate(worlds, agents):
         for i, id in enumerate(agents):
             mask = (matchup_idxs[envs, worlds.seats.long()] == i) & ~terminal
             if mask.any():
-                decisions = agents[id](worlds[mask])
+                decisions = agents[id](worlds[mask], eval=True)
                 worlds[mask], transitions = worlds[mask].step(decisions.actions)
                 terminal[mask] = transitions.terminal
                 wins[mask] += (transitions.rewards == 1).int()

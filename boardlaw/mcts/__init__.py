@@ -2,13 +2,14 @@ from contextlib import contextmanager
 from multiprocessing import Value
 import numpy as np
 import torch
+import torch.distributions
 from rebar import arrdict
 from . import cuda
 import logging
 
 log = logging.getLogger(__name__)
 
-def dirichlet_noise(logits, valid, alpha=None, eps=.25):
+def dirichlet_noise(logits, valid, eps, alpha=None):
     alpha = alpha or 10/logits.size(-1)
     alpha = torch.full((valid.shape[-1],), alpha, dtype=torch.float, device=logits.device)
     dist = torch.distributions.Dirichlet(alpha)
@@ -23,7 +24,7 @@ def dirichlet_noise(logits, valid, alpha=None, eps=.25):
 
 class MCTS:
 
-    def __init__(self, world, n_nodes, c_puct=1.25, noise_eps=.05):
+    def __init__(self, world, n_nodes, noise_eps, c_puct=1.25):
         """
         c_puct high: concentrates on prior
         c_puct low: concentrates on value
@@ -68,7 +69,7 @@ class MCTS:
         world = self.worlds[:, 0]
         with torch.no_grad():
             decisions = evaluator(world, value=True)
-        self.decisions.logits[:, self.sim] = dirichlet_noise(decisions.logits, world.valid, eps=self.noise_eps)
+        self.decisions.logits[:, self.sim] = dirichlet_noise(decisions.logits, world.valid, self.noise_eps)
         self.decisions.v[:, 0] = decisions.v
 
         self.sim += 1
@@ -130,6 +131,7 @@ class MCTS:
     def root(self):
         return arrdict.arrdict(
             logits=cuda.root(self._cuda()).log(),
+            prior=self.decisions.logits[:, 0], # useful for monitoring KL div
             v=self.decisions.v[:, 0])
     
     def n_leaves(self):
@@ -196,15 +198,22 @@ class MCTSAgent:
         self.evaluator = evaluator
         self.kwargs = kwargs
 
-    def __call__(self, world, value=True, **kwargs):
-        m = mcts(world, self.evaluator, **self.kwargs, **kwargs)
+    def __call__(self, world, value=True, eval=False, **kwargs):
+        noise_eps = 0. if eval else .05
+        m = mcts(world, self.evaluator, **{'noise_eps': noise_eps, **self.kwargs, **kwargs})
         r = m.root()
+
+        if eval:
+            actions = r.logits.argmax(-1)
+        else:
+            actions = torch.distributions.Categorical(logits=r.logits).sample()
+
         return arrdict.arrdict(
             logits=r.logits,
             n_sims=torch.full_like(m.envs, m.sim+1),
             n_leaves=m.n_leaves(),
             v=r.v,
-            actions=torch.distributions.Categorical(logits=r.logits).sample())
+            actions=actions)
 
     def load_state_dict(self, sd):
         #TODO: Systematize this

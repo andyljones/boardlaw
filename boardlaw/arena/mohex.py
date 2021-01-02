@@ -101,12 +101,12 @@ def append(df, name):
 
 class Trialer:
 
-    def __init__(self, worldfunc, device='cuda:1', max_history=256):
+    def __init__(self, worldfunc, device='cuda', max_history=256):
         self.worlds = worldfunc(8, device=device)
         self.mohex = mohex.MoHexAgent()
         self.history = deque(maxlen=max_history//self.worlds.n_envs)
 
-    def trial(self, agent):
+    def trial(self, agent, record=True):
         size = self.worlds.boardsize
         games = database.symmetric_games(f'mohex-{size}').pipe(append, 'agent')
         wins = database.symmetric_wins(f'mohex-{size}').pipe(append, 'agent')
@@ -119,7 +119,8 @@ class Trialer:
         soln = activelo.solve(games, wins)
         μ, σ = analysis.difference(soln, 'mohex-0.00', 'agent')
         log.info(f'Agent elo is {μ:.2f}±{2*σ:.2f} based on {2*int(games.loc["agent"].sum())} games')
-        stats.mean_std('elo-mohex', μ, σ)
+        if record:
+            stats.mean_std('elo-mohex', μ, σ)
 
         imp = activelo.improvement(soln)
         imp = pd.DataFrame(imp, games.index, games.index)
@@ -130,3 +131,8 @@ class Trialer:
         results = evaluator.evaluate(self.worlds, {'agent': agent, challenger: self.mohex})
         log.info(f'Agent played {challenger}, {int(results[0].wins[0] + results[1].wins[1])}-{int(results[0].wins[1] + results[1].wins[0])}')
         self.history.extend(results)
+
+def judge(worldfunc, agent):
+    trialer = Trialer(worldfunc)
+    while True:
+        trialer.trial(agent, record=False)
