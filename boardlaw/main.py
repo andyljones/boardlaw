@@ -93,7 +93,7 @@ def optimize(network, opt, batch):
         stats.mean('opt.step-max', (new - old).abs().max())
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=11, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=9, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
@@ -109,8 +109,6 @@ def warm_start(agent, opt, parent):
         opt.load_state_dict(sd['opt'])
     return parent
 
-
-
 def run(device='cuda'):
     buffer_length = 32 
     batch_size = 64*1024
@@ -122,11 +120,9 @@ def run(device='cuda'):
     opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-2, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
 
-    snapshots = []
-
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('fast-anneal', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('high-noise', boardsize=worlds.boardsize, parent=parent)
 
     git.tag(run, error=False)
 
