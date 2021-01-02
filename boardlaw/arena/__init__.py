@@ -118,6 +118,8 @@ def fill_matchups(run=-1, device='cuda', count=1):
     worlds = worldfunc(device=device, n_envs=256)
 
     while True:
+        agents = snapshot_agents(run, agentfunc, device=device)
+
         n, w = database.symmetric(run, agents)
         zeros = (n
             .stack()
@@ -129,6 +131,10 @@ def fill_matchups(run=-1, device='cuda', count=1):
         diff = abs(zeros.black_name.replace(indices) - zeros.white_name.replace(indices))
         ordered = zeros.loc[diff.sort_values().index]
         # Sample so there's no problems if we run in parallel
+        if len(ordered) == 0:
+            log.info('No matchups to play')
+            time.sleep(15)
+            continue
         matchup = ordered.head(10).sample(1).iloc[0, :2].tolist()
 
         log.info(f'Playing {matchup}')
