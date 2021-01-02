@@ -210,6 +210,7 @@ class MCTSAgent:
 
         return arrdict.arrdict(
             logits=r.logits,
+            prior=r.prior,
             n_sims=torch.full_like(m.envs, m.sim+1),
             n_leaves=m.n_leaves(),
             v=r.v,

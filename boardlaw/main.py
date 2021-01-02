@@ -74,8 +74,8 @@ def optimize(network, opt, batch):
         stats.mean('loss.value', value_loss)
         stats.mean('loss.policy', policy_loss)
         stats.mean('progress.resid-var', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
-        stats.mean('progress.target-kl-div', -(d0.logits - d.logits).where(w.valid, zeros).sum(-1).div(w.valid.float().sum(-1)).mean())
-        stats.mean('progress.prior-kl-div', -(d0.prior - d.logits).mul(d0.prior.exp()).where(w.valid, zeros).sum(-1))
+        stats.mean('progress.target-kl-div', (d0.logits - d.logits).mul(d0.logits.exp()).where(w.valid, zeros).sum(-1).mean())
+        stats.mean('progress.prior-kl-div', (d0.prior - d.logits).mul(d0.prior.exp()).where(w.valid, zeros).sum(-1).mean())
 
         stats.mean('rel-entropy.policy', *rel_entropy(d.logits, w.valid)) 
         stats.mean('rel-entropy.targets', *rel_entropy(d0.logits, w.valid))
@@ -93,7 +93,7 @@ def optimize(network, opt, batch):
         stats.mean('opt.step-max', (new - old).abs().max())
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=9, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=11, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
@@ -110,9 +110,9 @@ def warm_start(agent, opt, parent):
     return parent
 
 def run(device='cuda'):
-    buffer_length = 64 
-    batch_size = 128*1024
-    n_envs = 8*1024
+    buffer_length = 32 
+    batch_size = 64*1024
+    n_envs = 4*1024
     buffer_inc = batch_size//n_envs
 
     worlds = worldfunc(n_envs, device=device)
