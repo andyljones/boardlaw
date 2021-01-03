@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from rebar import arrdict
 from pavlov import stats, logs, runs, storage, git
-from . import hex, mcts, networks, learning, validation, analysis, arena
+from . import hex, mcts, networks, learning, validation, analysis, arena, leagues
 from torch.nn import functional as F
 from logging import getLogger
 from itertools import cycle
@@ -119,10 +119,11 @@ def run(device='cuda'):
     agent = agentfunc(device)
     opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-2, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
+    league = leagues.SimpleLeague(agentfunc, 128, device=device)
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('high-noise', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('simple-league', boardsize=worlds.boardsize, parent=parent)
 
     git.tag(run, error=False)
 
@@ -133,19 +134,22 @@ def run(device='cuda'):
         while True:
 
             while len(buffer) < buffer_length:
-                decisions = agent(worlds, value=True)
+                league_agent = league.select(agent)
+                decisions = league_agent(worlds, value=True)
                 new_worlds, transition = worlds.step(decisions.actions)
                 buffer.append(arrdict.arrdict(
                     worlds=worlds,
                     decisions=decisions,
                     transitions=transition).detach())
                 worlds = new_worlds
+                league.record(transition)
                 log.info('actor stepped')
                 
             chunk = arrdict.stack(buffer)
             chunk_stats(chunk, buffer_inc)
 
             optimize(agent.evaluator, opt, chunk[:, next(idxs)])
+            league.store(agent)
             sched.step()
             log.info('learner stepped')
             
