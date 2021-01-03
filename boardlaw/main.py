@@ -55,11 +55,11 @@ def optimize(network, opt, batch):
     d = network(w, value=True)
 
     zeros = torch.zeros_like(d.logits)
-    policy_loss = -(d0.logits.exp()*d.logits).where(w.valid, zeros).sum(axis=-1).mean()
+    policy_loss = -(d0.logits.exp()*d.logits).where(w.valid, zeros).sum(axis=-1)[batch.is_latest].mean()
 
     terminal = torch.stack([t.terminal for _ in range(w.n_seats)], -1)
     target_value = learning.reward_to_go(t.rewards, d0.v, terminal, terminal, gamma=1)
-    value_loss = (target_value - d.v).square().mean()
+    value_loss = (target_value - d.v).square()[batch.is_latest].mean()
     
     loss = policy_loss + value_loss 
     
@@ -71,6 +71,7 @@ def optimize(network, opt, batch):
     new = torch.cat([p.flatten() for p in network.parameters()])
 
     with stats.defer():
+        #TODO: Contract these all based on late-ness
         stats.mean('loss.value', value_loss)
         stats.mean('loss.policy', policy_loss)
         stats.mean('progress.resid-var', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
@@ -135,12 +136,15 @@ def run(device='cuda'):
 
             while len(buffer) < buffer_length:
                 league_agent = league.select(agent)
+                is_latest = torch.full((worlds.n_envs,), (league_agent == agent), device=device) 
+
                 decisions = league_agent(worlds, value=True)
                 new_worlds, transition = worlds.step(decisions.actions)
                 buffer.append(arrdict.arrdict(
                     worlds=worlds,
                     decisions=decisions,
-                    transitions=transition).detach())
+                    transitions=transition,
+                    is_latest=is_latest).detach())
                 worlds = new_worlds
                 league.record(transition)
                 log.info('actor stepped')
