@@ -22,7 +22,6 @@ logging.basicConfig(
             format='%(asctime)s %(levelname)s %(name)s: %(message)s', 
             datefmt=r'%Y-%m-%d %H:%M:%S')
 logging.getLogger('parso').setLevel('WARN')  # Jupyter's autocomplete spams the output if this isn't set
-log.info('Set log params')
 
 @contextmanager
 def handlers(*new_handlers):
