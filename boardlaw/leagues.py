@@ -32,9 +32,8 @@ def clone(x):
 
 class SimpleLeague:
 
-    def __init__(self, agentfunc, n_agents, device, frac=.2):
+    def __init__(self, n_agents, device, frac=.2):
         self.n_games = torch.tensor(0, device=device)
-        self.opponent = agentfunc()
 
         self.n_agents = n_agents
         self.step = 0

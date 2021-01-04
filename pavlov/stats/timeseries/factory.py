@@ -64,8 +64,9 @@ def timeseries(formatter=formatters.simple, plotter=plotters.Simple):
             call = {'_time': tests.datetime64(), **call}
 
             prefix = registry.make_prefix(channel)
-            w = registry.writer(prefix, lambda: numpy.Writer(registry.run(), prefix, kind=kind))
-            w.write(call)
+            if registry.run() is not None:
+                w = registry.writer(prefix, lambda: numpy.Writer(registry.run(), prefix, kind=kind))
+                w.write(call)
 
         reader = type(f'{kind}Reader', (TimeseriesReader,), {
             'resampler': staticmethod(f),

@@ -52,14 +52,15 @@ def rel_entropy(logits, valid):
 
 def optimize(network, opt, batch):
     w, d0, t = batch.worlds, batch.decisions, batch.transitions
-    d = network(w, value=True)
+    mask = (d0.is_prime == 0)
+    d = network(w)
 
     zeros = torch.zeros_like(d.logits)
-    policy_loss = -(d0.logits.exp()*d.logits).where(w.valid, zeros).sum(axis=-1)[batch.is_latest].mean()
+    policy_loss = -(d0.logits.exp()*d.logits).where(w.valid, zeros).sum(axis=-1)[mask].mean()
 
     terminal = torch.stack([t.terminal for _ in range(w.n_seats)], -1)
     target_value = learning.reward_to_go(t.rewards, d0.v, terminal, terminal, gamma=1)
-    value_loss = (target_value - d.v).square()[batch.is_latest].mean()
+    value_loss = (target_value - d.v).square()[mask].mean()
     
     loss = policy_loss + value_loss 
     
@@ -96,10 +97,10 @@ def optimize(network, opt, batch):
 def worldfunc(n_envs, device='cuda'):
     return hex.Hex.initial(n_envs=n_envs, boardsize=9, device=device)
 
-def agentfunc(device='cuda'):
+def agentfunc(device='cuda', n_opponents=0):
     worlds = worldfunc(n_envs=1, device=device)
     network = networks.LeagueNetwork(worlds.obs_space, worlds.action_space,
-                n_opponents=4).to(worlds.device)
+                n_opponents=n_opponents).to(worlds.device)
     # network.trace(worlds)
     return mcts.MCTSAgent(network, n_nodes=64)
 
@@ -118,34 +119,32 @@ def run(device='cuda'):
     buffer_inc = batch_size//n_envs
 
     worlds = worldfunc(n_envs, device=device)
-    agent = agentfunc(device)
-    opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-2, amsgrad=True)
+    agent = agentfunc(device, n_opponents=4)
+    opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=1e-2, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
-    league = leagues.SimpleLeague(agentfunc, 128, device=device)
+    league = leagues.SimpleLeague(32, device=device)
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('simple-league', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('league-net-test', boardsize=worlds.boardsize, parent=parent)
 
     git.tag(run, error=False)
 
+    buffer = []
+    idxs = cycle(learning.batch_indices(buffer_length, n_envs, batch_size, worlds.device))
     with logs.to_run(run), stats.to_run(run), \
             arena.monitor(run, worldfunc, agentfunc, device=worlds.device):
-        buffer = []
-        idxs = cycle(learning.batch_indices(buffer_length, n_envs, batch_size, worlds.device))
         while True:
 
             while len(buffer) < buffer_length:
-                league_agent = league.select(agent)
-                is_latest = torch.full((worlds.n_envs,), (league_agent == agent), device=device) 
-
-                decisions = league_agent(worlds, value=True)
+                # league.update(agent)
+                with torch.no_grad():
+                    decisions = agent(worlds, value=True)
                 new_worlds, transition = worlds.step(decisions.actions)
                 buffer.append(arrdict.arrdict(
                     worlds=worlds,
                     decisions=decisions,
-                    transitions=transition,
-                    is_latest=is_latest).detach())
+                    transitions=transition).detach())
                 worlds = new_worlds
                 league.record(transition)
                 log.info('actor stepped')
@@ -153,7 +152,7 @@ def run(device='cuda'):
             chunk = arrdict.stack(buffer)
             chunk_stats(chunk, buffer_inc)
 
-            optimize(agent.evaluator, opt, chunk[:, next(idxs)])
+            optimize(agent.evaluator.prime, opt, chunk[:, next(idxs)])
             league.store(agent)
             sched.step()
             log.info('learner stepped')
@@ -174,7 +173,7 @@ def benchmark_experience_collection(n_envs=8192, T=16):
 
     torch.manual_seed(0)
     worlds = worldfunc(n_envs)
-    agent = agentfunc()
+    agent = agentfunc(n_opponents=4)
 
     agent(worlds) # warmup
 

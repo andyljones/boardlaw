@@ -34,8 +34,6 @@ def to_run(run):
         del T.RUN
 
 def run():
-    if T.RUN is None:
-        raise ValueError('No run currently set')
     return T.RUN
 
 def writer(prefix, factory=None):

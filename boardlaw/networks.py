@@ -33,9 +33,12 @@ class Network(nn.Module):
 
         self.value = heads.ValueOutput(width)
 
-    def forward(self, obs, valid, seats):
+    def traced(self, obs, valid, seats):
         neck = self.body(obs)
         return (self.policy(neck, valid), self.value(neck, valid, seats))
+
+    def forward(self, worlds):
+        return arrdict.arrdict(zip(FIELDS, self.traced(worlds.obs, worlds.valid, worlds.seats)))
 
 def traced_network(obs_space, action_space, *args, **kwargs):
     #TODO: This trace all has to be done with standins of the right device,
@@ -44,14 +47,16 @@ def traced_network(obs_space, action_space, *args, **kwargs):
     obs = torch.ones((4, *obs_space.dim), dtype=torch.float, device='cuda')
     valid = torch.ones((4, action_space.dim), dtype=torch.bool, device='cuda')
     seats = torch.ones((4,), dtype=torch.int, device='cuda')
-    return torch.jit.trace(n, (obs, valid, seats))
+    m = torch.jit.trace_module(n, {'traced': (obs, valid, seats)})
+    m.forward = n.forward
+    return m
 
 class LeagueNetwork(nn.Module):
 
     def __init__(self, *args, n_opponents=4, split=.75, **kwargs):
         super().__init__()
 
-        self.latest = traced_network(*args, **kwargs)
+        self.prime = traced_network(*args, **kwargs)
         self.split = split
         self.opponents = nn.ModuleList([traced_network(*args, **kwargs) for _ in range(n_opponents)])
         self.n_opponents = n_opponents
@@ -66,9 +71,7 @@ class LeagueNetwork(nn.Module):
         obs, valid, seats = worlds.obs, worlds.valid, worlds.seats
         with torch.cuda.stream(self.streams[0]):
             s = slice(0, split)
-            part = dict(zip(FIELDS, self.latest(obs[s], valid[s], seats[s])))
-            part['agentid'] = torch.full((split,), True, device=worlds.device)
-            parts.append(part)
+            parts.append(dict(zip(FIELDS, self.prime.traced(obs[s], valid[s], seats[s]))))
 
         if self.n_opponents:
             chunk = (worlds.n_envs - split)//len(self.opponents)
@@ -76,10 +79,18 @@ class LeagueNetwork(nn.Module):
             with torch.cuda.stream(self.streams[1]):
                 for i, opponent in enumerate(self.opponents):
                     s = slice(split + i*chunk, split + (i+1)*chunk)
-                    part = dict(zip(FIELDS, opponent(obs[s], valid[s], seats[s])))
-                    part['agentid'] = torch.full((split,), False, device=worlds.device)
-                    parts.append(part)
+                    parts.append(dict(zip(FIELDS, opponent.traced(obs[s], valid[s], seats[s]))))
+
+        self.is_prime = torch.full((worlds.n_envs,), False, device=worlds.device)
+        self.is_prime[:split] = True
 
         torch.cuda.synchronize()
         return arrdict.from_dicts(arrdict.cat(parts))
-        
+
+    def state_dict(self):
+        return self.prime.state_dict()
+
+    def load_state_dict(self, sd):
+        self.prime.load_state_dict(sd)
+        for oppo in self.opponents:
+            oppo.load_state_dict(sd)
