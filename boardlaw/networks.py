@@ -41,8 +41,6 @@ class Network(nn.Module):
         return arrdict.arrdict(zip(FIELDS, self.traced(worlds.obs, worlds.valid, worlds.seats)))
 
 def traced_network(obs_space, action_space, *args, **kwargs):
-    #TODO: Something in the learner does not like this
-
     #TODO: This trace all has to be done with standins of the right device,
     # else the full_likes I've got scattered through my code will break.
     n = Network(obs_space, action_space, *args, **kwargs).cuda()
@@ -98,7 +96,7 @@ class SimpleNetwork(nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__()
 
-        self.prime = Network(*args, **kwargs)
+        self.prime = traced_network(*args, **kwargs)
 
     def forward(self, worlds):
         resp = arrdict.from_dicts(dict(zip(FIELDS, self.prime.traced(worlds.obs, worlds.valid, worlds.seats))))
