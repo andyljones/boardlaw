@@ -52,7 +52,7 @@ def rel_entropy(logits, valid):
 
 def optimize(network, opt, batch):
     w, d0, t = batch.worlds, batch.decisions, batch.transitions
-    mask = (d0.is_prime == 0)
+    mask = d0.is_prime
     d = network(w)
 
     zeros = torch.zeros_like(d.logits)
@@ -99,7 +99,7 @@ def worldfunc(n_envs, device='cuda'):
 
 def agentfunc(device='cuda', n_opponents=0):
     worlds = worldfunc(n_envs=1, device=device)
-    network = networks.SimpleNetwork(worlds.obs_space, worlds.action_space,
+    network = networks.LeagueNetwork(worlds.obs_space, worlds.action_space,
                 n_opponents=n_opponents).to(worlds.device)
     # network.trace(worlds)
     return mcts.MCTSAgent(network, n_nodes=64)
@@ -119,7 +119,7 @@ def run(device='cuda'):
     buffer_inc = batch_size//n_envs
 
     worlds = worldfunc(n_envs, device=device)
-    agent = agentfunc(device, n_opponents=0)
+    agent = agentfunc(device, n_opponents=4)
     opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=1e-2, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
     league = leagues.SimpleLeague(32, device=device)
