@@ -101,3 +101,21 @@ class LeagueNetwork(nn.Module):
         self.prime.load_state_dict(sd)
         for oppo in self.opponents:
             oppo.load_state_dict(sd)
+
+class SimpleNetwork(nn.Module):
+
+    def __init__(self, obs_space, action_space, *args, n_opponents=4, **kwargs):
+        super().__init__()
+
+        self.prime = Network(obs_space, action_space, *args, **kwargs).cuda()
+
+    def forward(self, worlds):
+        resp = arrdict.from_dicts(dict(zip(FIELDS, self.prime.traced(worlds.obs, worlds.valid, worlds.seats))))
+        self.is_prime = torch.full((worlds.n_envs,), True, device=worlds.device)
+        return resp
+
+    def state_dict(self):
+        return self.prime.state_dict()
+
+    def load_state_dict(self, sd):
+        self.prime.load_state_dict(sd)
