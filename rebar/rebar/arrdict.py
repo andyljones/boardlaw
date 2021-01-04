@@ -182,6 +182,10 @@ def clone(t):
         return t.copy()
     return t
 
+def from_dicts(t):
+    if isinstance(t, dict):
+        return arrdict({k: from_dicts(v) for k, v in t.items()})
+    return t
 
 def test_arrdict_setitem():
     d = arrdict(

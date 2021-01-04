@@ -17,6 +17,8 @@
 import numpy as np
 import torch
 from logging import getLogger
+from torch import nn
+from torch.nn import functional as F
 
 log = getLogger(__name__)
 

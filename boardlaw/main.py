@@ -98,7 +98,8 @@ def worldfunc(n_envs, device='cuda'):
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
-    network = networks.Network(worlds.obs_space, worlds.action_space).to(worlds.device)
+    network = networks.LeagueNetwork(worlds.obs_space, worlds.action_space,
+                n_opponents=4).to(worlds.device)
     # network.trace(worlds)
     return mcts.MCTSAgent(network, n_nodes=64)
 
@@ -166,8 +167,6 @@ def run(device='cuda'):
 
 def benchmark_experience_collection(n_envs=8192, T=16):
     import pandas as pd
-    # Make sure to init cuda before profiling this 
-    from rebar import timer
 
     if n_envs is None:
         ns = np.logspace(0, 15, 16, base=2, dtype=int)
@@ -177,13 +176,17 @@ def benchmark_experience_collection(n_envs=8192, T=16):
     worlds = worldfunc(n_envs)
     agent = agentfunc()
 
-    with timer.timer(cuda=True) as t:
-        for _ in range(T):
-            decisions = agent(worlds, value=True)
-            new_worlds, transition = worlds.step(decisions.actions)
-            worlds = new_worlds
-            log.info('actor stepped')
-    time = t.time()/(T*n_envs)
-    print(f'{n_envs}: {time}/sample')
+    agent(worlds) # warmup
 
-    return time
+    torch.cuda.synchronize()
+    start = time.time()
+    for _ in range(T):
+        decisions = agent(worlds)
+        new_worlds, transition = worlds.step(decisions.actions)
+        worlds = new_worlds
+        log.info('actor stepped')
+    torch.cuda.synchronize()
+    rate = (T*n_envs)/(time.time() - start)
+    print(f'{n_envs}: {rate}/sample')
+
+    return rate

@@ -80,6 +80,7 @@ class Compiled(nn.Module):
 
         self._forward = cuda.load(__package__).forward
 
+    @profiling.nvtx
     def forward(self, x, slices):
         return self._forward(x, self.Ws, self.bs, [(s.start, s.stop) for s in slices])
 
@@ -100,6 +101,7 @@ class Hybrid(nn.Module):
         self.bigstream = torch.cuda.Stream()
         self.lilstream = torch.cuda.Stream()
 
+    @profiling.nvtx
     def forward(self, x, slices):
         split = slices[0].stop
         with torch.cuda.stream(self.bigstream):
@@ -120,7 +122,7 @@ class Hybrid(nn.Module):
 
 @profiling.profilable
 @profiling.nvtx
-def benchmark(cls, features=256, layers=8, models=8, envs=8*1024, T=8, device='cuda'):
+def benchmark(cls, features=256, layers=8, models=4, envs=8*1024, T=8, device='cuda'):
     assert envs % models == 0
 
     x = torch.zeros((envs, features), device=device)
@@ -150,7 +152,7 @@ def profile(reps=1, **kwargs):
     torch.cuda.synchronize()
     results = {}
     for _ in range(reps):
-        for cls in [Hybrid, Optimal, Naive, Streamed]:
+        for cls in [Optimal, Naive, Streamed, Compiled, Hybrid]:
             results.setdefault(cls.__name__, []).append(benchmark(cls, **kwargs))
 
     s = pd.DataFrame(results).mean()

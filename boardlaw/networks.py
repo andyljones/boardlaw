@@ -2,8 +2,12 @@ import numpy as np
 import torch
 from . import heads
 from torch import nn
+import torch.jit
 from rebar import recurrence, arrdict
 from torch.nn import functional as F
+from collections import namedtuple
+
+FIELDS = ('logits', 'v')
 
 class ReZeroResidual(nn.Linear):
 
@@ -14,53 +18,6 @@ class ReZeroResidual(nn.Linear):
 
     def forward(self, x, *args, **kwargs):
         return x + self.α*F.relu(super().forward(x))
-
-class Residual(nn.Module):
-
-    def __init__(self, width, gain=1):
-        # "Identity Mappings in Deep Residual Networks"
-        super().__init__()
-        self.w0 = nn.Linear(width, width, bias=True)
-        self.n0 = nn.LayerNorm(width)
-        self.w1 = nn.Linear(width, width, bias=True)
-        self.n1 = nn.LayerNorm(width)
-
-        nn.init.orthogonal_(self.w0.weight)
-        nn.init.orthogonal_(self.w1.weight, gain=gain)
-
-    def forward(self, x, *args, **kwargs):
-        y = self.n0(x)
-        y = F.relu(y)
-        y = self.w0(y)
-        y = self.n1(y)
-        y = F.relu(y)
-        y = self.w1(y)
-        return x + y
-
-class Transformer(nn.Module):
-
-    def __init__(self, boardsize, width):
-        super().__init__()
-        self.boardsize = boardsize
-        self.width = width
-        self.norm = nn.LayerNorm(width)
-        self.qkv = nn.Linear(width, 3*width)
-        self.full = nn.Linear(width, width)
-
-    def forward(self, x, *args, **kwargs):
-        T, B, H, W, C = x.shape
-        n = self.norm(x.reshape(-1, self.boardsize**2, self.width))
-        q, k, v = self.qkv(n).chunk(3, -1)
-
-        sim = torch.einsum('bqc,bkc->bqkc', q, k)
-        attn = torch.softmax(sim, 2)
-
-        attended = torch.einsum('bqkc,bkc->bqc', attn, v)
-        attended = attended.reshape(T, B, H, W, C)
-        
-        y = F.relu(self.full(attended))
-
-        return x + y
 
 class Network(nn.Module):
 
@@ -76,56 +33,53 @@ class Network(nn.Module):
 
         self.value = heads.ValueOutput(width)
 
-    # def trace(self, world):
-    #     self.policy = torch.jit.trace_module(self.policy, {'forward': (world.obs, world.valid)})
-    #     self.vaue = torch.jit.trace_module(self.value, {'forward': (world.obs, world.valid, world.seats)})
+    def forward(self, obs, valid, seats):
+        neck = self.body(obs)
+        return (self.policy(neck, valid), self.value(neck, valid, seats))
 
-    def forward(self, world, value=False):
-        neck = self.body(world.obs)
-        outputs = arrdict.arrdict(
-            logits=self.policy(neck, valid=world.valid))
+def traced_network(obs_space, action_space, *args, **kwargs):
+    #TODO: This trace all has to be done with standins of the right device,
+    # else the full_likes I've got scattered through my code will break.
+    n = Network(obs_space, action_space, *args, **kwargs).cuda()
+    obs = torch.ones((4, *obs_space.dim), dtype=torch.float, device='cuda')
+    valid = torch.ones((4, action_space.dim), dtype=torch.bool, device='cuda')
+    seats = torch.ones((4,), dtype=torch.int, device='cuda')
+    return torch.jit.trace(n, (obs, valid, seats))
 
-        if value:
-            #TODO: Maybe the env should handle this? 
-            # Or there should be an output space for values? 
-            outputs['v'] = self.value(neck, valid=world.valid, seats=world.seats)
-        return outputs
+class LeagueNetwork(nn.Module):
 
-def check_var():
-    from boardlaw.main import worldfunc
-    import pandas as pd
+    def __init__(self, *args, n_opponents=4, split=.75, **kwargs):
+        super().__init__()
 
-    worlds = worldfunc(256)
-    stds = {}
-    for n in range(1, 20):
-        net = Network(worlds.obs_space, worlds.action_space, layers=n).cuda()
+        self.latest = traced_network(*args, **kwargs)
+        self.split = split
+        self.opponents = nn.ModuleList([traced_network(*args, **kwargs) for _ in range(n_opponents)])
+        self.n_opponents = n_opponents
 
-        obs = torch.rand_like(worlds.obs)
-        obs.requires_grad = True            
+        self.streams = [torch.cuda.Stream() for _ in range(2)]
+
+    def forward(self, worlds):
+        torch.cuda.synchronize()
+        split = int(self.split*worlds.n_envs) if self.n_opponents else worlds.n_envs
+
+        parts = []
+        obs, valid, seats = worlds.obs, worlds.valid, worlds.seats
+        with torch.cuda.stream(self.streams[0]):
+            s = slice(0, split)
+            part = dict(zip(FIELDS, self.latest(obs[s], valid[s], seats[s])))
+            part['agentid'] = torch.full((split,), True, device=worlds.device)
+            parts.append(part)
+
+        if self.n_opponents:
+            chunk = (worlds.n_envs - split)//len(self.opponents)
+            assert split + chunk*len(self.opponents) == worlds.n_envs
+            with torch.cuda.stream(self.streams[1]):
+                for i, opponent in enumerate(self.opponents):
+                    s = slice(split + i*chunk, split + (i+1)*chunk)
+                    part = dict(zip(FIELDS, opponent(obs[s], valid[s], seats[s])))
+                    part['agentid'] = torch.full((split,), False, device=worlds.device)
+                    parts.append(part)
+
+        torch.cuda.synchronize()
+        return arrdict.from_dicts(arrdict.cat(parts))
         
-        l = net.body(obs)
-        sf = l.std().item()
-        
-        for p in net.parameters():
-            p.grad = None
-        
-        l.sum().backward()
-        
-        stds[n] = {'forward': sf, 'backward': obs.grad.std().item()}
-    stds = pd.DataFrame(stds).T
-
-def test_transformer():
-
-    boardsize = 3
-    width = 4
-
-    model = Transformer(boardsize, width)
-
-    obs = torch.zeros((5, 7, boardsize, boardsize, width))
-    out = model(obs)
-
-    from boardlaw.main import worldfunc
-    worlds = worldfunc(32)
-
-    model = Network(worlds.obs_space, worlds.action_space).cuda()
-    model(worlds)
