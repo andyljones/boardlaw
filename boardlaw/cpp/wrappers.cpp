@@ -10,20 +10,28 @@ using namespace pybind11::literals;
 using namespace std::string_literals;
 using namespace torch::indexing;
 
-TT mul(TT X, TT W, std::vector<int> starts, std::vector<int> ends, int repeats) {
-    for (int i=0; i<W.size(0); i++) {
+using Weights = std::vector<std::vector<TT>>;
+using Slices = std::vector<std::tuple<int, int>>;
+
+TT forward(TT X, Weights Ws, Weights bs, Slices slices) {
+    std::vector<TT> parts = {};
+    for (int m=0; m<Ws.size(); m++) {
         auto stream = at::cuda::getStreamFromPool(X.device().index());
         at::cuda::CUDAStreamGuard guard(stream);
-        auto s = Slice(starts[i], ends[i], None);
-        for (int r=0; r<repeats; r++) {
-            X.index_put_({s}, at::matmul(X.index({s}), W[i]));
+        auto s = Slice(std::get<0>(slices[m]), std::get<1>(slices[m]), None);
+
+        auto Xs = X.index({s});
+        for (int l=0; l<Ws[m].size(); l++) {
+            Xs = at::addmm(bs[m][l], Xs, Ws[m][l]);
+            Xs = torch::relu(Xs);
         }
+        parts.push_back(Xs);
     }
-    return X;
+    at::cuda::device_synchronize();
+    return at::cat(parts);
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-
-    m.def("mul", &mul, "X"_a, "W"_a, "starts"_a, "ends"_a, "repeats"_a, py::call_guard<py::gil_scoped_release>());
+    m.def("forward", &forward, "X"_a, "Ws"_a, "bs"_a, "slices"_a, py::call_guard<py::gil_scoped_release>());
 }
 
