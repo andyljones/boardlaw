@@ -99,8 +99,7 @@ def worldfunc(n_envs, device='cuda'):
 
 def agentfunc(device='cuda', n_opponents=0):
     worlds = worldfunc(n_envs=1, device=device)
-    network = networks.LeagueNetwork(worlds.obs_space, worlds.action_space,
-                n_opponents=n_opponents).to(worlds.device)
+    network = networks.SimpleNetwork(worlds.obs_space, worlds.action_space).to(worlds.device)
     # network.trace(worlds)
     return mcts.MCTSAgent(network, n_nodes=64)
 
@@ -122,7 +121,7 @@ def run(device='cuda'):
     agent = agentfunc(device, n_opponents=4)
     opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=1e-2, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
-    league = leagues.SimpleLeague(32, device=device)
+    # league = leagues.SimpleLeague(32, device=device)
 
     parent = warm_start(agent, opt, '')
 
@@ -146,7 +145,7 @@ def run(device='cuda'):
                     decisions=decisions,
                     transitions=transition).detach())
                 worlds = new_worlds
-                league.record(transition)
+                # league.record(transition)
                 log.info('actor stepped')
                 
             chunk = arrdict.stack(buffer)

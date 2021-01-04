@@ -53,26 +53,18 @@ def traced_network(obs_space, action_space, *args, **kwargs):
 
 class LeagueNetwork(nn.Module):
 
-    def __init__(self, *args, n_opponents=4, split=.75, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__()
 
         self.prime = traced_network(*args, **kwargs)
-        self.split = split
-        self.active = False
-        self.opponents = nn.ModuleList([traced_network(*args, **kwargs) for _ in range(n_opponents)])
-        self.n_opponents = n_opponents
+        self.opponents = nn.ModuleList()
+        self.slices = [slice(None)]
 
         self.streams = [torch.cuda.Stream() for _ in range(2)]
 
-    def flip(self):
-        if self.opponents and not self.active:
-            self.active = True
-        else:
-            self.active = False
-
     def forward(self, worlds):
         torch.cuda.synchronize()
-        split = int(self.split*worlds.n_envs) if self.active else worlds.n_envs
+        split = self.slices[0].stop
 
         parts = []
         obs, valid, seats = worlds.obs, worlds.valid, worlds.seats
@@ -87,9 +79,6 @@ class LeagueNetwork(nn.Module):
                 for i, opponent in enumerate(self.opponents):
                     s = slice(split + i*chunk, split + (i+1)*chunk)
                     parts.append(dict(zip(FIELDS, opponent.traced(obs[s], valid[s], seats[s]))))
-
-        self.is_prime = torch.full((worlds.n_envs,), False, device=worlds.device)
-        self.is_prime[:split] = True
 
         torch.cuda.synchronize()
         return arrdict.from_dicts(arrdict.cat(parts))
@@ -107,7 +96,7 @@ class SimpleNetwork(nn.Module):
     def __init__(self, obs_space, action_space, *args, n_opponents=4, **kwargs):
         super().__init__()
 
-        self.prime = Network(obs_space, action_space, *args, **kwargs).cuda()
+        self.prime = traced_network(obs_space, action_space, *args, **kwargs)
 
     def forward(self, worlds):
         resp = arrdict.from_dicts(dict(zip(FIELDS, self.prime.traced(worlds.obs, worlds.valid, worlds.seats))))
