@@ -1,5 +1,5 @@
 """
-CUDA_VISIBLE_DEVICES=1 nsys profile --force-overwrite true -o "output/nsys" -t cublas,cuda,cudnn,nvtx,osrt -e EMIT_NVTX=1 python -c "from boardlaw.multimult import *; benchmark()"
+CUDA_VISIBLE_DEVICES=1 nsys profile --force-overwrite true -o "output/nsys" -c cudaProfilerApi  -t cublas,nvtx -e EMIT_NVTX=1 python -c "from boardlaw.multinet import *; profile()"
 
 docker cp boardlaw:/code/output/nsys.qdrep ~/Code/tmp/nsys.qdrep
 
@@ -44,8 +44,12 @@ def profilable(f):
     def g(*args, **kwargs):
         if os.environ.get('EMIT_NVTX') == '1':
             log.info('Emitting NVTX')
-            with torch.autograd.profiler.emit_nvtx(record_shapes=True):
-                return f(*args, **kwargs)
+            try:
+                torch.cuda.profiler.cudart().cudaProfilerStart()
+                with torch.autograd.profiler.emit_nvtx(record_shapes=True):
+                    return f(*args, **kwargs)
+            finally:
+                torch.cuda.profiler.cudart().cudaProfilerStop()
         else:
             return f(*args, **kwargs)
     return g

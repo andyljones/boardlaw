@@ -38,30 +38,40 @@ class Naive(nn.Module):
             y[s] = xs
         return y
 
+class _Streamed(nn.Module):
+
+    def __init__(self, n_features, n_layers):
+        super().__init__()
+        self.layers = nn.ModuleList([nn.Linear(n_features, n_features) for _ in range(n_layers)])
+
+    def forward(self, xs):
+        for l in self.layers:
+            xs = l(xs)
+            xs = F.relu(xs)
+        return xs
+
 class Streamed(nn.Module):
 
     def __init__(self, n_features, n_models, n_layers):
         super().__init__()
-        self.models = nn.ModuleList([
-            nn.ModuleList([nn.Linear(n_features, n_features) for _ in range(n_layers)])
-            for _ in range(n_models)])
+
+        exemplar = torch.zeros((1, n_features))
+        self.models = nn.ModuleList([torch.jit.trace(_Streamed(n_features, n_layers), (exemplar,)) for _ in range(n_models)])
         self.n_features = n_features
         self.streams = [torch.cuda.Stream() for _ in range(n_models)]
 
     @profiling.nvtx
     def forward(self, x, slices):
-        y = x.new_empty((*x.shape[:-1], self.n_features))
-        for s, ls, stream in zip(slices, self.models, self.streams):
+        parts = []
+        for s, model, stream in zip(slices, self.models, self.streams):
             with torch.cuda.stream(stream):
-                xs = x[s]
-                for l in ls:
-                    xs = l(xs)
-                    xs = F.relu(xs)
-                y[s] = xs
-        return y
+                parts.append(model(x[s]))
+        torch.cuda.synchronize()
+        return torch.cat(parts)
 
 @profiling.profilable
-def benchmark(cls, features=256, layers=8, models=8, envs=64*1024, T=64, device='cuda'):
+@profiling.nvtx
+def benchmark(cls, features=256, layers=8, models=8, envs=64*1024, T=8, device='cuda'):
     assert envs % models == 0
 
     x = torch.zeros((envs, features), device=device)
@@ -69,6 +79,9 @@ def benchmark(cls, features=256, layers=8, models=8, envs=64*1024, T=64, device=
     slices = [slice(i, i+chunk) for i in range(0, envs, chunk)]
 
     model = cls(features, models, layers).to(device)
+
+    # Warm up
+    model(x, slices=slices)
 
     with torch.no_grad():
         torch.cuda.synchronize()
@@ -79,11 +92,16 @@ def benchmark(cls, features=256, layers=8, models=8, envs=64*1024, T=64, device=
         end = time.time()
     return 1e6*(end - start)/(T*envs)
 
-def profile(**kwargs):
-    #TODO: Check multilayer, check backprop
+def profile(reps=1, **kwargs):
+    """
+    CUDA_VISIBLE_DEVICES=1 nsys profile --force-overwrite true -o "output/nsys" -c cudaProfilerApi --stop-on-range-end false -t cuda,cublas,nvtx -e EMIT_NVTX=1 python -c "from boardlaw.multinet import *; profile()"
+    """
+    torch.tensor(1).cuda() # initialize torch outside profiler range
+    torch.cuda.synchronize()
     results = {}
-    for cls in [Optimal, Naive, Streamed]:
-        results[cls.__name__] = benchmark(cls, **kwargs)
+    for _ in range(reps):
+        for cls in [Optimal, Naive, Streamed]:
+            results.setdefault(cls.__name__, []).append(benchmark(cls, **kwargs))
 
-    df = pd.Series(results)
-    print(df)
+        df = pd.DataFrame(results).mean()
+        print(df/df['Optimal'])
