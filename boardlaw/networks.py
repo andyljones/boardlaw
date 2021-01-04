@@ -41,6 +41,8 @@ class Network(nn.Module):
         return arrdict.arrdict(zip(FIELDS, self.traced(worlds.obs, worlds.valid, worlds.seats)))
 
 def traced_network(obs_space, action_space, *args, **kwargs):
+    #TODO: Something in the learner does not like this
+
     #TODO: This trace all has to be done with standins of the right device,
     # else the full_likes I've got scattered through my code will break.
     n = Network(obs_space, action_space, *args, **kwargs).cuda()
@@ -56,15 +58,16 @@ class LeagueNetwork(nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__()
 
-        self.prime = traced_network(*args, **kwargs)
-        self.opponents = nn.ModuleList()
-        self.slices = [slice(None)]
+        # self.prime = traced_network(*args, **kwargs)
+        self.prime = Network(*args, **kwargs)
+        self.opponents = nn.ModuleDict()
+        self.slices = {}
 
         self.streams = [torch.cuda.Stream() for _ in range(2)]
 
     def forward(self, worlds):
         torch.cuda.synchronize()
-        split = self.slices[0].stop
+        split = min([s.start for s in self.slices.values()], default=worlds.n_envs)
 
         parts = []
         obs, valid, seats = worlds.obs, worlds.valid, worlds.seats
@@ -72,13 +75,12 @@ class LeagueNetwork(nn.Module):
             s = slice(0, split)
             parts.append(dict(zip(FIELDS, self.prime.traced(obs[s], valid[s], seats[s]))))
 
-        if self.active:
-            chunk = (worlds.n_envs - split)//len(self.opponents)
-            assert split + chunk*len(self.opponents) == worlds.n_envs
-            with torch.cuda.stream(self.streams[1]):
-                for i, opponent in enumerate(self.opponents):
-                    s = slice(split + i*chunk, split + (i+1)*chunk)
-                    parts.append(dict(zip(FIELDS, opponent.traced(obs[s], valid[s], seats[s]))))
+        chunk = (worlds.n_envs - split)//len(self.opponents)
+        assert split + chunk*len(self.opponents) == worlds.n_envs
+        with torch.cuda.stream(self.streams[1]):
+            for idx, s in self.slices.items():
+                opponent = self.opponents[idx]
+                parts.append(dict(zip(FIELDS, opponent.traced(obs[s], valid[s], seats[s]))))
 
         torch.cuda.synchronize()
         return arrdict.from_dicts(arrdict.cat(parts))
@@ -93,10 +95,10 @@ class LeagueNetwork(nn.Module):
 
 class SimpleNetwork(nn.Module):
 
-    def __init__(self, obs_space, action_space, *args, n_opponents=4, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__()
 
-        self.prime = traced_network(obs_space, action_space, *args, **kwargs)
+        self.prime = Network(*args, **kwargs)
 
     def forward(self, worlds):
         resp = arrdict.from_dicts(dict(zip(FIELDS, self.prime.traced(worlds.obs, worlds.valid, worlds.seats))))

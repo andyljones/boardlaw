@@ -19,6 +19,7 @@ import torch
 from logging import getLogger
 from torch import nn
 from torch.nn import functional as F
+from copy import deepcopy
 
 log = getLogger(__name__)
 
@@ -30,18 +31,44 @@ def clone(x):
     else:
         return x
 
+def assemble(agent, state_dict):
+    new = deepcopy(agent)
+    new.load_state_dict(state_dict)
+    return new
+
 class SimpleLeague:
 
-    def __init__(self, agent, n_opponents, n_stabled, device):
-        self.n_games = torch.zeros((n_opponents,), device=device)
+    def __init__(self, evaluator, n_envs, n_opponents, n_stabled, device):
+        self.n_envs = n_envs
+        self.n_opponents = n_opponents
+        self.n_games = torch.zeros((n_stabled,), device=device)
 
         self.step = 0
-        self.stable = {i: agent.state_dict() for i in range(n_stabled)}
+        self.stable = {i: clone(evaluator.state_dict()) for i in range(n_stabled)}
 
-    def update(self, agent):
-        agent.flip()
-        if (len(self.stable) < self.n_agents) or (self.step % 1000 == 0):
-            self.stable[self.step] = clone(agent.state_dict())
-        while len(self.stable) > self.n_agents:
-            del self.stable[min(self.stable)]
+    def init(self, evaluator):
+        chunk = self.n_envs//4//self.n_opponents
+        start = 3*(self.n_envs//4)
+        assert start + chunk*self.n_opponents == self.n_envs
+
+        idxs = np.random.choice(list(self.stable), (self.n_opponents,))
+        evaluator.slices = {idx: slice(start+i*chunk, start+(i+1)*chunk) for i, idx in enumerate(idxs)}
+        evaluator.opponents = nn.ModuleDict({idx: assemble(evaluator, self.stable[idx]) for idx in idxs})
+
+    def update(self, evaluator):
+        if not evaluator.slices:
+            self.init(evaluator)
+
+        # Add to the stable
+        if self.step % 1000 == 0:
+            idx = np.random.choice(self.stable)
+            self.stable[idx] = clone(evaluator.state_dict())
+
+        for idx, s in evaluator.slices.items():
+            pass
+
+    def record(self, trans, evaluator):
+        for idx, s in evaluator.slices.items():
+            self.n_games[idx] += trans[s].sum()
+
 
