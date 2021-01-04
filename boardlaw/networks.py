@@ -58,14 +58,21 @@ class LeagueNetwork(nn.Module):
 
         self.prime = traced_network(*args, **kwargs)
         self.split = split
+        self.active = False
         self.opponents = nn.ModuleList([traced_network(*args, **kwargs) for _ in range(n_opponents)])
         self.n_opponents = n_opponents
 
         self.streams = [torch.cuda.Stream() for _ in range(2)]
 
+    def flip(self):
+        if self.opponents and not self.active:
+            self.active = True
+        else:
+            self.active = False
+
     def forward(self, worlds):
         torch.cuda.synchronize()
-        split = int(self.split*worlds.n_envs) if self.n_opponents else worlds.n_envs
+        split = int(self.split*worlds.n_envs) if self.active else worlds.n_envs
 
         parts = []
         obs, valid, seats = worlds.obs, worlds.valid, worlds.seats
@@ -73,7 +80,7 @@ class LeagueNetwork(nn.Module):
             s = slice(0, split)
             parts.append(dict(zip(FIELDS, self.prime.traced(obs[s], valid[s], seats[s]))))
 
-        if self.n_opponents:
+        if self.active:
             chunk = (worlds.n_envs - split)//len(self.opponents)
             assert split + chunk*len(self.opponents) == worlds.n_envs
             with torch.cuda.stream(self.streams[1]):

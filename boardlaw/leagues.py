@@ -55,17 +55,12 @@ class SimpleLeague:
             log.info('League is inactive')
         self.step += 1
 
-    def store(self, agent):
+    def update(self, agent):
+        agent.flip()
         if (len(self.stable) < self.n_agents) or (self.step % 1000 == 0):
             self.stable[self.step] = clone(agent.state_dict())
         while len(self.stable) > self.n_agents:
             del self.stable[min(self.stable)]
-
-    def select(self, agent):
-        if self.active and (self.step % 2 == 0):
-            self.opponent.load_state_dict(self.stable[self.active])
-            return self.opponent
-        return agent
 
 
 class Responsibilities:

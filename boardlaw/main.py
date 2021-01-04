@@ -119,14 +119,14 @@ def run(device='cuda'):
     buffer_inc = batch_size//n_envs
 
     worlds = worldfunc(n_envs, device=device)
-    agent = agentfunc(device, n_opponents=4)
+    agent = agentfunc(device, n_opponents=0)
     opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=1e-2, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
     league = leagues.SimpleLeague(32, device=device)
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('league-net-test', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('league-net-test-no-oppo', boardsize=worlds.boardsize, parent=parent)
 
     git.tag(run, error=False)
 
@@ -153,7 +153,6 @@ def run(device='cuda'):
             chunk_stats(chunk, buffer_inc)
 
             optimize(agent.evaluator.prime, opt, chunk[:, next(idxs)])
-            league.store(agent)
             sched.step()
             log.info('learner stepped')
             
