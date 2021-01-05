@@ -38,11 +38,11 @@ def chunk_stats(chunk, n_new):
         d, t = chunk.decisions, chunk.transitions
         v = d.v[t.terminal]
         r = t.rewards[t.terminal]
-        stats.mean('progress.terminal-corr', ((v - v.mean())*(r - r.mean())).mean()/(v.var()*r.var())**.5)
+        stats.mean('progress.corr.terminal', ((v - v.mean())*(r - r.mean())).mean()/(v.var()*r.var())**.5)
 
         v = d.v[:-1][t.terminal[1:]]
         r = t.rewards[1:][t.terminal[1:]]
-        stats.mean('progress.terminal-1-corr', ((v - v.mean())*(r - r.mean())).mean()/(v.var()*r.var())**.5)
+        stats.mean('progress.corr.penultimate', ((v - v.mean())*(r - r.mean())).mean()/(v.var()*r.var())**.5)
 
 def rel_entropy(logits, valid):
     zeros = torch.zeros_like(logits)
