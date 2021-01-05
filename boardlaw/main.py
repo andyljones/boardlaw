@@ -118,7 +118,7 @@ def run(device='cuda'):
 
     worlds = worldfunc(n_envs, device=device)
     agent = agentfunc(device, n_opponents=4)
-    opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=1e-2, amsgrad=True)
+    opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=1e-3, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
     league = leagues.SimpleLeague(agentfunc, agent.evaluator, worlds.n_envs)
 

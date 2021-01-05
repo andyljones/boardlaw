@@ -131,22 +131,24 @@ def pandas():
 def created(run):
     return pd.to_datetime(info(run)['_created'])
 
-def resolve(run):
+def resolutions(run):
     names = list(runs())
     if isinstance(run, int):
-        return names[run]
+        return [names[run]]
     elif run in names:
-        return run
-    else: # it's a suffix
-        hits = []
-        for n in names:
-            if n.endswith(run):
-                hits.append(n)
-        if len(hits) == 1:
-            return hits[0]
-        else:
-            recent = ', '.join(f'"{h}"' for h in hits[-3:])
-            raise ValueError(f'Found {len(hits)} runs that finished with "{run}", such as: {recent}')
+        return [run]
+    else: # it's a glob
+        return [n for n in names if fnmatch(n, run)]
+
+def resolve(run):
+    hits = resolutions(run)
+    if len(hits) == 0:
+        raise ValueError(f'Found no runs that match query "{run}"')
+    if len(hits) == 1:
+        return hits[0]
+    else:
+        recent = ', '.join(f'"{h}"' for h in hits[-3:])
+        raise ValueError(f'Found {len(hits)} runs that match glob "{run}", such as: {recent}')
 
 def resuffix(old, new):
     oldpath = path(old)
