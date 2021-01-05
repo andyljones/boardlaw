@@ -1,6 +1,6 @@
 import threading
 
-WRITE_LOCK = threading.RLock()
+LOCK = threading.RLock()
 
 class Output:
 
@@ -13,7 +13,7 @@ class Output:
         from IPython.display import clear_output
         # This is not thread-safe, but the recommended way to do 
         # thread-safeness - to use append_stdout - causes flickering
-        with WRITE_LOCK, self._output:
+        with LOCK, self._output:
             clear_output(wait=True)
             print(content)
     
@@ -36,22 +36,25 @@ class Compositor:
 
         output = ipw.Output(
             layout=ipw.Layout(width='100%'))
-        self._box.children = (*self._box.children, output)
+        with LOCK:
+            self._box.children = (*self._box.children, output)
 
         return Output(self, output, self.lines)
 
     def remove(self, child):
         child.close()
-        self._box.children = tuple(c for c in self._box.children if c != child)
+        with LOCK:
+            self._box.children = tuple(c for c in self._box.children if c != child)
 
     def clear(self):
-        for child in self._box.children:
-            self.remove(child)
+        with LOCK:
+            for child in self._box.children:
+                self.remove(child)
 
 _cache = (-1, None)
 def compositor():
     from IPython import get_ipython
-    with WRITE_LOCK:
+    with LOCK:
         new_count = get_ipython().execution_count
         global _cache
 

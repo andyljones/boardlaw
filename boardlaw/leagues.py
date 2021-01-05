@@ -72,7 +72,7 @@ class SimpleLeague:
             self.n_games[i] += transition.terminal[s].sum()
 
         # Figure out who's been playing too long. Stagger it a bit so they don't all change at once
-        threshold = torch.linspace(1, 2, self.n_opponents).mul(self.n_oppo_envs).int()
+        threshold = torch.linspace(1.5, 2.5, self.n_opponents).mul(self.n_oppo_envs).int()
         (replace,) = (self.n_games >= threshold).nonzero(as_tuple=True)
         # Swap out any over the limit
         for i in replace:
