@@ -199,7 +199,7 @@ class MCTSAgent:
         self.kwargs = kwargs
 
     def __call__(self, world, value=True, eval=False, **kwargs):
-        noise_eps = 0. if eval else .01
+        noise_eps = 0. if eval else .001
         m = mcts(world, self.evaluator, **{'noise_eps': noise_eps, **self.kwargs, **kwargs})
         r = m.root()
 

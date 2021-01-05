@@ -109,4 +109,5 @@ def pandas(run, channel, field=None, rule='60s', **kwargs):
     return df
 
 def compare(rs, *args, **kwargs):
-    return pd.concat({runs.resolve(r): pandas(r, *args, **kwargs) for r in rs}, 1)
+    ns = [n for r in rs for n in runs.resolutions(r)]
+    return pd.concat({n: pandas(n, *args, **kwargs) for n in ns}, 1)

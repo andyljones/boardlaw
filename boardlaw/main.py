@@ -95,7 +95,7 @@ def optimize(network, opt, batch):
         stats.mean('opt.step-max', (new - old).abs().max())
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=9, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=7, device=device)
 
 def agentfunc(device='cuda', n_opponents=0):
     worlds = worldfunc(n_envs=1, device=device)
@@ -122,9 +122,9 @@ def run(device='cuda'):
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
     league = leagues.SimpleLeague(agentfunc, agent.evaluator, worlds.n_envs)
 
-    parent = warm_start(agent, opt, 'common-flight league-net-test')
+    parent = warm_start(agent, opt, '*gentle-mouth 7x7')
 
-    run = runs.new_run('league-net-fine-tune', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('7x7-fast-league', boardsize=worlds.boardsize, parent=parent)
 
     git.tag(run, error=False)
 

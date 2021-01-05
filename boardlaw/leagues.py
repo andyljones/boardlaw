@@ -83,7 +83,7 @@ class SimpleLeague:
             self.n_games[i] = 0
 
         # Add to the stable
-        if self.step % 600 == 0:
+        if self.step % 60 == 0:
             old = np.random.choice(list(self.stable))
             del self.stable[old]
             self.stable[self.step] = clone(evaluator.state_dict())

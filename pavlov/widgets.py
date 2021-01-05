@@ -31,25 +31,34 @@ class Compositor:
         from IPython.display import display
         display(self._box)
 
-    def output(self):
+        self._children = {}
+
+    def _refresh(self):
+        with LOCK:
+            self._box.children = tuple([self._children[n] for n in sorted(self._children)])
+
+    def output(self, name):
         import ipywidgets as ipw
 
         output = ipw.Output(
             layout=ipw.Layout(width='100%'))
         with LOCK:
-            self._box.children = (*self._box.children, output)
+            self._children[name] = output
+            self._refresh()
 
         return Output(self, output, self.lines)
 
     def remove(self, child):
         child.close()
         with LOCK:
-            self._box.children = tuple(c for c in self._box.children if c != child)
+            del self._children[child]
+            self._refresh()
+
 
     def clear(self):
         with LOCK:
-            for child in self._box.children:
-                self.remove(child)
+            self._children = {}
+            self._refresh()
 
 _cache = (-1, None)
 def compositor():

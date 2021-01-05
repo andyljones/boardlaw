@@ -106,7 +106,7 @@ class IPythonRenderer:
 
     def __init__(self, compositor=None):
         super().__init__()
-        self._out = (compositor or widgets.compositor()).output()
+        self._out = (compositor or widgets.compositor()).output('logs')
         self._next = tests.time()
         self._lasts = {}
         self._buffers = defaultdict(lambda: deque(['']*self._out.lines, maxlen=self._out.lines))

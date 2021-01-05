@@ -92,7 +92,7 @@ def treeformat(pairs):
 
 def from_run_sync(run, rule, canceller=None, throttle=1):
     run = runs.resolve(run)
-    out = widgets.compositor().output()
+    out = widgets.compositor().output('stats')
     start = pd.Timestamp(runs.info(run)['_created'])
     pool = registry.StatsReaders(run)
 

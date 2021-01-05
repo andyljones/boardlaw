@@ -14,6 +14,9 @@ from aljpy import humanhash
 from fnmatch import fnmatch
 import uuid
 from . import tests
+from logging import getLogger
+
+log = getLogger(__name__)
 
 ROOT = 'output/pavlov'
 
@@ -94,6 +97,7 @@ def new_run(suffix='', **kwargs):
         '_created': str(now), 
         '_host': socket.gethostname(), 
         '_files': {}}
+    log.info(f'Created run {run}')
     new_info(run, kwargs, res=False)
     return run
 
