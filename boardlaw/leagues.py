@@ -38,7 +38,7 @@ def assemble(agentfunc, state_dict):
 
 class SimpleLeague:
 
-    def __init__(self, agentfunc, evaluator, n_envs, n_opponents, n_stabled, prime_frac=3/4):
+    def __init__(self, agentfunc, evaluator, n_envs, n_opponents=4, n_stabled=16, prime_frac=3/4):
         self.n_envs = n_envs
         self.n_opponents = n_opponents
 
@@ -48,14 +48,14 @@ class SimpleLeague:
         self.step = 0
         self.stable = {i: clone(evaluator.state_dict()) for i in range(n_stabled)}
 
-        self.prime_frac = 3/4
-
-        chunk = self.n_envs//4//self.n_opponents
-        start = int(self.prime_frac*self.n_envs)
-        assert start + chunk*self.n_opponents == self.n_envs
+        prime_frac = 3/4
+        self.n_prime_envs = int(prime_frac*self.n_envs)
+        self.n_oppo_envs = int((1 - prime_frac)*self.n_envs//self.n_opponents)
+        assert self.n_prime_envs + self.n_oppo_envs*self.n_opponents == self.n_envs
 
         idxs = np.random.choice(list(self.stable), (self.n_opponents,))
-        evaluator.slices = [slice(start+i*chunk, start+(i+1)*chunk) for i, idx in enumerate(idxs)]
+        start, chunk = self.n_prime_envs, self.n_oppo_envs
+        evaluator.slices = [slice(start + i*chunk, start + (i+1)*chunk) for i, idx in enumerate(idxs)]
         evaluator.opponents = nn.ModuleList([assemble(agentfunc, self.stable[idx]) for idx in idxs])
 
     def update(self, evaluator, transition):
@@ -72,17 +72,21 @@ class SimpleLeague:
             self.n_games[i] += transition.terminal[s].sum()
 
         # Swap out any over the limit
-        (replace,) = (self.n_games > self.n_envs).nonzero(as_tuple=True)
+        (replace,) = (self.n_games >= 2*self.n_oppo_envs).nonzero(as_tuple=True)
         for i in replace:
-            new = np.random.randint(len(self.stable))
-            evaluator.opponents[i] = assemble(evaluator, self.stable[new])
+            new = np.random.choice(list(self.stable))
+            evaluator.opponents[i].load_state_dict(self.stable[new])
+            log.info(f'New opponent #{new} is {self.step-new} steps old')
 
             self.n_games[i] = 0
 
         # Add to the stable
-        if self.step % 1000 == 0:
-            i = np.random.randint(len(self.stable))
-            self.stable[i] = clone(evaluator.state_dict())
+        if self.step % 600 == 0:
+            old = np.random.choice(list(self.stable))
+            del self.stable[old]
+            self.stable[self.step] = clone(evaluator.state_dict())
+            log.info(f'Network #{self.step} stabled; #{old} removed')
+
         self.step += 1
 
         return is_prime

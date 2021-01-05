@@ -76,8 +76,8 @@ def optimize(network, opt, batch):
         stats.mean('loss.value', value_loss)
         stats.mean('loss.policy', policy_loss)
         stats.mean('progress.resid-var', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
-        stats.mean('progress.target-kl-div', (d0.logits - d.logits).mul(d0.logits.exp()).where(w.valid, zeros).sum(-1).mean())
-        stats.mean('progress.prior-kl-div', (d0.prior - d.logits).mul(d0.prior.exp()).where(w.valid, zeros).sum(-1).mean())
+        stats.mean('progress.kl-div.prior', (d0.logits - d.logits).mul(d0.logits.exp()).where(w.valid, zeros).sum(-1).mean())
+        stats.mean('progress.kl-div.target', (d0.prior - d.logits).mul(d0.prior.exp()).where(w.valid, zeros).sum(-1).mean())
 
         stats.mean('rel-entropy.policy', *rel_entropy(d.logits, w.valid)) 
         stats.mean('rel-entropy.targets', *rel_entropy(d0.logits, w.valid))
@@ -120,11 +120,11 @@ def run(device='cuda'):
     agent = agentfunc(device, n_opponents=4)
     opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=1e-2, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
-    league = leagues.SimpleLeague(agentfunc, agent.evaluator, worlds.n_envs, 4, 16)
+    league = leagues.SimpleLeague(agentfunc, agent.evaluator, worlds.n_envs)
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('league-net-test-no-oppo', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('league-net-test', boardsize=worlds.boardsize, parent=parent)
 
     git.tag(run, error=False)
 
