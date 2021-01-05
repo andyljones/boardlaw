@@ -56,29 +56,35 @@ class LeagueNetwork(nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__()
 
-        # self.prime = traced_network(*args, **kwargs)
+        self.prime = traced_network(*args, **kwargs)
         self.prime = Network(*args, **kwargs)
-        self.opponents = nn.ModuleDict()
-        self.slices = {}
+        self.opponents = nn.ModuleList()
+        self.slices = []
 
         self.streams = [torch.cuda.Stream() for _ in range(2)]
 
+        self.prime_only = True
+
     def forward(self, worlds):
-        torch.cuda.synchronize()
-        split = min([s.start for s in self.slices.values()], default=worlds.n_envs)
+        if self.prime_only:
+            split = worlds.n_envs
+        else:
+            split = min([s.start for s in self.slices.values()], default=worlds.n_envs)
 
         parts = []
         obs, valid, seats = worlds.obs, worlds.valid, worlds.seats
+
+        torch.cuda.synchronize()
         with torch.cuda.stream(self.streams[0]):
             s = slice(0, split)
             parts.append(dict(zip(FIELDS, self.prime.traced(obs[s], valid[s], seats[s]))))
 
-        chunk = (worlds.n_envs - split)//len(self.opponents)
-        assert split + chunk*len(self.opponents) == worlds.n_envs
-        with torch.cuda.stream(self.streams[1]):
-            for idx, s in self.slices.items():
-                opponent = self.opponents[idx]
-                parts.append(dict(zip(FIELDS, opponent.traced(obs[s], valid[s], seats[s]))))
+        if split < worlds.n_envs:
+            chunk = (worlds.n_envs - split)//len(self.opponents)
+            assert split + chunk*len(self.opponents) == worlds.n_envs
+            with torch.cuda.stream(self.streams[1]):
+                for s, opponent in zip(self.slices, self.opponents): 
+                    parts.append(dict(zip(FIELDS, opponent.traced(obs[s], valid[s], seats[s]))))
 
         torch.cuda.synchronize()
         return arrdict.from_dicts(arrdict.cat(parts))
@@ -100,7 +106,6 @@ class SimpleNetwork(nn.Module):
 
     def forward(self, worlds):
         resp = arrdict.from_dicts(dict(zip(FIELDS, self.prime.traced(worlds.obs, worlds.valid, worlds.seats))))
-        self.is_prime = torch.full((worlds.n_envs,), True, device=worlds.device)
         return resp
 
     def state_dict(self):
