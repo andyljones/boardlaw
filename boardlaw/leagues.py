@@ -31,18 +31,18 @@ def clone(x):
     else:
         return x
 
-def assemble(agent, state_dict):
-    new = deepcopy(agent)
+def assemble(agentfunc, state_dict):
+    new = agentfunc().evaluator.prime
     new.load_state_dict(state_dict)
     return new
 
 class SimpleLeague:
 
-    def __init__(self, evaluator, n_envs, n_opponents, n_stabled):
+    def __init__(self, agentfunc, evaluator, n_envs, n_opponents, n_stabled, prime_frac=3/4):
         self.n_envs = n_envs
         self.n_opponents = n_opponents
 
-        [device] = [p.device for p in evaluator.parameters() if isinstance(p, torch.Tensor)]
+        [device] = {p.device for p in evaluator.parameters() if isinstance(p, torch.Tensor)}
         self.n_games = torch.zeros((n_opponents,), device=device)
 
         self.step = 0
@@ -50,43 +50,39 @@ class SimpleLeague:
 
         self.prime_frac = 3/4
 
-    def init(self, evaluator):
         chunk = self.n_envs//4//self.n_opponents
         start = int(self.prime_frac*self.n_envs)
         assert start + chunk*self.n_opponents == self.n_envs
 
         idxs = np.random.choice(list(self.stable), (self.n_opponents,))
         evaluator.slices = [slice(start+i*chunk, start+(i+1)*chunk) for i, idx in enumerate(idxs)]
-        evaluator.opponents = nn.ModuleList([assemble(evaluator, self.stable[idx]) for idx in idxs])
+        evaluator.opponents = nn.ModuleList([assemble(agentfunc, self.stable[idx]) for idx in idxs])
 
-    def update(self, trans, evaluator):
+    def update(self, evaluator, transition):
         # Toggle the prime-only
         evaluator.prime_only = not evaluator.prime_only
 
-        # Initialize
-        if not evaluator.slices:
-            self.init(evaluator)
-
         # Generate the prime mask
-        is_prime = torch.full((self.n_envs,), True, device=trans.terminal.device)
+        is_prime = torch.full((self.n_envs,), True, device=transition.terminal.device)
         for s in evaluator.slices:
             is_prime[s] = False
             
         # Update the games count
         for i, s in enumerate(evaluator.slices):
-            self.n_games[i] += trans[s].sum()
+            self.n_games[i] += transition.terminal[s].sum()
 
         # Swap out any over the limit
-        replace = (self.n_games > self.n_envs).nonzero().squeeze(-1)
-        for r in replace:
-            new = np.random.choice(list(self.stable))
-            evaluator.opponents[r] = assemble(evaluator, self.stable[new])
+        (replace,) = (self.n_games > self.n_envs).nonzero(as_tuple=True)
+        for i in replace:
+            new = np.random.randint(len(self.stable))
+            evaluator.opponents[i] = assemble(evaluator, self.stable[new])
 
-            self.n_games[r] = 0
+            self.n_games[i] = 0
 
         # Add to the stable
         if self.step % 1000 == 0:
-            idx = np.random.choice(self.stable)
-            self.stable[idx] = clone(evaluator.state_dict())
+            i = np.random.randint(len(self.stable))
+            self.stable[i] = clone(evaluator.state_dict())
+        self.step += 1
 
         return is_prime

@@ -69,7 +69,7 @@ class LeagueNetwork(nn.Module):
         if self.prime_only:
             split = worlds.n_envs
         else:
-            split = min([s.start for s in self.slices.values()], default=worlds.n_envs)
+            split = min([s.start for s in self.slices], default=worlds.n_envs)
 
         parts = []
         obs, valid, seats = worlds.obs, worlds.valid, worlds.seats

@@ -113,14 +113,14 @@ def warm_start(agent, opt, parent):
 def run(device='cuda'):
     buffer_length = 32 
     batch_size = 64*1024
-    n_envs = 4*1024
+    n_envs = 8*1024
     buffer_inc = batch_size//n_envs
 
     worlds = worldfunc(n_envs, device=device)
     agent = agentfunc(device, n_opponents=4)
     opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=1e-2, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
-    league = leagues.SimpleLeague(agent.evaluator, worlds.n_envs, 4, 16)
+    league = leagues.SimpleLeague(agentfunc, agent.evaluator, worlds.n_envs, 4, 16)
 
     parent = warm_start(agent, opt, '')
 
@@ -139,8 +139,7 @@ def run(device='cuda'):
                     decisions = agent(worlds, value=True)
                 new_worlds, transition = worlds.step(decisions.actions)
 
-                # is_prime = league.update(agent.evaluator, transition)
-                is_prime = torch.full((worlds.n_envs,), True, device=worlds.device)
+                is_prime = league.update(agent.evaluator, transition)
 
                 buffer.append(arrdict.arrdict(
                     worlds=worlds,
