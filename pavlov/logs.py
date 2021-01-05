@@ -126,7 +126,7 @@ class IPythonRenderer:
         self._out.refresh(content)
 
         for name, last in list(self._lasts.items()):
-            if tests.time() - last > 120:
+            if tests.time() - last > 300:
                 del self._buffers[name]
                 del self._lasts[name]
 

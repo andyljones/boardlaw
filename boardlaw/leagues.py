@@ -46,7 +46,7 @@ class SimpleLeague:
         self.n_games = torch.zeros((n_opponents,), device=device)
 
         self.step = 0
-        self.stable = {i: agentfunc().evaluator.state_dict() for i in range(n_stabled)}
+        self.stable = {i: evaluator.state_dict() for i in range(n_stabled)}
 
         prime_frac = 3/4
         self.n_prime_envs = int(prime_frac*self.n_envs)
@@ -72,7 +72,7 @@ class SimpleLeague:
             self.n_games[i] += transition.terminal[s].sum()
 
         # Figure out who's been playing too long. Stagger it a bit so they don't all change at once
-        threshold = torch.linspace(1.5, 2.5, self.n_opponents).mul(self.n_oppo_envs).int()
+        threshold = torch.linspace(1.5, 2.5, self.n_opponents, device=transition.terminal.device).mul(self.n_oppo_envs).int()
         (replace,) = (self.n_games >= threshold).nonzero(as_tuple=True)
         # Swap out any over the limit
         for i in replace:

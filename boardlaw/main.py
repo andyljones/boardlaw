@@ -122,9 +122,9 @@ def run(device='cuda'):
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
     league = leagues.SimpleLeague(agentfunc, agent.evaluator, worlds.n_envs)
 
-    parent = warm_start(agent, opt, '')
+    parent = warm_start(agent, opt, 'common-flight league-net-test')
 
-    run = runs.new_run('league-net-test', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('league-net-fine-tune', boardsize=worlds.boardsize, parent=parent)
 
     git.tag(run, error=False)
 
