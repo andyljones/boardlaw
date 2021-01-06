@@ -49,21 +49,37 @@ def prepare(obs, pos):
     B, H, W, C = stack.shape
     return stack.reshape(B, H*W, C)
 
-class Attention:
+class Attention(nn.Module):
 
-    def __init__(self, d_trunk, d_key=16):
-        d_obs = 7
-        d_pos = 3
-        self.prekey = nn.Linear(d_trunk, d_key)
-        self.kv = nn.Linear(d_obs+d_pos+d_trunk, 2*d_key)
-        self.q = nn.Linear(d_trunk, d_key)
+    def __init__(self, D=16, H=1):
+        super().__init__()
 
-    def forward(self, x, prep):
+        self.H = H
+        D_obs, D_pos = 7, 3
+        self.kv_x = nn.Linear(D, 2*H*D)
+        self.kv_b = nn.Linear(D_obs+D_pos, 2*H*D)
+        self.q = nn.Linear(D, D*H)
+        self.final = nn.Linear(D*H, D)
 
-        pk = torch.cat([self.prekey(x), prep], -1)
-        k, v = self.kv(pk).chunk(2, -1)
+    def forward(self, x, b):
+        B, Dx = x.shape
+        B, P, Db = b.shape
+        H = self.H
+
+        k, v = (self.kv_x(x)[:, None, :] + self.kv_b(b)).chunk(2, -1)
         q = self.q(x)
-        torch.einsum('brc')
+
+        k = k.view(B, P, H, Dx)
+        v = v.view(B, P, H, Dx)
+        q = q.view(B, H, Dx)
+
+        dots = torch.einsum('bphd,bhd->bph', k, q)
+        attn = torch.softmax(dots, -1)
+        vals = torch.einsum('bph,bphd->bhd', attn, v)
+
+        out = self.final(vals.view(B, H*Dx))
+
+        return out
 
 def test():
     from boardlaw.hex import Hex
@@ -71,4 +87,9 @@ def test():
     worlds = Hex.initial(1, 5)
 
     pos = positions(worlds.boardsize).to(worlds.device)
-    prep = prepare(worlds.obs, pos)
+    b = prepare(worlds.obs, pos)
+
+    x = torch.zeros((worlds.n_envs, 16), device=worlds.device)
+
+    attn = Attention().to(worlds.device)
+    attn(x, b)

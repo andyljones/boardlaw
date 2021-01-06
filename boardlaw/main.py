@@ -161,7 +161,7 @@ def run(device='cuda'):
 
             sd = storage.state_dicts(agent=agent, opt=opt)
             storage.throttled_latest(run, sd, 60)
-            storage.throttled_snapshot(run, sd, 60)
+            storage.throttled_snapshot(run, sd, 900)
             stats.gpu(worlds.device, 15)
 
 def benchmark_experience_collection(n_envs=8192, T=16):
@@ -173,7 +173,7 @@ def benchmark_experience_collection(n_envs=8192, T=16):
 
     torch.manual_seed(0)
     worlds = worldfunc(n_envs)
-    agent = agentfunc(n_opponents=4)
+    agent = agentfunc()
 
     agent(worlds) # warmup
 
