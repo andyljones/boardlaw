@@ -9,6 +9,51 @@ from . import cuda
 CHARS = '.bwTBLR'
 ORDS = {c: i for i, c in enumerate(CHARS)}
 
+def plot_board(colors, ax=None, black='dimgray', white='lightgray'):
+    _, ax = plt.subplots()
+    ax.set_aspect(1)
+
+    width = colors.shape[0]
+
+    sin60 = np.sin(np.pi/3)
+    ax.set_xlim(-1.5, 1.5*width)
+    ax.set_ylim(-sin60, sin60*width)
+
+    size = width*width
+    rows, cols = np.indices((width, width))
+    coords = np.stack([
+        cols + .5*np.arange(width)[:, None],
+        # Hex centers are 1 apart, so distances between rows are sin(60)
+        sin60*(width - 1 - rows)], -1).reshape(-1, 2)
+
+    tl, tr = (-1.5, (width)*sin60), (width-.5, (width)*sin60)
+    bl, br = (width/2-1, -sin60), (1.5*width, -sin60)
+    ax.add_patch(mpl.patches.Polygon(np.array([tl, tr, bl, br]), linewidth=1, edgecolor='k', facecolor=black, zorder=1))
+    ax.add_patch(mpl.patches.Polygon(np.array([tl, bl, tr, br]), linewidth=1, edgecolor='k', facecolor=white, zorder=1))
+
+    radius = .5/sin60
+    data_to_pixels = ax.transData.get_matrix()[0, 0]
+    pixels_to_points = 1/ax.figure.get_dpi()*72.
+    size = np.pi*(data_to_pixels*pixels_to_points*radius)**2
+    sizes = (size,)*len(coords)
+
+    hexes = mpl.collections.RegularPolyCollection(
+                    numsides=6, 
+                    sizes=sizes,
+                    offsets=coords, 
+                    facecolors=colors.reshape(-1, colors.shape[-1]), 
+                    edgecolor='k', 
+                    linewidths=1, 
+                    transOffset=ax.transData,
+                    zorder=2)
+    ax.add_collection(hexes)
+
+    ax.set_frame_on(False)
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    return ax
+
 class Hex(arrdict.namedarrtuple(fields=('board', 'seats'))):
 
     @classmethod
@@ -75,20 +120,8 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seats'))):
     def plot_worlds(cls, worlds, e=None, ax=None, colors='obs'):
         e = (0,)*(worlds.board.ndim-2) if e is None else e
         board = worlds.board[e]
-        width = board.shape[1]
 
         ax = plt.subplots()[1] if ax is None else ax
-        ax.set_aspect(1)
-
-        sin60 = np.sin(np.pi/3)
-        ax.set_xlim(-1.5, 1.5*width)
-        ax.set_ylim(-sin60, sin60*width)
-
-        rows, cols = np.indices(board.shape)
-        coords = np.stack([
-            cols + .5*np.arange(board.shape[0])[:, None],
-            # Hex centers are 1 apart, so distances between rows are sin(60)
-            sin60*(board.shape[0] - 1 - rows)], -1).reshape(-1, 2)
 
         black = 'dimgray'
         white = 'lightgray'
@@ -96,34 +129,8 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seats'))):
             colors = ['tan', black, white, black, black, white, white] 
         elif colors == 'board':
             colors = ['tan', black, white, 'maroon', 'sienna', 'cornflowerblue', 'plum']
-        colors = np.vectorize(colors.__getitem__)(board).flatten()
-
-
-        tl, tr = (-1.5, (width)*sin60), (width-.5, (width)*sin60)
-        bl, br = (width/2-1, -sin60), (1.5*width, -sin60)
-        ax.add_patch(mpl.patches.Polygon(np.array([tl, tr, bl, br]), linewidth=1, edgecolor='k', facecolor=black, zorder=1))
-        ax.add_patch(mpl.patches.Polygon(np.array([tl, bl, tr, br]), linewidth=1, edgecolor='k', facecolor=white, zorder=1))
-
-        radius = .5/sin60
-        data_to_pixels = ax.transData.get_matrix()[0, 0]
-        pixels_to_points = 1/ax.figure.get_dpi()*72.
-        size = np.pi*(data_to_pixels*pixels_to_points*radius)**2
-        sizes = (size,)*len(coords)
-
-        hexes = mpl.collections.RegularPolyCollection(
-                        numsides=6, 
-                        sizes=sizes,
-                        offsets=coords, 
-                        facecolors=colors, 
-                        edgecolor='k', 
-                        linewidths=1, 
-                        transOffset=ax.transData,
-                        zorder=2)
-
-        ax.add_collection(hexes)
-        ax.set_frame_on(False)
-        ax.set_xticks([])
-        ax.set_yticks([])
+        colors = np.vectorize(colors.__getitem__)(board)
+        plot_board(colors, ax)
 
         return ax.figure
 
