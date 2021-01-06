@@ -22,7 +22,6 @@ def plot(p):
     from .hex import plot_board
     plot_board(np.stack(np.vectorize(plt.cm.RdBu)(.5+.5*p), -1))
 
-
 def positions(boardsize):
     # https://www.redblobgames.com/grids/hexagons/#conversions-axial
     #TODO: Does it help to sin/cos encode this?
@@ -45,7 +44,8 @@ def neighbourhoods(obs):
     return torch.stack([offset(augmented, o) for o in OFFSETS], -1)
 
 def prepare(obs, pos):
-    stack = torch.cat([neighbourhoods(obs), pos[None]], -1)
+    pos = pos[None].repeat_interleave(obs.shape[0], 0)
+    stack = torch.cat([neighbourhoods(obs), pos], -1)
     B, H, W, C = stack.shape
     return stack.reshape(B, H*W, C)
 
@@ -73,7 +73,7 @@ class Attention(nn.Module):
         v = v.view(B, P, H, Dx)
         q = q.view(B, H, Dx)
 
-        dots = torch.einsum('bphd,bhd->bph', k, q)
+        dots = torch.einsum('bphd,bhd->bph', k, q)/Dx**.5
         attn = torch.softmax(dots, -1)
         vals = torch.einsum('bph,bphd->bhd', attn, v)
 
@@ -81,15 +81,74 @@ class Attention(nn.Module):
 
         return out
 
+class MaskedActions(nn.Module):
+
+    def __init__(self, boardsize, D):
+        super().__init__()
+        D_pos = 3
+        self.k_p = nn.Linear(D_pos, D) 
+        self.k_x = nn.Linear(D, D) 
+        self.q = nn.Linear(D, D)
+
+    def forward(self, x, p):
+        B, D = x.shape
+        boardsize = p.size(-2)
+
+        p = p.view(boardsize*boardsize, -1)
+        k = self.k_x(x)[:, None, :] + self.k_p(p)[None, :, :]
+        q = self.q(x)
+
+        dots = torch.einsum('bpd,bd->bp', k, q)/D**.5
+
+        return F.log_softmax(dots, -1).reshape(B, boardsize, boardsize)
+
+class Model(nn.Module):
+
+    def __init__(self, boardsize, D):
+        super().__init__()
+
+        self.D = D
+        self.layers = Attention(D)
+        self.policy = MaskedActions(boardsize, D)
+
+        pos = positions(boardsize)
+        self.register_buffer('pos', pos)
+
+    def forward(self, obs):
+        b = prepare(obs, self.pos)
+        x = torch.zeros((obs.shape[0], self.D), device=obs.device)
+        x = self.layers(x, b)
+        x = self.policy(x, self.pos)
+        return x
+
 def test():
     from boardlaw.hex import Hex
+    from tqdm.auto import tqdm
 
     worlds = Hex.initial(1, 5)
 
-    pos = positions(worlds.boardsize).to(worlds.device)
-    b = prepare(worlds.obs, pos)
+    D = 16
 
-    x = torch.zeros((worlds.n_envs, 16), device=worlds.device)
+    model = Model(worlds.boardsize, D).cuda()
+    opt = torch.optim.Adam(model.parameters(), lr=1e-3)
 
-    attn = Attention().to(worlds.device)
-    attn(x, b)
+    B = 1024
+    envs = torch.arange(B, device=worlds.device)
+    with tqdm() as pbar:
+        while True:
+            rows = torch.randint(0, worlds.boardsize, size=(B,), device=worlds.device)
+            cols = torch.randint(0, worlds.boardsize, size=(B,), device=worlds.device)
+
+            obs = torch.zeros((B, worlds.boardsize, worlds.boardsize, 2), device=worlds.device)
+            obs[envs, rows, cols, 0] = 1.
+            targets = rows*worlds.boardsize + cols
+
+            logprobs = model(obs)
+
+            loss = F.nll_loss(logprobs.reshape(B, -1), targets)
+            
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+
+            pbar.set_description(f'{loss:.2f}')
