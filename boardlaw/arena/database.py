@@ -74,6 +74,9 @@ def wins(run, min_games=-1):
         return pd.DataFrame()
     return df.black_wins
 
+def winrate(run):
+    return wins(run)/games(run)
+
 def moves(run):
     df = summary(run)
     if len(df) == 0:

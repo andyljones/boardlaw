@@ -97,10 +97,10 @@ def optimize(network, opt, batch):
 def worldfunc(n_envs, device='cuda'):
     return hex.Hex.initial(n_envs=n_envs, boardsize=7, device=device)
 
-def agentfunc(device='cuda', n_opponents=0):
+def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
     network = networks.LeagueNetwork(worlds.obs_space, worlds.action_space).to(worlds.device)
-    return mcts.MCTSAgent(network, n_nodes=64)
+    return mcts.MCTSAgent(network, n_nodes=256)
 
 def warm_start(agent, opt, parent):
     if parent:
@@ -118,13 +118,13 @@ def run(device='cuda'):
 
     worlds = worldfunc(n_envs, device=device)
     agent = agentfunc(device, n_opponents=4)
-    opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=1e-3, amsgrad=True)
+    opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=1e-2, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
     league = leagues.SimpleLeague(agentfunc, agent.evaluator, worlds.n_envs)
 
     parent = warm_start(agent, opt, '*gentle-mouth 7x7')
 
-    run = runs.new_run('7x7-fast-league', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('7x7-high-sim', boardsize=worlds.boardsize, parent=parent)
 
     git.tag(run, error=False)
 
@@ -161,7 +161,7 @@ def run(device='cuda'):
 
             sd = storage.state_dicts(agent=agent, opt=opt)
             storage.throttled_latest(run, sd, 60)
-            storage.throttled_snapshot(run, sd, 900)
+            storage.throttled_snapshot(run, sd, 60)
             stats.gpu(worlds.device, 15)
 
 def benchmark_experience_collection(n_envs=8192, T=16):

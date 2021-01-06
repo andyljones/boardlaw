@@ -65,6 +65,7 @@ class StatsReaders:
     def __init__(self, run):
         self._run = run
         self._pool = {}
+        self.refresh()
 
     def refresh(self):
         for filename, info in files.files(self._run).items():
@@ -75,11 +76,15 @@ class StatsReaders:
                     reader = KINDS[kind].reader(self._run, prefix)
                     self._pool[prefix] = reader
 
+    #TODO: Just inherit from dict, c'mon
     def __getitem__(self, prefix):
         return self._pool[prefix]
 
     def __iter__(self):
         return iter(self._pool)
+
+    def items(self):
+        return self._pool.items()
         
 def reader(run, channel):
     #TODO: This won't generalise!
@@ -111,3 +116,20 @@ def pandas(run, channel, field=None, rule='60s', **kwargs):
 def compare(rs, *args, **kwargs):
     ns = [n for r in rs for n in runs.resolutions(r)]
     return pd.concat({n: pandas(n, *args, **kwargs) for n in ns}, 1)
+
+def purge(minlen=900):
+    from tqdm.auto import tqdm
+    for r in tqdm(runs.runs()):
+        try:
+            start = pd.to_datetime(runs.info(r)['_created'])
+            end = np.datetime64(start.tz_localize(None))
+            for _, reader in StatsReaders(r).items():
+                end = max(end, reader.array()['_time'].max())
+            length = pd.to_datetime(end).tz_localize('UTC') - start
+            if length.total_seconds() < 900:
+                print(f'Deleting {length.total_seconds():.0f}s run "{r}"')
+                runs.delete(r)
+        except Exception as e:
+            print(f'Checking "{r}" failed with error "{e}"')
+
+    pass
