@@ -69,6 +69,7 @@ class MCTS:
         world = self.worlds[:, 0]
         with torch.no_grad():
             decisions = evaluator(world)
+        self.original_logits = decisions.logits
         self.decisions.logits[:, self.sim] = dirichlet_noise(decisions.logits, world.valid, self.noise_eps)
         self.decisions.v[:, 0] = decisions.v
 
@@ -129,6 +130,8 @@ class MCTS:
         self.sim += 1
 
     def root(self):
+        #TODO: Bit of a hack this 
+        self.decisions.logits[:, 0] = self.original_logits
         return arrdict.arrdict(
             logits=cuda.root(self._cuda()).log(),
             prior=self.decisions.logits[:, 0], # useful for monitoring KL div

@@ -95,7 +95,7 @@ def optimize(network, opt, batch):
         stats.mean('opt.step-max', (new - old).abs().max())
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=9, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=7, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
@@ -112,7 +112,7 @@ def warm_start(agent, opt, parent):
 
 def run(device='cuda'):
     buffer_length = 32 
-    batch_size = 32*1024
+    batch_size = 64*1024
     n_envs = 8*1024
     buffer_inc = batch_size//n_envs
 
@@ -124,7 +124,7 @@ def run(device='cuda'):
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('9x9-deep-net', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('7x7-noise-free-root', boardsize=worlds.boardsize, parent=parent)
 
     git.tag(run, error=False)
 
