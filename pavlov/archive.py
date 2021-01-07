@@ -14,3 +14,19 @@ def archive(run=-1):
 
     path = files.new_file(run, 'archive.tar.gz')
     path.write_bytes(contents)
+
+def update():
+    from pavlov import runs
+    import git
+
+    rows = runs.pandas().query('tag.notnull()')
+    repo = git.Repo('.')
+    for run, row in rows.iterrows():
+        print(run)
+        if not files.path(run, 'archive.tar.gz').exists():
+            repo.git.checkout(f'tags/pavlov_{row.tag}')
+            archive(run)
+            
+    for run, row in rows.iterrows():
+        with runs.update(run) as i:
+            del i['tag']
