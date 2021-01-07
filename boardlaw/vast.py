@@ -115,8 +115,8 @@ def deploy(label):
     rsync(conn, 
         source='.',
         target='/code',
-        exclude=('.*', 'output', '**/__pycache__', '*.egg-info'),
-        include=('output/arena/mohex-*',),
+        exclude=('.git',),
+        rsync_opts='--filter=":- .gitignore"',
         strict_host_keys=False)
 
 def run(label):
@@ -129,6 +129,7 @@ def fetch(label):
 
 def demo():
     label = launch()
+    wait(label)
 
     setup(label)
     deploy(label)
