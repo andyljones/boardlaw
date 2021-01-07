@@ -19,11 +19,11 @@ def compare(rs, *args, fill=False, **kwargs):
     ns = [n for r in rs for n in runs.resolutions(r)]
     return pd.concat({n: pandas(n, *args, **kwargs) for n in ns}, 1)
 
-def plot(*args, fill=False, tail=0, **kwargs):
+def plot(*args, fill=False, tail=None, head=None, **kwargs):
     df = compare(*args, **kwargs)
     if fill:
         df = df.ffill().where(df.bfill().notnull())
-    ax = df.iloc[tail:].plot()
+    ax = df.iloc[tail:head].plot()
     ax.grid(True)
     return ax
 
