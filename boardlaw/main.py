@@ -2,7 +2,7 @@ import time
 import numpy as np
 import torch
 from rebar import arrdict
-from pavlov import stats, logs, runs, storage, git
+from pavlov import stats, logs, runs, storage, archive
 from . import hex, mcts, networks, learning, validation, analysis, arena, leagues
 from torch.nn import functional as F
 from logging import getLogger
@@ -126,7 +126,7 @@ def run(device='cuda'):
 
     run = runs.new_run('7x7-noise-free-root', boardsize=worlds.boardsize, parent=parent)
 
-    git.tag(run, error=False)
+    archive.archive(run)
 
     buffer = []
     idxs = cycle(learning.batch_indices(buffer_length, n_envs, batch_size, worlds.device))
