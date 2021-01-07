@@ -90,16 +90,18 @@ def wait(label):
             print(f'({s["actual_status"]}) {s["status_msg"]}')
 
 
-
+_cache = {}
 def connection(label):
     # Get the vast key into place: `docker cp ~/.ssh/boardlaw_rsa boardlaw:/root/.ssh/`
     # Would be better to use SSH agent forwarding, if vscode's worked reliably :(
-    s = status(label)
-    return Connection(
-        host=s.ssh_host, 
-        user='root', 
-        port=int(s.ssh_port), 
-        connect_kwargs={'key_filename': ['/root/.ssh/vast_rsa']})
+    if label not in _cache:
+        s = status(label)
+        _cache[label] = Connection(
+            host=s.ssh_host, 
+            user='root', 
+            port=int(s.ssh_port), 
+            connect_kwargs={'key_filename': ['/root/.ssh/vast_rsa']})
+    return _cache[label]
     
 def ssh_command(label):
     s = status(label)

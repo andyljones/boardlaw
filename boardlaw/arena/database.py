@@ -1,4 +1,5 @@
 import pandas as pd
+from pkg_resources import resource_filename
 from pavlov import json, runs
 from pathlib import Path
 import json as json_
@@ -36,7 +37,7 @@ def save(run, result):
 def pandas(run):
     # Need to come up with a better way of handling 'special' runs
     if isinstance(run, str) and run.startswith('mohex'):
-        contents = json_.loads(Path(f'output/arena/{run}.json').read_text())
+        contents = json_.loads(Path(resource_filename(__package__, f'data/{run}.json')).read_text())
     else:
         contents = json.read(run, PREFIX, [])
     if contents:

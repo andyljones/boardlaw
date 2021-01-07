@@ -100,7 +100,7 @@ def worldfunc(n_envs, device='cuda'):
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
     network = networks.LeagueNetwork(worlds.obs_space, worlds.action_space).to(worlds.device)
-    return mcts.MCTSAgent(network, n_nodes=128)
+    return mcts.MCTSAgent(network, n_nodes=64)
 
 def warm_start(agent, opt, parent):
     if parent:
@@ -112,7 +112,7 @@ def warm_start(agent, opt, parent):
 
 def run(device='cuda'):
     buffer_length = 32 
-    batch_size = 64*1024
+    batch_size = 32*1024
     n_envs = 8*1024
     buffer_inc = batch_size//n_envs
 
