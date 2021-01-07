@@ -126,8 +126,12 @@ def run(label):
     conn.run('cd /code && python -c "from boardlaw.main import *; run()"', pty=False)
 
 def fetch(label):
-    # TODO
-    pass
+    conn = connection(label)
+    rsync(conn, 
+        source='/code/output',
+        target='./output',
+        rsync_opts='--filter=":- .gitignore"',
+        strict_host_keys=False)
 
 def demo():
     label = launch()
