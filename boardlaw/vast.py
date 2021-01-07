@@ -24,7 +24,12 @@ def set_key():
 
 def invoke(command):
     set_key()
-    return check_output(f'vast {command}', shell=True).decode()
+    while True:
+        s = check_output(f'vast {command}', shell=True).decode()
+        if s.startswith('failed with error 502'):
+            print('Hit 502 error, trying again')
+        else:
+            return s
 
 def offers():
     js = json.loads(invoke(f'search offers --raw --storage {DISK}'))
@@ -32,7 +37,7 @@ def offers():
 
 def suggest():
     o = offers()
-    viable = o.query('gpu_name == "RTX 2080 Ti" & num_gpus == 1')
+    viable = o.query('gpu_name == "RTX 2080 Ti" & num_gpus == 1 & cuda_max_good >= 11.1')
     return viable.sort_values('dph_total').iloc[0]
 
 def launch():
@@ -63,11 +68,28 @@ def status(label=None):
         s = status()
         if s is None: 
             raise ValueError('No instances')
+        elif isinstance(label, int):
+            return s.iloc[label]
         else:
             return s.loc[label]
     js = json.loads(invoke('show instances --raw'))
     if js:
         return pd.DataFrame.from_dict(js).set_index('label')
+
+def wait(label):
+    from IPython import display
+    while True:
+        s = status(label)
+        display.clear_output(wait=True)
+        if s['actual_status'] is None:
+            print('Waiting on first status message')
+        if s['actual_status'] == 'running':
+            print('Ready')
+            break
+        else:
+            print(f'({s["actual_status"]}) {s["status_msg"]}')
+
+
 
 def connection(label):
     # Get the vast key into place: `docker cp ~/.ssh/boardlaw_rsa boardlaw:/root/.ssh/`
@@ -97,11 +119,6 @@ def deploy(label):
         include=('output/arena/mohex-*',),
         strict_host_keys=False)
 
-def install(label):
-    conn = connection(label)
-    conn.run('pip install -e /code/rebar')
-    conn.run('pip install -e /code/activelo')
-
 def run(label):
     conn = connection(label)
     conn.run('cd /code && python -c "from boardlaw.main import *; run()"')
@@ -115,5 +132,4 @@ def demo():
 
     setup(label)
     deploy(label)
-    install(label)
     run(label)
