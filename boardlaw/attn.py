@@ -108,7 +108,9 @@ class Model(nn.Module):
         super().__init__()
 
         self.D = D
-        self.layers = Attention(D)
+        self.first = nn.Linear(D, D)
+        self.attn = Attention(D)
+        self.second = nn.Linear(D, D)
         self.policy = MaskedActions(boardsize, D)
 
         pos = positions(boardsize)
@@ -117,7 +119,9 @@ class Model(nn.Module):
     def forward(self, obs):
         b = prepare(obs, self.pos)
         x = torch.zeros((obs.shape[0], self.D), device=obs.device)
-        x = self.layers(x, b)
+        x = F.relu(self.first(x))
+        x = self.attn(x, b)
+        x = F.relu(self.second(x))
         x = self.policy(x, self.pos)
         return x
 
@@ -130,7 +134,7 @@ def test():
     D = 16
 
     model = Model(worlds.boardsize, D).cuda()
-    opt = torch.optim.Adam(model.parameters(), lr=1e-3)
+    opt = torch.optim.Adam(model.parameters(), lr=1e-4)
 
     B = 1024
     envs = torch.arange(B, device=worlds.device)
