@@ -8,8 +8,9 @@ log = getLogger(__name__)
 
 def archive(run=-1):
     with NamedTemporaryFile() as f:
-        check_output('git add -u', shell=True)
-        check_output('git ls-files --cached --others --exclude-standard -z | xargs -0 tar -czvf ' + f.name, shell=True, stderr=STDOUT)
+        # Ignores .gitignore automagically, and doesn't depend on a git repo existing
+        # so that we can use it on remote machines we've rsync'd to. Hooray!
+        check_output('ag -0 -l . | xargs -0 tar -czvf ' + f.name, shell=True, stderr=STDOUT)
         contents = f.read()
 
     path = files.new_file(run, 'archive.tar.gz')
