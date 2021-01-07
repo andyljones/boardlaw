@@ -1,7 +1,7 @@
 from . import files
 from logging import getLogger
 from tempfile import NamedTemporaryFile
-from subprocess import check_output, STDOUT
+from subprocess import CalledProcessError, check_output, STDOUT
 
 
 log = getLogger(__name__)
@@ -10,7 +10,12 @@ def archive(run=-1):
     with NamedTemporaryFile() as f:
         # Ignores .gitignore automagically, and doesn't depend on a git repo existing
         # so that we can use it on remote machines we've rsync'd to. Hooray!
-        check_output('ag -0 -l . | xargs -0 tar -czvf ' + f.name, shell=True, stderr=STDOUT)
+        try:
+            # /dev/null fixes this bug: https://github.com/ggreer/the_silver_searcher/issues/943#issuecomment-426096765
+            check_output('ag -g "" -l -0 /code </dev/null | xargs -0 tar -czvf ' + f.name, shell=True, stderr=STDOUT)
+        except CalledProcessError as e:
+            log.error(f'Archival failed with output "{e.stdout.decode()}"')
+            raise 
         contents = f.read()
 
     path = files.new_file(run, 'archive.tar.gz')

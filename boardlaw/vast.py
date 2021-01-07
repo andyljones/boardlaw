@@ -121,7 +121,7 @@ def deploy(label):
 
 def run(label):
     conn = connection(label)
-    conn.run('cd /code && python -c "from boardlaw.main import *; run()"')
+    conn.run('cd /code && python -c "from boardlaw.main import *; run()"', pty=False)
 
 def fetch(label):
     # TODO
