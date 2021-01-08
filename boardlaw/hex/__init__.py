@@ -10,7 +10,7 @@ CHARS = '.bwTBLR'
 ORDS = {c: i for i, c in enumerate(CHARS)}
 
 def plot_board(colors, ax=None, black='dimgray', white='lightgray'):
-    _, ax = plt.subplots()
+    ax = plt.subplots()[1] if ax is None else ax
     ax.set_aspect(1)
 
     width = colors.shape[0]
