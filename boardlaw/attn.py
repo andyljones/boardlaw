@@ -149,9 +149,10 @@ class Model(nn.Module):
 
         self.D = D
         self.first = nn.Linear(D, D)
-        self.attn = Attention(D, D_obs, D_pos)
+        self.attn = Attention(D, D_obs, D_pos, H=2)
         self.second = nn.Linear(D, D)
-        self.policy = PosActions(boardsize, D, D_pos)
+        self.policy0 = PosActions(boardsize, D, D_pos)
+        self.policy1 = PosActions(boardsize, D, D_pos)
 
     def forward(self, obs):
         b = prepare(obs, self.pos)
@@ -159,8 +160,9 @@ class Model(nn.Module):
         x = F.relu(self.first(x))
         x = self.attn(x, b)
         x = self.second(x)
-        x = self.policy(x, self.pos)
-        return x
+        x0 = self.policy0(x, self.pos)
+        x1 = self.policy1(x, self.pos)
+        return x0, x1
 
 def pointer_loss(rows, cols, boardsize, outputs):
     targets = 2*torch.stack([rows/boardsize, cols/boardsize], -1) - 1
@@ -177,8 +179,8 @@ def test():
 
     worlds = Hex.initial(1, 5)
 
-    T = 1000
-    D = 16
+    T = 5000
+    D = 32
 
     model = Model(worlds.boardsize, D).cuda()
     opt = torch.optim.Adam(model.parameters(), lr=1e-2)
@@ -189,15 +191,18 @@ def test():
     losses = []
     with tqdm(total=T) as pbar:
         for t in range(T):
-            rows = torch.randint(0, worlds.boardsize, size=(B,), device=worlds.device)
-            cols = torch.randint(0, worlds.boardsize, size=(B,), device=worlds.device)
-
             obs = torch.zeros((B, worlds.boardsize, worlds.boardsize, 2), device=worlds.device)
-            obs[envs, rows, cols, 0] = 1.
 
+            r0 = torch.randint(0, worlds.boardsize, size=(B,), device=worlds.device)
+            c0 = torch.randint(0, worlds.boardsize, size=(B,), device=worlds.device)
+            obs[envs, r0, c0, 0] = 1.
+
+            r1 = torch.randint(0, worlds.boardsize, size=(B,), device=worlds.device)
+            c1 = torch.randint(0, worlds.boardsize, size=(B,), device=worlds.device)
+            obs[envs, r1, c1, 1] = 1.
             
-            outputs = model(obs)
-            loss = action_loss(rows, cols, worlds.boardsize, outputs)
+            x0, x1 = model(obs)
+            loss = action_loss(r0, c0, worlds.boardsize, x0) + action_loss(r1, c1, worlds.boardsize, x1)
 
             opt.zero_grad()
             loss.backward()
