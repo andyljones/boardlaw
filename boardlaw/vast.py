@@ -1,16 +1,14 @@
-# Build and push image to DockerHub (might have to do this manually)
-# Find an appropriate vast machine
-# Create a machine using their commandline
-# Pass onstart script to start the job
-# Use vast, ssh, rsync to monitor things (using fabric and patchwork?)
-# Manual destroy
+from subprocess import Popen, check_output, PIPE, STDOUT
+import time
 import pandas as pd
 import json
-from subprocess import check_output
 from pathlib import Path
 import aljpy
 from fabric import Connection
 from patchwork.transfers import rsync
+from logging import getLogger
+
+log = getLogger(__name__)
 
 DISK = 10
 MAX_DPH = .5
@@ -27,7 +25,7 @@ def invoke(command):
     while True:
         s = check_output(f'vast {command}', shell=True).decode()
         if s.startswith('failed with error 502'):
-            print('Hit 502 error, trying again')
+            log.info('Hit 502 error, trying again')
         else:
             return s
 
@@ -129,8 +127,28 @@ def fetch(label):
     # rsync -r root@ssh4.vast.ai:/code/output/pavlov output/  -e "ssh -o StrictHostKeyChecking=no -i /root/.ssh/vast_rsa -p 37481"
     conn = connection(label)
     [keyfile] = conn.connect_kwargs['key_filename']
-    conn.local(f"""rsync -r -e "ssh -o StrictHostKeyChecking=no -i {keyfile} -p {conn.port}" {conn.user}@{conn.host}:/code/output/pavlov output/""")
+    command = f"""rsync -r -e "ssh -o StrictHostKeyChecking=no -i {keyfile} -p {conn.port}" {conn.user}@{conn.host}:/code/output/pavlov output/"""
+    return Popen(command, shell=True, stdout=PIPE, stderr=PIPE)
 
+def watch():
+    ps = {}
+    while True:
+        for label in set(status().index) - set(ps):
+            log.debug(f'Fetching "{label}"')
+            ps[label] = fetch(label)
+        
+        for label in list(ps):
+            r = ps[label].poll()
+            if r is None:
+                pass
+            elif r == 0:
+                log.debug(f'Fetched "{label}"')
+                del ps[label]
+            else:
+                log.warn(f'Fetching "{label}" failed with retcode {r}. Stdout: "{r.stderr.read()}"')
+        
+        time.sleep(1)
+            
 def demo():
     label = launch()
     wait(label)
@@ -138,3 +156,11 @@ def demo():
     setup(label)
     deploy(label)
     run(label)
+
+if __name__ == '__main__':
+    fns = [watch]
+    from argparse import ArgumentParser
+    parser = ArgumentParser()
+    parser.add_argument('action', type=str, choices=[f.__name__ for f in fns])
+    args = parser.parse_args()
+    globals()[args.action]()
