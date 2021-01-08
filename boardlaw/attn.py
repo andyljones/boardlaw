@@ -1,20 +1,9 @@
-"""
-Idea:
-    * Attend to the board
-    * Say main layers are 256 neurons
-    * Then at each layer, compress the input down to 8
-    * At each location, stack it with the position (4?) and 3x3 board features (9 or 18, depending)
-    * That gives 8 + 4 + 18 = 30 input, which you can stack with the 8 and transform into 16?
-    * On a 9x9 board, that works out to about the cost of one 256x256 layer
-    * Attend to it with a 16 key, return a 16 value, expand that value up to 256 again and add it in
-    * Then ReZero it into the trunk.
-
-"""
 import pandas as pd
 import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
+from rebar import dotdict
 
 OFFSETS = [(-1, 0), (-1, 1), (0, -1), (0, 0), (0, +1), (-1, -1), (-1, 0)]
 
@@ -34,26 +23,6 @@ class Mechanical(nn.Module):
         x = F.log_softmax(x, -1)
         x = x.reshape(obs.shape[:-1])
         return x
-
-class MaskedActions(nn.Module):
-
-    def __init__(self, boardsize, D, D_pos):
-        super().__init__()
-        self.k_p = nn.Linear(D_pos, D) 
-        self.k_x = nn.Linear(D, D) 
-        self.q = nn.Linear(D, D)
-
-    def forward(self, x, p):
-        B, D = x.shape
-        boardsize = p.size(-2)
-
-        p = p.view(boardsize*boardsize, -1)
-        k = self.k_x(x)[:, None, :] + self.k_p(p)[None, :, :]
-        q = self.q(x)
-
-        dots = torch.einsum('bpd,bd->bp', k, q)/D**.5
-
-        return F.log_softmax(dots, -1).reshape(B, boardsize, boardsize)
 
 class ReZeroResidual(nn.Linear):
 
@@ -118,6 +87,26 @@ def prepare(obs, pos):
     B, H, W, C = stack.shape
     return stack.reshape(B, H*W, C)
 
+class PosActions(nn.Module):
+
+    def __init__(self, boardsize, D, D_pos):
+        super().__init__()
+        self.k_p = nn.Linear(D_pos, D) 
+        self.k_x = nn.Linear(D, D) 
+        self.q = nn.Linear(D, D)
+
+    def forward(self, x, p):
+        B, D = x.shape
+        boardsize = p.size(-2)
+
+        p = p.view(boardsize*boardsize, -1)
+        k = self.k_x(x)[:, None, :] + self.k_p(p)[None, :, :]
+        q = self.q(x)
+
+        dots = torch.einsum('bpd,bd->bp', k, q)/D**.5
+
+        return F.log_softmax(dots, -1).reshape(B, boardsize, boardsize)
+
 class Attention(nn.Module):
 
     def __init__(self, D, D_obs, D_pos, H=1):
@@ -142,7 +131,7 @@ class Attention(nn.Module):
         q = q.view(B, H, Dx)
 
         dots = torch.einsum('bphd,bhd->bph', k, q)/Dx**.5
-        attn = torch.softmax(dots, -1)
+        attn = torch.softmax(dots, -2)
         vals = torch.einsum('bph,bphd->bhd', attn, v)
 
         out = self.final(vals.view(B, H*Dx))
@@ -151,28 +140,36 @@ class Attention(nn.Module):
 
 class Model(nn.Module):
 
-    def __init__(self, boardsize, D):
+    def __init__(self, boardsize, D, D_obs=7):
         super().__init__()
 
-        D_obs, D_pos = 7, 18
+        pos = positions(boardsize)
+        self.register_buffer('pos', pos)
+        D_pos = pos.size(-1)
 
         self.D = D
         self.first = nn.Linear(D, D)
         self.attn = Attention(D, D_obs, D_pos)
         self.second = nn.Linear(D, D)
-        self.policy = MaskedActions(boardsize, D, D_pos)
-
-        pos = positions(boardsize)
-        self.register_buffer('pos', pos)
+        self.policy = PosActions(boardsize, D, D_pos)
 
     def forward(self, obs):
         b = prepare(obs, self.pos)
         x = torch.zeros((obs.shape[0], self.D), device=obs.device)
         x = F.relu(self.first(x))
         x = self.attn(x, b)
-        x = F.relu(self.second(x))
+        x = self.second(x)
         x = self.policy(x, self.pos)
         return x
+
+def pointer_loss(rows, cols, boardsize, outputs):
+    targets = 2*torch.stack([rows/boardsize, cols/boardsize], -1) - 1
+    return (targets - outputs).pow(2).mean()
+
+def action_loss(rows, cols, boardsize, outputs):
+    B = rows.shape[0]
+    targets = rows*boardsize + cols
+    return F.nll_loss(outputs.reshape(B, -1), targets)
 
 def test():
     from boardlaw.hex import Hex
@@ -180,7 +177,7 @@ def test():
 
     worlds = Hex.initial(1, 5)
 
-    T = 10000
+    T = 1000
     D = 16
 
     model = Model(worlds.boardsize, D).cuda()
@@ -197,12 +194,11 @@ def test():
 
             obs = torch.zeros((B, worlds.boardsize, worlds.boardsize, 2), device=worlds.device)
             obs[envs, rows, cols, 0] = 1.
-            targets = rows*worlds.boardsize + cols
 
-            logprobs = model(obs)
-
-            loss = F.nll_loss(logprobs.reshape(B, -1), targets)
             
+            outputs = model(obs)
+            loss = action_loss(rows, cols, worlds.boardsize, outputs)
+
             opt.zero_grad()
             loss.backward()
             opt.step()
@@ -213,4 +209,8 @@ def test():
 
             losses.append(float(loss))
 
-    return pd.Series(losses)
+    return dotdict.dotdict(
+        losses=pd.Series(losses),
+        obs=obs,
+        outputs=outputs,
+        targets=targets)
