@@ -10,6 +10,7 @@ Idea:
     * Then ReZero it into the trunk.
 
 """
+import pandas as pd
 import numpy as np
 import torch
 from torch import nn
@@ -125,21 +126,67 @@ class Model(nn.Module):
         x = self.policy(x, self.pos)
         return x
 
+class ReZeroResidual(nn.Linear):
+
+    def __init__(self, width):
+        super().__init__(width, width)
+        nn.init.orthogonal_(self.weight, gain=2**.5)
+        self.register_parameter('α', nn.Parameter(torch.zeros(())))
+
+    def forward(self, x, *args, **kwargs):
+        return x + self.α*F.relu(super().forward(x))
+
+class FCModel(nn.Module):
+
+    def __init__(self, boardsize, D, n_layers=8):
+        super().__init__()
+
+        self.D = D
+        self.first = nn.Linear(boardsize**2, D)
+        # self.body = nn.Sequential(*[ReZeroResidual(D) for _ in range(n_layers)])
+        self.second = nn.Linear(D, boardsize**2)
+
+        pos = positions(boardsize)
+        self.register_buffer('pos', pos)
+
+    def forward(self, obs):
+        B, boardsize, boardsize, _ = obs.shape
+        x = (obs[..., 0] - obs[..., 1]).reshape(B, boardsize*boardsize)
+        x = F.relu(self.first(x))
+        x = self.second(x)
+        x = F.log_softmax(x, -1)
+        return x.reshape(B, boardsize, boardsize)
+
+class Mechanical(nn.Module):
+
+    def __init__(self, boardsize, D):
+        super().__init__()
+
+    def forward(self, obs):
+        x = 10*(obs.sum(-1) - 1) - 1
+        x = x.reshape(obs.shape[0], -1)
+        x = F.log_softmax(x, -1)
+        x = x.reshape(obs.shape[:-1])
+        return x
+
 def test():
     from boardlaw.hex import Hex
     from tqdm.auto import tqdm
 
     worlds = Hex.initial(1, 5)
 
+    T = 10000
     D = 16
 
-    model = Model(worlds.boardsize, D).cuda()
-    opt = torch.optim.Adam(model.parameters(), lr=1e-4)
+    model = FCModel(worlds.boardsize, D).cuda()
+    opt = torch.optim.Adam(model.parameters(), lr=1e-2)
 
-    B = 1024
+    B = 8*1024
     envs = torch.arange(B, device=worlds.device)
-    with tqdm() as pbar:
-        while True:
+
+    losses = []
+    with tqdm(total=T) as pbar:
+        for t in range(T):
             rows = torch.randint(0, worlds.boardsize, size=(B,), device=worlds.device)
             cols = torch.randint(0, worlds.boardsize, size=(B,), device=worlds.device)
 
@@ -156,3 +203,9 @@ def test():
             opt.step()
 
             pbar.set_description(f'{loss:.2f}')
+            if t % 10 == 0:
+                pbar.update(10)
+
+            losses.append(float(loss))
+
+    return pd.Series(losses)

@@ -6,6 +6,7 @@ from rebar import arrdict
 
 @torch.no_grad()
 def rollout(worlds, agents):
+    from IPython import display
 
     wins = torch.zeros((worlds.n_seats,), device=worlds.device)
     games = torch.zeros((), device=worlds.device)
@@ -28,6 +29,7 @@ def rollout(worlds, agents):
         rate = wins[0]/games
         p = (wins[0] + 1)/(games + 2)
         var = p*(1 - p)/games
+        display.clear_output(wait=True)
         print(f'{rate:.2f}±{var**.5:.2f}')
 
 def run():
