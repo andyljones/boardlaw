@@ -24,11 +24,11 @@ def set_key():
 def invoke(command):
     set_key()
     while True:
-        s = check_output(f'vast {command}', shell=True).decode()
-        if s.startswith('failed with error 502'):
-            log.info('Hit 502 error, trying again')
-        else:
-            return s
+        for _ in range(5):
+            s = check_output(f'vast {command}', shell=True).decode()
+            if not s.startswith('failed with error 502'):
+                return s
+        log.info('Hit multiple 502 errors, trying again')
 
 def offers():
     js = json.loads(invoke(f'search offers --raw --storage {DISK}'))
