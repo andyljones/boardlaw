@@ -123,15 +123,13 @@ def deploy(label):
 
 def run(label):
     conn = connection(label)
-    conn.run('cd /code && python -c "from boardlaw.main import *; run()"', pty=False)
+    conn.run('cd /code && python -c "from boardlaw.main import *; run()"', pty=False, disown=True)
 
 def fetch(label):
+    # rsync -r root@ssh4.vast.ai:/code/output/pavlov output/  -e "ssh -o StrictHostKeyChecking=no -i /root/.ssh/vast_rsa -p 37481"
     conn = connection(label)
-    rsync(conn, 
-        source='/code/output',
-        target='./output',
-        rsync_opts='--filter=":- .gitignore"',
-        strict_host_keys=False)
+    [keyfile] = conn.connect_kwargs['key_filename']
+    conn.local(f"""rsync -r -e "ssh -o StrictHostKeyChecking=no -i {keyfile} -p {conn.port}" {conn.user}@{conn.host}:/code/output/pavlov output/""")
 
 def demo():
     label = launch()
