@@ -159,7 +159,7 @@ class Model(nn.Module):
         x = torch.zeros((obs.shape[0], self.D), device=obs.device)
         x = F.relu(self.first(x))
         x = self.attn(x, b)
-        x = self.second(x)
+        x = F.relu(self.second(x))
         x0 = self.policy0(x, self.pos)
         x1 = self.policy1(x, self.pos)
         return x0, x1
@@ -183,7 +183,7 @@ def test():
     D = 32
 
     model = Model(worlds.boardsize, D).cuda()
-    opt = torch.optim.Adam(model.parameters(), lr=1e-2)
+    opt = torch.optim.Adam(model.parameters(), lr=1e-3)
 
     B = 8*1024
     envs = torch.arange(B, device=worlds.device)
@@ -200,6 +200,10 @@ def test():
             r1 = torch.randint(0, worlds.boardsize, size=(B,), device=worlds.device)
             c1 = torch.randint(0, worlds.boardsize, size=(B,), device=worlds.device)
             obs[envs, r1, c1, 1] = 1.
+
+            mask = (r0 != r1) | (c0 != c1)
+            obs = obs[mask]
+            r0, c0, r1, c1 = r0[mask], c0[mask], r1[mask], c1[mask]
             
             x0, x1 = model(obs)
             loss = action_loss(r0, c0, worlds.boardsize, x0) + action_loss(r1, c1, worlds.boardsize, x1)
@@ -217,5 +221,5 @@ def test():
     return dotdict.dotdict(
         losses=pd.Series(losses),
         obs=obs,
-        outputs=outputs,
+        # outputs=outputs,
         targets=targets)
