@@ -15,19 +15,20 @@ def rollout(worlds, agents, n_steps=None, n_trajs=None, n_reps=None):
     steps, trajs = 0, 0
     reps = torch.zeros(worlds.n_envs, device=worlds.device)
     while True:
-        outputs = []
+        decisions, masks = {}, {}
         for i, agent in enumerate(agents):
             mask = worlds.seats == i
             if mask.any():
-                outputs.append([mask, agent(worlds[mask])])
+                decisions[i] = agent(worlds[mask])
+                masks[i] = mask
 
-        decisions = arrdict.cat([d for m, d in outputs])
-        for m, d in outputs:
-            decisions[m] = d
+        actions = torch.cat([d.actions for d in decisions.values()])
+        for mask, decision in zip(masks.values(), decisions.values()):
+            actions[mask] = decision.actions
         
-        worlds, transitions = worlds.step(decisions.actions)
+        worlds, transitions = worlds.step(actions)
         trace.append(arrdict.arrdict(
-            decisions=decisions,
+            decisions=arrdict.arrdict(actions=actions),
             transitions=transitions,
             worlds=worlds))
         steps += 1
@@ -116,7 +117,7 @@ def demo_record(run_name=-1):
 
 def demo_rollout():
     from . import networks, mcts, mohex
-    env = hex.Hex.initial(n_envs=4, boardsize=5, device='cuda')
+    env = hex.Hex.initial(n_envs=4, boardsize=9, device='cuda')
     network = networks.Network(env.obs_space, env.action_space, width=128).to(env.device)
     agent = mcts.MCTSAgent(env, network, n_nodes=16)
     oppo = mohex.MoHexAgent(env)

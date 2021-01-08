@@ -129,7 +129,8 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seats'))):
             colors = ['tan', black, white, black, black, white, white] 
         elif colors == 'board':
             colors = ['tan', black, white, 'maroon', 'sienna', 'cornflowerblue', 'plum']
-        colors = np.vectorize(colors.__getitem__)(board)
+        colors = np.stack(np.vectorize(mpl.colors.to_rgb)(colors), -1)
+        colors = np.vectorize(colors.__getitem__, signature='()->(3)')(board)
         plot_board(colors, ax)
 
         return ax.figure

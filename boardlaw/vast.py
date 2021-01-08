@@ -144,7 +144,6 @@ def last_logs():
             l = p.read_text().splitlines()[-1]
             print(f'{c}/{r}/{i}: {l}')
 
-
 def watch():
     ps = {}
     while True:

@@ -124,7 +124,7 @@ def run(device='cuda'):
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('9x9-high-cpuct', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('11x11-baseline', boardsize=worlds.boardsize, parent=parent)
 
     archive.archive(run)
 
