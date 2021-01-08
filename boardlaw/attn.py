@@ -23,70 +23,22 @@ def plot(p):
     from .hex import plot_board
     plot_board(np.stack(np.vectorize(plt.cm.RdBu)(.5+.5*p), -1))
 
-def positions(boardsize):
-    # https://www.redblobgames.com/grids/hexagons/#conversions-axial
-    #TODO: Does it help to sin/cos encode this?
-    rs, cs = torch.meshgrid(
-            torch.linspace(-1, 1, boardsize),
-            torch.linspace(-1, 1, boardsize))
-    zs = (rs + cs)/2.
-    return torch.stack([rs, cs, zs], -1)
-
-def offset(board, o):
-    w = board.shape[-1]
-    r, c = o
-    t, b = 1+r, w-1+r
-    l, r = 1+c, w-1+c
-    return board[..., t:b, l:r]
-
-def neighbourhoods(obs):
-    single = obs[..., 0] - obs[..., 1]
-    augmented = F.pad(single, (1, 1, 1, 1))
-    return torch.stack([offset(augmented, o) for o in OFFSETS], -1)
-
-def prepare(obs, pos):
-    pos = pos[None].repeat_interleave(obs.shape[0], 0)
-    stack = torch.cat([neighbourhoods(obs), pos], -1)
-    B, H, W, C = stack.shape
-    return stack.reshape(B, H*W, C)
-
-class Attention(nn.Module):
-
-    def __init__(self, D=16, H=1):
-        super().__init__()
-
-        self.H = H
-        D_obs, D_pos = 7, 3
-        self.kv_x = nn.Linear(D, 2*H*D)
-        self.kv_b = nn.Linear(D_obs+D_pos, 2*H*D)
-        self.q = nn.Linear(D, D*H)
-        self.final = nn.Linear(D*H, D)
-
-    def forward(self, x, b):
-        B, Dx = x.shape
-        B, P, Db = b.shape
-        H = self.H
-
-        k, v = (self.kv_x(x)[:, None, :] + self.kv_b(b)).chunk(2, -1)
-        q = self.q(x)
-
-        k = k.view(B, P, H, Dx)
-        v = v.view(B, P, H, Dx)
-        q = q.view(B, H, Dx)
-
-        dots = torch.einsum('bphd,bhd->bph', k, q)/Dx**.5
-        attn = torch.softmax(dots, -1)
-        vals = torch.einsum('bph,bphd->bhd', attn, v)
-
-        out = self.final(vals.view(B, H*Dx))
-
-        return out
-
-class MaskedActions(nn.Module):
+class Mechanical(nn.Module):
 
     def __init__(self, boardsize, D):
         super().__init__()
-        D_pos = 3
+
+    def forward(self, obs):
+        x = 10*(obs.sum(-1) - 1) - 1
+        x = x.reshape(obs.shape[0], -1)
+        x = F.log_softmax(x, -1)
+        x = x.reshape(obs.shape[:-1])
+        return x
+
+class MaskedActions(nn.Module):
+
+    def __init__(self, boardsize, D, D_pos):
+        super().__init__()
         self.k_p = nn.Linear(D_pos, D) 
         self.k_x = nn.Linear(D, D) 
         self.q = nn.Linear(D, D)
@@ -102,29 +54,6 @@ class MaskedActions(nn.Module):
         dots = torch.einsum('bpd,bd->bp', k, q)/D**.5
 
         return F.log_softmax(dots, -1).reshape(B, boardsize, boardsize)
-
-class Model(nn.Module):
-
-    def __init__(self, boardsize, D):
-        super().__init__()
-
-        self.D = D
-        self.first = nn.Linear(D, D)
-        self.attn = Attention(D)
-        self.second = nn.Linear(D, D)
-        self.policy = MaskedActions(boardsize, D)
-
-        pos = positions(boardsize)
-        self.register_buffer('pos', pos)
-
-    def forward(self, obs):
-        b = prepare(obs, self.pos)
-        x = torch.zeros((obs.shape[0], self.D), device=obs.device)
-        x = F.relu(self.first(x))
-        x = self.attn(x, b)
-        x = F.relu(self.second(x))
-        x = self.policy(x, self.pos)
-        return x
 
 class ReZeroResidual(nn.Linear):
 
@@ -157,16 +86,92 @@ class FCModel(nn.Module):
         x = F.log_softmax(x, -1)
         return x.reshape(B, boardsize, boardsize)
 
-class Mechanical(nn.Module):
+def positions(boardsize):
+    # https://www.redblobgames.com/grids/hexagons/#conversions-axial
+    #TODO: Does it help to sin/cos encode this?
+    rs, cs = torch.meshgrid(
+            torch.linspace(-1, 1, boardsize),
+            torch.linspace(-1, 1, boardsize))
+    zs = (rs + cs)/2.
+    xs = torch.stack([rs, cs, zs], -1)
+
+    ps = [1, 2, 4]
+    return torch.cat([
+        torch.cat([torch.cos(2*np.pi*xs/p) for p in ps], -1),
+        torch.cat([torch.sin(2*np.pi*xs/p) for p in ps], -1)], -1)
+
+def offset(board, o):
+    w = board.shape[-1]
+    r, c = o
+    t, b = 1+r, w-1+r
+    l, r = 1+c, w-1+c
+    return board[..., t:b, l:r]
+
+def neighbourhoods(obs):
+    single = obs[..., 0] - obs[..., 1]
+    augmented = F.pad(single, (1, 1, 1, 1))
+    return torch.stack([offset(augmented, o) for o in OFFSETS], -1)
+
+def prepare(obs, pos):
+    pos = pos[None].repeat_interleave(obs.shape[0], 0)
+    stack = torch.cat([neighbourhoods(obs), pos], -1)
+    B, H, W, C = stack.shape
+    return stack.reshape(B, H*W, C)
+
+class Attention(nn.Module):
+
+    def __init__(self, D, D_obs, D_pos, H=1):
+        super().__init__()
+
+        self.H = H
+        self.kv_x = nn.Linear(D, 2*H*D)
+        self.kv_b = nn.Linear(D_obs+D_pos, 2*H*D)
+        self.q = nn.Linear(D, D*H)
+        self.final = nn.Linear(D*H, D)
+
+    def forward(self, x, b):
+        B, Dx = x.shape
+        B, P, Db = b.shape
+        H = self.H
+
+        k, v = (self.kv_x(x)[:, None, :] + self.kv_b(b)).chunk(2, -1)
+        q = self.q(x)
+
+        k = k.view(B, P, H, Dx)
+        v = v.view(B, P, H, Dx)
+        q = q.view(B, H, Dx)
+
+        dots = torch.einsum('bphd,bhd->bph', k, q)/Dx**.5
+        attn = torch.softmax(dots, -1)
+        vals = torch.einsum('bph,bphd->bhd', attn, v)
+
+        out = self.final(vals.view(B, H*Dx))
+
+        return out
+
+class Model(nn.Module):
 
     def __init__(self, boardsize, D):
         super().__init__()
 
+        D_obs, D_pos = 7, 18
+
+        self.D = D
+        self.first = nn.Linear(D, D)
+        self.attn = Attention(D, D_obs, D_pos)
+        self.second = nn.Linear(D, D)
+        self.policy = MaskedActions(boardsize, D, D_pos)
+
+        pos = positions(boardsize)
+        self.register_buffer('pos', pos)
+
     def forward(self, obs):
-        x = 10*(obs.sum(-1) - 1) - 1
-        x = x.reshape(obs.shape[0], -1)
-        x = F.log_softmax(x, -1)
-        x = x.reshape(obs.shape[:-1])
+        b = prepare(obs, self.pos)
+        x = torch.zeros((obs.shape[0], self.D), device=obs.device)
+        x = F.relu(self.first(x))
+        x = self.attn(x, b)
+        x = F.relu(self.second(x))
+        x = self.policy(x, self.pos)
         return x
 
 def test():
@@ -178,7 +183,7 @@ def test():
     T = 10000
     D = 16
 
-    model = FCModel(worlds.boardsize, D).cuda()
+    model = Model(worlds.boardsize, D).cuda()
     opt = torch.optim.Adam(model.parameters(), lr=1e-2)
 
     B = 8*1024
