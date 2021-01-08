@@ -9,6 +9,7 @@ import sys
 import traceback
 import _thread
 import threading
+from pathlib import Path
 
 # for re-export
 from logging import getLogger
@@ -80,6 +81,8 @@ class Reader:
                 self._files[name] = (info, path.open('r'))
         
         for name, (info, f) in self._files.items():
+            mtime = pd.Timestamp(Path(f.name).stat().st_mtime, unit='s').tz_localize('UTC')
+            info['mtime'] = mtime
             for line in tail(f.readlines(), 1000):
                 yield info, line.rstrip('\n')
 
@@ -104,17 +107,18 @@ class StdoutRenderer:
 
 class IPythonRenderer:
 
-    def __init__(self, compositor=None):
+    def __init__(self, compositor=None, max_age='300s'):
         super().__init__()
         self._out = (compositor or widgets.compositor()).output('logs')
         self._next = tests.time()
         self._lasts = {}
         self._buffers = defaultdict(lambda: deque(['']*self._out.lines, maxlen=self._out.lines))
+        self._max_age = pd.to_timedelta(max_age)
 
     def append(self, info, line):
         source = f'{info["_process_name"]}/#{info["_process_id"]}'
         self._buffers[source].append(line)
-        self._lasts[source] = tests.time()
+        self._lasts[source] = info['mtime']
 
     def _format_block(self, name):
         n_lines = max(self._out.lines//(len(self._buffers) + 2), 1)
@@ -122,13 +126,13 @@ class IPythonRenderer:
         return f'{name}:\n{lines}'
 
     def display(self):
-        content = '\n\n'.join([self._format_block(n) for n in self._buffers])
-        self._out.refresh(content)
-
         for name, last in list(self._lasts.items()):
-            if tests.time() - last > 300:
+            if tests.timestamp() - last > self._max_age:
                 del self._buffers[name]
                 del self._lasts[name]
+
+        content = '\n\n'.join([self._format_block(n) for n in self._buffers])
+        self._out.refresh(content)
 
 def tail(iterable, n):
     return iter(deque(iterable, maxlen=n))
