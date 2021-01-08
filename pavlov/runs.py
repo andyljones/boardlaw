@@ -1,3 +1,4 @@
+import os
 from multiprocessing import Value, context
 import pandas as pd
 import socket
@@ -96,7 +97,8 @@ def new_run(suffix='', **kwargs):
     kwargs = {**kwargs, 
         '_created': str(now), 
         '_host': socket.gethostname(), 
-        '_files': {}}
+        '_files': {},
+        '_env': dict(os.environ)}
     log.info(f'Created run {run}')
     new_info(run, kwargs, res=False)
     return run

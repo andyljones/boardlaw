@@ -7,6 +7,7 @@ import aljpy
 from fabric import Connection
 from patchwork.transfers import rsync
 from logging import getLogger
+from pavlov import runs, logs
 
 log = getLogger(__name__)
 
@@ -130,6 +131,20 @@ def fetch(label):
     command = f"""rsync -r -e "ssh -o StrictHostKeyChecking=no -i {keyfile} -p {conn.port}" {conn.user}@{conn.host}:/code/output/pavlov output/"""
     return Popen(command, shell=True, stdout=PIPE, stderr=PIPE)
 
+def run_containers():
+    container_ids = {str(v): k for k, v in status()['id'].iteritems()}
+    run_ids = {r: i.get('_env', {}).get('VAST_CONTAINERLABEL', '') for r, i in runs.runs().items()}
+    return {r: container_ids[i[2:]] for r, i in run_ids.items() if i != ''}
+
+def last_logs():
+    from IPython import display
+    display.clear_output(wait=True)
+    for r, c in run_containers().items():
+        for i, p in enumerate(logs.paths(r)):
+            l = p.read_text().splitlines()[-1]
+            print(f'{c}/{r}/{i}: {l}')
+
+
 def watch():
     ps = {}
     while True:
@@ -145,7 +160,9 @@ def watch():
                 log.debug(f'Fetched "{label}"')
                 del ps[label]
             else:
-                log.warn(f'Fetching "{label}" failed with retcode {r}. Stdout: "{r.stderr.read()}"')
+                log.warn(f'Fetching "{label}" failed with retcode {r}. Stdout: "{ps[label].stderr.read()}"')
+        
+        last_logs()
         
         time.sleep(1)
             

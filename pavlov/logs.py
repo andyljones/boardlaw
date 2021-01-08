@@ -64,8 +64,11 @@ def pandas(run=-1):
     d = {n: {**i, '_path': files.path(run, n)} for n, i in files.seq(run, 'logs.{n}.txt').items()}
     return pd.DataFrame.from_dict(d, orient='index')
 
-def procpaths(run=-1, proc='MainProcess'):
-    return pandas(run).loc[lambda df: df._process_name == proc]._path.tolist()
+def paths(run=-1, proc=None):
+    df = pandas(run)
+    if proc is not None:
+        df = df.loc[lambda df: df._process_name == proc]
+    return df._path.tolist()
 
 
 class Reader:
