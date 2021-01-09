@@ -7,7 +7,7 @@ import aljpy
 from fabric import Connection
 from patchwork.transfers import rsync
 from logging import getLogger
-from pavlov import runs, logs
+from pavlov import runs, logs, files
 
 log = getLogger(__name__)
 
@@ -124,6 +124,7 @@ def run(label):
     conn = connection(label)
     conn.run('cd /code && python -c "from boardlaw.main import *; run()"', pty=False, disown=True)
 
+
 def fetch(label):
     # rsync -r root@ssh4.vast.ai:/code/output/pavlov output/  -e "ssh -o StrictHostKeyChecking=no -i /root/.ssh/vast_rsa -p 37481"
     conn = connection(label)
@@ -135,6 +136,14 @@ def run_containers():
     container_ids = {str(v): k for k, v in status()['id'].iteritems()}
     run_ids = {r: i.get('_env', {}).get('VAST_CONTAINERLABEL', '  ')[2:] for r, i in runs.runs().items()}
     return {r: container_ids[i] for r, i in run_ids.items() if i in container_ids}
+
+def stop(run):
+    run = runs.resolve(run)
+    label = run_containers()[run]
+    pids = {i['_process_id'] for i in files.files(run).values()}
+    conn = connection(label)
+    for pid in pids:
+        conn.run(f'kill {pid}')
 
 def last_logs():
     from IPython import display

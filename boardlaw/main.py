@@ -92,10 +92,10 @@ def optimize(network, opt, batch):
 
         stats.mean('opt.lr', np.mean([p['lr'] for p in opt.param_groups]))
         stats.mean('opt.step-std', (new - old).pow(2).mean().pow(.5))
-        stats.mean('opt.step-max', (new - old).abs().max())
+        stats.max('opt.step-max', (new - old).abs().max())
 
-        rv = (target_value - d.v).pow(2).mean()/target_value.pow(2).mean()
-        return rv > 10            
+        kl_div = (d0.prior - d.logits).mul(d0.prior.exp()).where(w.valid, zeros).sum(-1).mean()
+        return kl_div > 1.
 
 def worldfunc(n_envs, device='cuda'):
     return hex.Hex.initial(n_envs=n_envs, boardsize=9, device=device)

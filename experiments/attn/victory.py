@@ -33,10 +33,10 @@ def gamegen(n_envs=1024):
         worlds = new_worlds
 
         
-def save_boards(total=32*1024):
+def save_boards(n_envs=32*1024, total=1024*1024):
     boards = []
     with tqdm(total=total) as pbar:
-        for b in gamegen(total):
+        for b in gamegen(n_envs):
             boards.append(b)
             count = sum(b.actions.size(0) for b in boards)
             pbar.update(count - pbar.n)
@@ -49,17 +49,12 @@ def save_boards(total=32*1024):
 def load_boards():
     return pickle.loads(Path('output/terminal-boards.pkl').read_bytes())
 
-def run():
-    D = 32
-    B = 8*1024
-    T = 10000
-    device = 'cuda'
-
+def run(D=32, B=8*1024, T=5000, device='cuda'):
     boards = arrdict.from_dicts(load_boards()).to(device)
     worlds = Hex(boards.worlds)
 
     n_boards, boardsize, _ = worlds.board.shape
-    model = common.AttnModel(common.PosActions, boardsize, D).to(device)
+    model = common.FCModel(common.PosActions, boardsize, D).to(device)
 
     opt = torch.optim.Adam(model.parameters(), lr=1e-2)
 
