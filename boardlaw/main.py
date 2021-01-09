@@ -121,7 +121,7 @@ class NoiseSchedule:
         self.base = base
 
     def step(self):
-        hours = (time.time() - self.start)/3600
+        hours = (time.time() - self.start)/(4*3600)
         self.agent.noise_eps = self.base/2**hours
         stats.mean('opt.noise', self.agent.noise_eps)
 

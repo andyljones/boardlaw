@@ -133,8 +133,8 @@ def fetch(label):
 
 def run_containers():
     container_ids = {str(v): k for k, v in status()['id'].iteritems()}
-    run_ids = {r: i.get('_env', {}).get('VAST_CONTAINERLABEL', '') for r, i in runs.runs().items()}
-    return {r: container_ids[i[2:]] for r, i in run_ids.items() if i != ''}
+    run_ids = {r: i.get('_env', {}).get('VAST_CONTAINERLABEL', '  ')[2:] for r, i in runs.runs().items()}
+    return {r: container_ids[i] for r, i in run_ids.items() if i in container_ids}
 
 def last_logs():
     from IPython import display
@@ -165,7 +165,7 @@ def watch():
         
         time.sleep(1)
             
-def demo():
+def new_run():
     label = launch()
     wait(label)
 
@@ -174,7 +174,7 @@ def demo():
     run(label)
 
 if __name__ == '__main__':
-    fns = [watch]
+    fns = [watch, new_run]
     from argparse import ArgumentParser
     parser = ArgumentParser()
     parser.add_argument('action', type=str, choices=[f.__name__ for f in fns])

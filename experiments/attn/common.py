@@ -15,16 +15,26 @@ def plot(p):
     from boardlaw.hex import plot_board
     plot_board(np.stack(np.vectorize(plt.cm.RdBu)(.5+.5*p), -1))
 
+class ReZeroResidual(nn.Linear):
+
+    def __init__(self, width):
+        super().__init__(width, width)
+        nn.init.orthogonal_(self.weight, gain=2**.5)
+        self.register_parameter('α', nn.Parameter(torch.zeros(())))
+
+    def forward(self, x, *args, **kwargs):
+        return x + self.α*F.relu(super().forward(x))
+
 class FCModel(nn.Module):
 
-    def __init__(self, Head, boardsize, D):
+    def __init__(self, Head, boardsize, D, n_layers=16):
         super().__init__()
 
         self.D = D
-        self.layers = nn.ModuleList([
-            nn.Linear(boardsize**2, D),
-            nn.Linear(D, D),
-            nn.Linear(D, D)])
+        layers = [nn.Linear(boardsize**2, D)]
+        for _ in range(n_layers):
+            layers.append(ReZeroResidual(D)) 
+        self.layers = nn.ModuleList(layers)
 
         pos = positions(boardsize)
         self.register_buffer('pos', pos)
@@ -142,7 +152,7 @@ class ReZeroAttn(nn.Module):
 
 class AttnModel(nn.Module):
 
-    def __init__(self, Head, boardsize, D):
+    def __init__(self, Head, boardsize, D, n_layers=16):
         super().__init__()
 
         pos = positions(boardsize)
@@ -152,10 +162,10 @@ class AttnModel(nn.Module):
         D_prep = prepare(exemplar, pos).shape[-1]
 
         self.D = D
-        self.layers = nn.ModuleList([
-            ReZeroAttn(D, D_prep),
-            ReZeroAttn(D, D_prep),
-            ReZeroAttn(D, D_prep)])
+        layers = []
+        for _ in range(n_layers):
+            layers.append(ReZeroAttn(D, D_prep)) 
+        self.layers = nn.ModuleList(layers)
 
         self.head = Head(D, pos.shape[-1])
 
