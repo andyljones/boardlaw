@@ -15,7 +15,7 @@ def rollout(worlds, agents):
         for i, agent in enumerate(agents):
             mask = worlds.seats == i
             if mask.any():
-                decisions[i] = agent(worlds[mask], eval=eval)
+                decisions[i] = agent(worlds[mask])
                 masks[i] = mask
 
         actions = torch.cat([d.actions for d in decisions.values()])

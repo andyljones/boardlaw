@@ -94,11 +94,10 @@ def optimize(network, opt, batch):
         stats.mean('opt.step-std', (new - old).pow(2).mean().pow(.5))
         stats.max('opt.step-max', (new - old).abs().max())
 
-        kl_div = (d0.prior - d.logits).mul(d0.prior.exp()).where(w.valid, zeros).sum(-1).mean()
-        return kl_div > 1.
+        return value_loss > 1
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=9, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=11, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
@@ -113,35 +112,21 @@ def warm_start(agent, opt, parent):
         opt.load_state_dict(sd['opt'])
     return parent
 
-class NoiseSchedule:
-
-    def __init__(self, agent, base=.2):
-        self.agent = agent
-        self.start = time.time()
-        self.base = base
-
-    def step(self):
-        hours = (time.time() - self.start)/(4*3600)
-        self.agent.noise_eps = self.base/2**hours
-        stats.mean('opt.noise', self.agent.noise_eps)
-
-
 def run(device='cuda'):
     buffer_length = 32 
-    batch_size = 64*1024
-    n_envs = 8*1024
+    batch_size = 32*1024
+    n_envs = 4*1024
     buffer_inc = batch_size//n_envs
 
     worlds = worldfunc(n_envs, device=device)
     agent = agentfunc(device)
     opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=1e-2, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
-    noise = NoiseSchedule(agent)
     league = leagues.SimpleLeague(agentfunc, agent.evaluator, worlds.n_envs)
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('9x9-noise-sched', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('11x11-high-noise', boardsize=worlds.boardsize, parent=parent)
 
     archive.archive(run)
 
@@ -178,7 +163,6 @@ def run(device='cuda'):
                 raise ValueError()
 
             sched.step()
-            noise.step()
             log.info('learner stepped')
             
             buffer = buffer[buffer_inc:]

@@ -188,7 +188,7 @@ class MoHexAgent:
         for e in range(len(seats)):
             self._proxies[e].load(obs[e], seats[e])
 
-    def __call__(self, worlds, eval=False):
+    def __call__(self, worlds):
         self._load(worlds)
 
         actions = torch.distributions.Categorical(probs=worlds.valid.float()).sample()

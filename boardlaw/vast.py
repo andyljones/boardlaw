@@ -137,7 +137,7 @@ def run_containers():
     run_ids = {r: i.get('_env', {}).get('VAST_CONTAINERLABEL', '  ')[2:] for r, i in runs.runs().items()}
     return {r: container_ids[i] for r, i in run_ids.items() if i in container_ids}
 
-def stop(run):
+def kill(run):
     run = runs.resolve(run)
     label = run_containers()[run]
     pids = {i['_process_id'] for i in files.files(run).values()}

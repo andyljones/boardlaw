@@ -195,20 +195,16 @@ def mcts(worlds, evaluator, **kwargs):
 
 class MCTSAgent:
 
-    def __init__(self, evaluator, noise_eps=.05, **kwargs):
+    def __init__(self, evaluator, noise_eps=.2, **kwargs):
         self.evaluator = evaluator
         self.kwargs = kwargs
         self.noise_eps = noise_eps
 
-    def __call__(self, world, value=True, eval=False, **kwargs):
-        noise_eps = 0. if eval else self.noise_eps
-        m = mcts(world, self.evaluator, noise_eps=noise_eps, **{**self.kwargs, **kwargs})
+    def __call__(self, world, value=True, **kwargs):
+        m = mcts(world, self.evaluator, noise_eps=self.noise_eps, **{**self.kwargs, **kwargs})
         r = m.root()
 
-        if eval:
-            actions = r.logits.argmax(-1)
-        else:
-            actions = torch.distributions.Categorical(logits=r.logits).sample()
+        actions = torch.distributions.Categorical(logits=r.logits).sample()
 
         return arrdict.arrdict(
             logits=r.logits,
