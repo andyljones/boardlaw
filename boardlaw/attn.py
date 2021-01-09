@@ -89,7 +89,7 @@ def prepare(obs, pos):
 
 class PosActions(nn.Module):
 
-    def __init__(self, boardsize, D, D_pos):
+    def __init__(self, D, D_pos):
         super().__init__()
         self.k_p = nn.Linear(D_pos, D) 
         self.k_x = nn.Linear(D, D) 
@@ -109,12 +109,12 @@ class PosActions(nn.Module):
 
 class Attention(nn.Module):
 
-    def __init__(self, D, D_obs, D_pos, H=1):
+    def __init__(self, D, D_prep, H=1):
         super().__init__()
 
         self.H = H
         self.kv_x = nn.Linear(D, 2*H*D)
-        self.kv_b = nn.Linear(D_obs+D_pos, 2*H*D)
+        self.kv_b = nn.Linear(D_prep, 2*H*D)
         self.q = nn.Linear(D, D*H)
         self.final = nn.Linear(D*H, D)
 
@@ -140,19 +140,22 @@ class Attention(nn.Module):
 
 class Model(nn.Module):
 
-    def __init__(self, boardsize, D, D_obs=7):
+    def __init__(self, boardsize, D):
         super().__init__()
 
         pos = positions(boardsize)
         self.register_buffer('pos', pos)
         D_pos = pos.size(-1)
 
+        exemplar = torch.zeros((1, boardsize, boardsize, 2))
+        D_prep = prepare(exemplar, pos).shape[-1]
+
         self.D = D
         self.first = nn.Linear(D, D)
-        self.attn = Attention(D, D_obs, D_pos, H=2)
+        self.attn = Attention(D, D_prep)
         self.second = nn.Linear(D, D)
-        self.policy0 = PosActions(boardsize, D, D_pos)
-        self.policy1 = PosActions(boardsize, D, D_pos)
+        self.policy0 = PosActions(D, D_pos)
+        self.policy1 = PosActions(D, D_pos)
 
     def forward(self, obs):
         b = prepare(obs, self.pos)
@@ -160,9 +163,8 @@ class Model(nn.Module):
         x = F.relu(self.first(x))
         x = self.attn(x, b)
         x = F.relu(self.second(x))
-        x0 = self.policy0(x, self.pos)
-        x1 = self.policy1(x, self.pos)
-        return x0, x1
+        x = self.policy0(x, self.pos)
+        return x
 
 def pointer_loss(rows, cols, boardsize, outputs):
     targets = 2*torch.stack([rows/boardsize, cols/boardsize], -1) - 1
@@ -183,7 +185,7 @@ def test():
     D = 32
 
     model = Model(worlds.boardsize, D).cuda()
-    opt = torch.optim.Adam(model.parameters(), lr=1e-3)
+    opt = torch.optim.Adam(model.parameters(), lr=1e-2)
 
     B = 8*1024
     envs = torch.arange(B, device=worlds.device)
@@ -193,20 +195,12 @@ def test():
         for t in range(T):
             obs = torch.zeros((B, worlds.boardsize, worlds.boardsize, 2), device=worlds.device)
 
-            r0 = torch.randint(0, worlds.boardsize, size=(B,), device=worlds.device)
-            c0 = torch.randint(0, worlds.boardsize, size=(B,), device=worlds.device)
-            obs[envs, r0, c0, 0] = 1.
+            r = torch.randint(0, worlds.boardsize, size=(B,), device=worlds.device)
+            c = torch.randint(0, worlds.boardsize, size=(B,), device=worlds.device)
+            obs[envs, r, c, 1] = 1.
 
-            r1 = torch.randint(0, worlds.boardsize, size=(B,), device=worlds.device)
-            c1 = torch.randint(0, worlds.boardsize, size=(B,), device=worlds.device)
-            obs[envs, r1, c1, 1] = 1.
-
-            mask = (r0 != r1) | (c0 != c1)
-            obs = obs[mask]
-            r0, c0, r1, c1 = r0[mask], c0[mask], r1[mask], c1[mask]
-            
-            x0, x1 = model(obs)
-            loss = action_loss(r0, c0, worlds.boardsize, x0) + action_loss(r1, c1, worlds.boardsize, x1)
+            x = model(obs)
+            loss = action_loss(r, c, worlds.boardsize, x)
 
             opt.zero_grad()
             loss.backward()
