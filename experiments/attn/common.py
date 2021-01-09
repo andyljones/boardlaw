@@ -17,21 +17,26 @@ def plot(p):
 
 class FCModel(nn.Module):
 
-    def __init__(self, head, boardsize, D):
+    def __init__(self, Head, boardsize, D):
         super().__init__()
 
         self.D = D
-        self.first = nn.Linear(boardsize**2, D)
-        self.head = head
+        self.layers = nn.ModuleList([
+            nn.Linear(boardsize**2, D),
+            nn.Linear(D, D),
+            nn.Linear(D, D)])
 
         pos = positions(boardsize)
         self.register_buffer('pos', pos)
 
+        self.head = Head(D, pos.shape[-1])
+
     def forward(self, obs):
         B, boardsize, boardsize, _ = obs.shape
         x = (obs[..., 0] - obs[..., 1]).reshape(B, boardsize*boardsize)
-        x = F.relu(self.first(x))
-        return self.head(x)
+        for l in self.layers:
+            x = F.relu(l(x))
+        return self.head(x, self.pos)
 
 def positions(boardsize):
     # https://www.redblobgames.com/grids/hexagons/#conversions-axial
@@ -135,25 +140,28 @@ class ReZeroAttn(nn.Module):
 
         return x
 
-class Model(nn.Module):
+class AttnModel(nn.Module):
 
-    def __init__(self, head, boardsize, D):
+    def __init__(self, Head, boardsize, D):
         super().__init__()
 
         pos = positions(boardsize)
         self.register_buffer('pos', pos)
-        D_pos = pos.size(-1)
 
         exemplar = torch.zeros((1, boardsize, boardsize, 2))
         D_prep = prepare(exemplar, pos).shape[-1]
 
         self.D = D
-        self.layers = ReZeroAttn(D, D_prep)
+        self.layers = nn.ModuleList([
+            ReZeroAttn(D, D_prep),
+            ReZeroAttn(D, D_prep),
+            ReZeroAttn(D, D_prep)])
 
-        self.head = head
+        self.head = Head(D, pos.shape[-1])
 
     def forward(self, obs):
         b = prepare(obs, self.pos)
         x = torch.zeros((obs.shape[0], self.D), device=obs.device)
-        x = self.layers(x, b)
-        return self.head(x)
+        for l in self.layers:
+            x = l(x, b)
+        return self.head(x, self.pos)

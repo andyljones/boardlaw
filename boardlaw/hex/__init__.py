@@ -158,7 +158,6 @@ class Solitaire(Hex):
         worlds = super().initial(*args, **kwargs)
         if seat == 1:
             raise ValueError('Can\'t do seat #1 right now')
-            worlds, _ = cls._play(worlds)
         return worlds
 
     def __init__(self, *args, **kwargs):
@@ -183,7 +182,7 @@ class Solitaire(Hex):
         return worlds, transitions
 
 class Lazy(Solitaire):
-    """Opponent plays the first action"""
+    """Opponent plays the first available action"""
 
     @classmethod
     def _play(cls, worlds):
