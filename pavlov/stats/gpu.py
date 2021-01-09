@@ -31,6 +31,7 @@ def dataframe():
 
 _last = -1
 def gpu(device=None, throttle=0):
+    #TODO: This doesn't handle CUDA_VISIBLE_DEVICES properly
     from . import max_percent, mean_percent
 
     # This is a fairly expensive op, so let's avoid doing it too often

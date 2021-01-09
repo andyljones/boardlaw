@@ -15,27 +15,14 @@ def plot(p):
     from boardlaw.hex import plot_board
     plot_board(np.stack(np.vectorize(plt.cm.RdBu)(.5+.5*p), -1))
 
-class Mechanical(nn.Module):
-
-    def __init__(self, boardsize, D):
-        super().__init__()
-
-    def forward(self, obs):
-        x = 10*(obs.sum(-1) - 1) - 1
-        x = x.reshape(obs.shape[0], -1)
-        x = F.log_softmax(x, -1)
-        x = x.reshape(obs.shape[:-1])
-        return x
-
 class FCModel(nn.Module):
 
-    def __init__(self, boardsize, D, n_layers=8):
+    def __init__(self, head, boardsize, D):
         super().__init__()
 
         self.D = D
         self.first = nn.Linear(boardsize**2, D)
-        # self.body = nn.Sequential(*[ReZeroResidual(D) for _ in range(n_layers)])
-        self.second = nn.Linear(D, boardsize**2)
+        self.head = head
 
         pos = positions(boardsize)
         self.register_buffer('pos', pos)
@@ -44,9 +31,7 @@ class FCModel(nn.Module):
         B, boardsize, boardsize, _ = obs.shape
         x = (obs[..., 0] - obs[..., 1]).reshape(B, boardsize*boardsize)
         x = F.relu(self.first(x))
-        x = self.second(x)
-        x = F.log_softmax(x, -1)
-        return x.reshape(B, boardsize, boardsize)
+        return self.head(x)
 
 def positions(boardsize):
     # https://www.redblobgames.com/grids/hexagons/#conversions-axial
@@ -152,7 +137,7 @@ class ReZeroAttn(nn.Module):
 
 class Model(nn.Module):
 
-    def __init__(self, boardsize, D):
+    def __init__(self, head, boardsize, D):
         super().__init__()
 
         pos = positions(boardsize)
@@ -164,11 +149,11 @@ class Model(nn.Module):
 
         self.D = D
         self.layers = ReZeroAttn(D, D_prep)
-        self.policy = PosActions(D, D_pos)
+
+        self.head = head
 
     def forward(self, obs):
         b = prepare(obs, self.pos)
         x = torch.zeros((obs.shape[0], self.D), device=obs.device)
         x = self.layers(x, b)
-        x = self.policy(x, self.pos)
-        return x
+        return self.head(x)

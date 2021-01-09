@@ -1,5 +1,6 @@
 import torch
 from torch.nn import functional as F
+from torch import nn
 from .common import Model
 from tqdm import tqdm
 
@@ -12,6 +13,18 @@ def action_loss(rows, cols, boardsize, outputs):
     targets = rows*boardsize + cols
     return F.nll_loss(outputs.reshape(B, -1), targets)
 
+class Mechanical(nn.Module):
+
+    def __init__(self, boardsize, D):
+        super().__init__()
+
+    def forward(self, obs):
+        x = 10*(obs.sum(-1) - 1) - 1
+        x = x.reshape(obs.shape[0], -1)
+        x = F.log_softmax(x, -1)
+        x = x.reshape(obs.shape[:-1])
+        return x
+
 
 def indicator_test(T=5000, D=32, B=8*1024, boardsize=9, device='cuda'):
     model = Model(boardsize, D).cuda()
@@ -19,7 +32,6 @@ def indicator_test(T=5000, D=32, B=8*1024, boardsize=9, device='cuda'):
 
     envs = torch.arange(B, device=device)
 
-    losses = []
     with tqdm(total=T) as pbar:
         for t in range(T):
             obs = torch.zeros((B, boardsize, boardsize, 2), device=device)
@@ -41,5 +53,3 @@ def indicator_test(T=5000, D=32, B=8*1024, boardsize=9, device='cuda'):
             if loss < 1e-2:
                 print(f'Finished in {t} steps')
                 break
-
-            losses.append(float(loss))

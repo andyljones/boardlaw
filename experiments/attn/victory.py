@@ -1,8 +1,12 @@
 import torch
+from torch import nn
 from rebar import arrdict
 import pickle
 from pathlib import Path
 from . import common
+from tqdm.auto import tqdm
+from boardlaw.hex import Hex
+from torch.nn import functional as F
 
 def gamegen(batchsize=1024):
     from boardlaw.main import worldfunc, agentfunc
@@ -49,10 +53,41 @@ def save_boards():
 def load_boards():
     return pickle.loads(Path('output/terminal-boards.pkl').read_bytes())
 
-def victory_test():
-    boards = load_boards()
-    boardsize = boards.size(-1)
+class VictoryHead(nn.Module):
 
+    def __init__(self, D):
+        super().__init__()
+        self.full = nn.Linear(D, 2)
+
+    def forward(self, x, **kwargs):
+        return F.log_softmax(self.full(x), -1)
+
+def run():
     D = 32
-    model = common.Model(boardsize).cuda()
+    B = 1024
+    T = 1000
+    device = 'cuda'
 
+    boards = load_boards().to(device)
+    worlds = Hex(boards.worlds)
+
+    n_boards, boardsize, _ = worlds.board.shape
+    head = VictoryHead(D)
+    model = common.FCModel(head, boardsize, D).to(device)
+
+    opt = torch.optim.Adam(model.parameters(), lr=1e-2)
+
+    with tqdm(total=T) as pbar:
+        for t in range(T):
+            idxs = torch.randint(0, n_boards, size=(B,), device=device)
+            outputs = model(worlds[idxs].obs)
+            targets = boards.target[idxs, 0].div(2).add(.5).int()
+
+            loss = F.nll_loss(outputs, targets.long())
+
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+
+            pbar.update(1)
+            pbar.set_description(f'{loss:.2f}')
