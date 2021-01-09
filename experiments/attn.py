@@ -183,18 +183,18 @@ def gamegen(batchsize=1024):
     from boardlaw.main import worldfunc, agentfunc
     from pavlov import storage
 
-    n_envs = 1024
+    n_envs = batchsize
     worlds = worldfunc(n_envs)
     agent = agentfunc()
     agent.evaluator = agent.evaluator.prime
 
-    sd = storage.load_snapshot('*perky-boxes*', 64)
+    sd = storage.load_snapshot('*kind-june*', 2)
     agent.load_state_dict(sd['agent'])
 
     buffer = []
     while True:
         with torch.no_grad():
-            decisions = agent(worlds, eval=True)
+            decisions = agent(worlds, eval=False)
         new_worlds, transitions = worlds.step(decisions.actions)
 
         if transitions.terminal.any():
@@ -206,8 +206,9 @@ def gamegen(batchsize=1024):
 
         size = sum(b.target.size(0) for b in buffer)
         if size > batchsize:
-            yield arrdict.cat(buffer)[:batchsize]
-            buffer = []
+            buffer = arrdict.cat(buffer)
+            yield buffer[:batchsize]
+            buffer = [buffer[batchsize:]]
         
 
 

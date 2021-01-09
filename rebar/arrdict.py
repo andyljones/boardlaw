@@ -187,6 +187,12 @@ def from_dicts(t):
         return arrdict({k: from_dicts(v) for k, v in t.items()})
     return t
 
+def to_dicts(t):
+    if isinstance(t, dict):
+        return {k: to_dicts(v) for k, v in t.items()}
+    return t
+
+
 def test_arrdict_setitem():
     d = arrdict(
         a=np.array([0, 1]),

@@ -98,3 +98,8 @@ def throttled_snapshot(run, objs, throttle):
 
     if tests.timestamp() > last + pd.Timedelta(throttle, 's'):
         snapshot(run, objs)
+
+def named(run, name, objs):
+    name = 'storage.named.{name}.{n}.pkl'
+    path = files.new_file(run, name)
+    save(path, objs)
