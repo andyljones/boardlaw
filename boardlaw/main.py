@@ -120,7 +120,7 @@ def run(device='cuda'):
 
     worlds = worldfunc(n_envs, device=device)
     agent = agentfunc(device)
-    opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=1e-2, amsgrad=True)
+    opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=3e-3, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
     league = leagues.SimpleLeague(agentfunc, agent.evaluator, worlds.n_envs)
 
@@ -159,6 +159,7 @@ def run(device='cuda'):
             if bad:
                 sd = storage.state_dicts(agent=agent, opt=opt)
                 sd['worlds'] = arrdict.to_dicts(worlds)
+                sd['chunk'] = arrdict.to_dicts(worlds)
                 storage.named(run, 'bad', sd)
                 raise ValueError()
 

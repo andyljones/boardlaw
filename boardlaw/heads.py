@@ -138,8 +138,8 @@ class ValueOutput(nn.Module):
         self.core = nn.Linear(width, 1)
 
     def forward(self, x, valid, seats, *args, **kwargs):
-        v = self.core.forward(x).squeeze(-1)
-        return scatter_values(v, seats)
+        v = self.core(x).squeeze(-1)
+        return scatter_values(torch.tanh(v), seats)
 
 def output(space, width):
     if isinstance(space, dict):

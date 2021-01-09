@@ -100,6 +100,6 @@ def throttled_snapshot(run, objs, throttle):
         snapshot(run, objs)
 
 def named(run, name, objs):
-    name = 'storage.named.{name}.{n}.pkl'
+    name = f'storage.named.{name}.{{n}}.pkl'
     path = files.new_file(run, name)
     save(path, objs)
