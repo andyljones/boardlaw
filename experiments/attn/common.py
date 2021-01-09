@@ -1,3 +1,6 @@
+from tqdm.auto import tqdm
+import pickle
+from pathlib import Path
 import pandas as pd
 import numpy as np
 import torch
@@ -9,7 +12,7 @@ OFFSETS = [(-1, 0), (-1, 1), (0, -1), (0, 0), (0, +1), (-1, -1), (-1, 0)]
 
 def plot(p):
     import matplotlib.pyplot as plt
-    from .hex import plot_board
+    from boardlaw.hex import plot_board
     plot_board(np.stack(np.vectorize(plt.cm.RdBu)(.5+.5*p), -1))
 
 class Mechanical(nn.Module):
@@ -169,85 +172,3 @@ class Model(nn.Module):
         x = self.layers(x, b)
         x = self.policy(x, self.pos)
         return x
-
-def pointer_loss(rows, cols, boardsize, outputs):
-    targets = 2*torch.stack([rows/boardsize, cols/boardsize], -1) - 1
-    return (targets - outputs).pow(2).mean()
-
-def action_loss(rows, cols, boardsize, outputs):
-    B = rows.shape[0]
-    targets = rows*boardsize + cols
-    return F.nll_loss(outputs.reshape(B, -1), targets)
-
-def gamegen(batchsize=1024):
-    from boardlaw.main import worldfunc, agentfunc
-    from pavlov import storage
-
-    n_envs = batchsize
-    worlds = worldfunc(n_envs)
-    agent = agentfunc()
-    agent.evaluator = agent.evaluator.prime
-
-    sd = storage.load_snapshot('*kind-june*', 2)
-    agent.load_state_dict(sd['agent'])
-
-    buffer = []
-    while True:
-        with torch.no_grad():
-            decisions = agent(worlds, eval=False)
-        new_worlds, transitions = worlds.step(decisions.actions)
-
-        if transitions.terminal.any():
-            buffer.append(arrdict.arrdict(
-                worlds=worlds[transitions.terminal],
-                target=transitions.rewards[transitions.terminal]))
-
-        worlds = new_worlds
-
-        size = sum(b.target.size(0) for b in buffer)
-        if size > batchsize:
-            buffer = arrdict.cat(buffer)
-            yield buffer[:batchsize]
-            buffer = [buffer[batchsize:]]
-        
-
-
-def test():
-    from boardlaw.hex import Hex
-    from tqdm.auto import tqdm
-
-    worlds = Hex.initial(1, 5)
-
-    T = 5000
-    D = 32
-
-    model = Model(worlds.boardsize, D).cuda()
-    opt = torch.optim.Adam(model.parameters(), lr=1e-2)
-
-    B = 8*1024
-    envs = torch.arange(B, device=worlds.device)
-
-    losses = []
-    with tqdm(total=T) as pbar:
-        for t in range(T):
-            obs = torch.zeros((B, worlds.boardsize, worlds.boardsize, 2), device=worlds.device)
-
-            r = torch.randint(0, worlds.boardsize, size=(B,), device=worlds.device)
-            c = torch.randint(0, worlds.boardsize, size=(B,), device=worlds.device)
-            obs[envs, r, c, 1] = 1.
-
-            x = model(obs)
-            loss = action_loss(r, c, worlds.boardsize, x)
-
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
-
-            pbar.set_description(f'{loss:.2f}')
-            if t % 10 == 0:
-                pbar.update(10)
-            if loss < 1e-2:
-                print(f'Finished in {t} steps')
-                break
-
-            losses.append(float(loss))
