@@ -9,6 +9,23 @@ from . import cuda
 CHARS = '.bwTBLR'
 ORDS = {c: i for i, c in enumerate(CHARS)}
 
+def color_board(board, colors='obs'):
+    black = 'dimgray'
+    white = 'lightgray'
+    if colors == 'obs':
+        colors = ['tan', black, white, black, black, white, white] 
+    elif colors == 'board':
+        colors = ['tan', black, white, 'maroon', 'sienna', 'cornflowerblue', 'plum']
+    colors = np.stack(np.vectorize(mpl.colors.to_rgb)(colors), -1)
+    colors = np.vectorize(colors.__getitem__, signature='()->(3)')(board)
+    return colors
+
+def color_obs(obs):
+    keyed = np.zeros_like(obs[..., 0], dtype=int)
+    keyed[obs[..., 0] == 1.] = 1
+    keyed[obs[..., 1] == 1.] = 2
+    return color_board(keyed)
+
 def plot_board(colors, ax=None, black='dimgray', white='lightgray'):
     ax = plt.subplots()[1] if ax is None else ax
     ax.set_aspect(1)
@@ -123,14 +140,7 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seats'))):
 
         ax = plt.subplots()[1] if ax is None else ax
 
-        black = 'dimgray'
-        white = 'lightgray'
-        if colors == 'obs':
-            colors = ['tan', black, white, black, black, white, white] 
-        elif colors == 'board':
-            colors = ['tan', black, white, 'maroon', 'sienna', 'cornflowerblue', 'plum']
-        colors = np.stack(np.vectorize(mpl.colors.to_rgb)(colors), -1)
-        colors = np.vectorize(colors.__getitem__, signature='()->(3)')(board)
+        colors = color_board(board, colors)
         plot_board(colors, ax)
 
         return ax.figure

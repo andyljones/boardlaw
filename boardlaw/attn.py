@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
-from rebar import dotdict
+from rebar import dotdict, arrdict
 
 OFFSETS = [(-1, 0), (-1, 1), (0, -1), (0, 0), (0, +1), (-1, -1), (-1, 0)]
 
@@ -23,16 +23,6 @@ class Mechanical(nn.Module):
         x = F.log_softmax(x, -1)
         x = x.reshape(obs.shape[:-1])
         return x
-
-class ReZeroResidual(nn.Linear):
-
-    def __init__(self, width):
-        super().__init__(width, width)
-        nn.init.orthogonal_(self.weight, gain=2**.5)
-        self.register_parameter('α', nn.Parameter(torch.zeros(())))
-
-    def forward(self, x, *args, **kwargs):
-        return x + self.α*F.relu(super().forward(x))
 
 class FCModel(nn.Module):
 
@@ -116,6 +106,7 @@ class Attention(nn.Module):
         self.kv_x = nn.Linear(D, 2*H*D)
         self.kv_b = nn.Linear(D_prep, 2*H*D)
         self.q = nn.Linear(D, D*H)
+
         self.final = nn.Linear(D*H, D)
 
     def forward(self, x, b):
@@ -134,9 +125,27 @@ class Attention(nn.Module):
         attn = torch.softmax(dots, -2)
         vals = torch.einsum('bph,bphd->bhd', attn, v)
 
-        out = self.final(vals.view(B, H*Dx))
+        return F.relu(self.final(vals.view(B, H*Dx)))
 
-        return out
+class ReZeroAttn(nn.Module):
+
+    def __init__(self, D, *args, **kwargs):
+        super().__init__()
+        self.attn = Attention(D, *args, **kwargs)
+        self.fc0 = nn.Linear(D, D)
+        self.fc1 = nn.Linear(D, D)
+
+        self.register_parameter('α', nn.Parameter(torch.zeros(())))
+
+    def forward(self, x, b):
+        y = self.attn(x, b)
+        x = x + self.α*y
+
+        y = F.relu(self.fc0(x))
+        y = self.fc1(y)
+        x = x + self.α*y
+
+        return x
 
 class Model(nn.Module):
 
@@ -151,19 +160,14 @@ class Model(nn.Module):
         D_prep = prepare(exemplar, pos).shape[-1]
 
         self.D = D
-        self.first = nn.Linear(D, D)
-        self.attn = Attention(D, D_prep)
-        self.second = nn.Linear(D, D)
-        self.policy0 = PosActions(D, D_pos)
-        self.policy1 = PosActions(D, D_pos)
+        self.layers = ReZeroAttn(D, D_prep)
+        self.policy = PosActions(D, D_pos)
 
     def forward(self, obs):
         b = prepare(obs, self.pos)
         x = torch.zeros((obs.shape[0], self.D), device=obs.device)
-        x = F.relu(self.first(x))
-        x = self.attn(x, b)
-        x = F.relu(self.second(x))
-        x = self.policy0(x, self.pos)
+        x = self.layers(x, b)
+        x = self.policy(x, self.pos)
         return x
 
 def pointer_loss(rows, cols, boardsize, outputs):
@@ -174,6 +178,38 @@ def action_loss(rows, cols, boardsize, outputs):
     B = rows.shape[0]
     targets = rows*boardsize + cols
     return F.nll_loss(outputs.reshape(B, -1), targets)
+
+def gamegen(batchsize=1024):
+    from boardlaw.main import worldfunc, agentfunc
+    from pavlov import storage
+
+    n_envs = 1024
+    worlds = worldfunc(n_envs)
+    agent = agentfunc()
+    agent.evaluator = agent.evaluator.prime
+
+    sd = storage.load_snapshot('*perky-boxes*', 64)
+    agent.load_state_dict(sd['agent'])
+
+    buffer = []
+    while True:
+        with torch.no_grad():
+            decisions = agent(worlds, eval=True)
+        new_worlds, transitions = worlds.step(decisions.actions)
+
+        if transitions.terminal.any():
+            buffer.append(arrdict.arrdict(
+                worlds=worlds[transitions.terminal],
+                target=transitions.rewards[transitions.terminal]))
+
+        worlds = new_worlds
+
+        size = sum(b.target.size(0) for b in buffer)
+        if size > batchsize:
+            yield arrdict.cat(buffer)[:batchsize]
+            buffer = []
+        
+
 
 def test():
     from boardlaw.hex import Hex
@@ -209,11 +245,8 @@ def test():
             pbar.set_description(f'{loss:.2f}')
             if t % 10 == 0:
                 pbar.update(10)
+            if loss < 1e-2:
+                print(f'Finished in {t} steps')
+                break
 
             losses.append(float(loss))
-
-    return dotdict.dotdict(
-        losses=pd.Series(losses),
-        obs=obs,
-        # outputs=outputs,
-        targets=targets)

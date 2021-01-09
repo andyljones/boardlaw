@@ -195,13 +195,14 @@ def mcts(worlds, evaluator, **kwargs):
 
 class MCTSAgent:
 
-    def __init__(self, evaluator, **kwargs):
+    def __init__(self, evaluator, noise_eps=.05, **kwargs):
         self.evaluator = evaluator
         self.kwargs = kwargs
+        self.noise_eps = noise_eps
 
     def __call__(self, world, value=True, eval=False, **kwargs):
-        noise_eps = 0. if eval else .05
-        m = mcts(world, self.evaluator, **{'noise_eps': noise_eps, **self.kwargs, **kwargs})
+        noise_eps = 0. if eval else self.noise_eps
+        m = mcts(world, self.evaluator, noise_eps=noise_eps, **{**self.kwargs, **kwargs})
         r = m.root()
 
         if eval:
@@ -223,9 +224,10 @@ class MCTSAgent:
         kwargs = {k[7:]: v for k, v in sd.items() if k.startswith('kwargs.')}
         self.evaluator.load_state_dict(evaluator)
         self.kwargs.update(kwargs)
+        self.noise_eps = sd['noise_eps']
 
     def state_dict(self):
         evaluator = {f'evaluator.{k}': v for k, v in self.evaluator.state_dict().items()}
         kwargs = {f'kwargs.{k}': v for k, v in self.kwargs.items()}
-        return {**evaluator, **kwargs}
+        return {**evaluator, **kwargs, 'noise_eps': self.noise_eps}
 

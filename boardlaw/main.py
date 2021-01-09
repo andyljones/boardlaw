@@ -110,21 +110,35 @@ def warm_start(agent, opt, parent):
         opt.load_state_dict(sd['opt'])
     return parent
 
+class NoiseSchedule:
+
+    def __init__(self, agent, base=.2):
+        self.agent = agent
+        self.start = time.time()
+        self.base = base
+
+    def step(self):
+        hours = (time.time() - self.start)/3600
+        self.agent.noise_eps = self.base/2**hours
+        stats.mean('opt.noise', self.agent.noise_eps)
+
+
 def run(device='cuda'):
     buffer_length = 32 
     batch_size = 64*1024
-    n_envs = 4*1024
+    n_envs = 8*1024
     buffer_inc = batch_size//n_envs
 
     worlds = worldfunc(n_envs, device=device)
     agent = agentfunc(device)
     opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=1e-2, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
+    noise = NoiseSchedule(agent)
     league = leagues.SimpleLeague(agentfunc, agent.evaluator, worlds.n_envs)
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('11x11-baseline', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('9x9-noise-sched', boardsize=worlds.boardsize, parent=parent)
 
     archive.archive(run)
 
@@ -155,6 +169,7 @@ def run(device='cuda'):
 
             optimize(agent.evaluator.prime, opt, chunk[:, next(idxs)])
             sched.step()
+            noise.step()
             log.info('learner stepped')
             
             buffer = buffer[buffer_inc:]
