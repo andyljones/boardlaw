@@ -1,3 +1,4 @@
+from pavlov import stats, runs, storage
 import pandas as pd
 import numpy as np
 import torch
@@ -100,12 +101,12 @@ def animate(i, obs, attns):
             plt.close(fig)
     enc.notebook()
 
-def run_trial(B=4*1024, T=1000, boardsize=7, device='cuda', **kwargs):
+def run_trial(Model, B=4*1024, T=1000, boardsize=7, device='cuda', **kwargs):
 
     worlds = Hex.initial(B, boardsize=boardsize)
 
     boardsize = worlds.boardsize
-    model = common.FCModel(common.PosActions, boardsize, **kwargs).to(device)
+    model = Model(common.PosActions, boardsize, **kwargs).to(device)
 
     opt = torch.optim.Adam(model.parameters(), lr=1e-2)
 
@@ -129,9 +130,17 @@ def run_trial(B=4*1024, T=1000, boardsize=7, device='cuda', **kwargs):
     return pd.Series(losses)
 
 def run():
-    results = {}
+    Model = common.FCModel
+    run = runs.new_run('experiments-victory', model=Model.__name__)
     for boardsize in (3, 5, 7, 9):
         for depth in [1, 2, 4, 8, 16]:
             for width in [8, 16, 32, 64, 128]:
-                print(boardsize, depth, width)
-                results[boardsize, depth, width] = run_trial(boardsize=boardsize, n_layers=depth, D=width)
+                losses = run_trial(Model, boardsize=boardsize, n_layers=depth, D=width)
+                storage.snapshot(run, {'losses': losses.to_dict()}, boardsize=boardsize, depth=depth, width=width)
+
+def load(run):
+    snapshots = pd.DataFrame.from_dict(storage.snapshots(run), orient='index')
+    df = {}
+    for i, row in snapshots.iterrows():
+        df[row.boardsize, row.depth, row.width] = storage.load_snapshot(run, i)['losses']
+    return pd.DataFrame(df)
