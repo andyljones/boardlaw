@@ -6,6 +6,7 @@ import torch.jit
 from rebar import recurrence, arrdict
 from torch.nn import functional as F
 from collections import namedtuple
+from . import attn
 
 FIELDS = ('logits', 'v')
 
@@ -56,7 +57,7 @@ class LeagueNetwork(nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__()
 
-        self.prime = traced_network(*args, **kwargs)
+        # self.prime = traced_network(*args, **kwargs)
         self.prime = Network(*args, **kwargs)
         self.opponents = nn.ModuleList()
         self.slices = []

@@ -82,8 +82,10 @@ def optimize(network, opt, batch):
         stats.mean('rel-entropy.policy', *rel_entropy(d.logits, w.valid)) 
         stats.mean('rel-entropy.targets', *rel_entropy(d0.logits, w.valid))
 
-        stats.mean('v-target.mean', target_value.mean())
-        stats.mean('v-target.std', target_value.std())
+        stats.mean('v.target.mean', target_value.mean())
+        stats.mean('v.target.std', target_value.std())
+        stats.mean('v.outputs.mean', d.v.mean())
+        stats.mean('v.outputs.std', d.v.std())
 
         stats.rate('sample-rate.learner', t.terminal.nelement())
         stats.rate('step-rate.learner', 1)
@@ -97,7 +99,7 @@ def optimize(network, opt, batch):
         return value_loss > 1
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=11, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=9, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
@@ -128,12 +130,11 @@ def run(device='cuda'):
     worlds = mix(worlds)
     agent = agentfunc(device)
     opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=1e-2, amsgrad=True)
-    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
     league = leagues.SimpleLeague(agentfunc, agent.evaluator, worlds.n_envs)
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('11x11-high-noise', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('no-lr-sched', boardsize=worlds.boardsize, parent=parent)
 
     archive.archive(run)
 
@@ -163,14 +164,13 @@ def run(device='cuda'):
             chunk_stats(chunk, buffer_inc)
 
             bad = optimize(agent.evaluator.prime, opt, chunk[:, next(idxs)])
-            if bad:
-                sd = storage.state_dicts(agent=agent, opt=opt)
-                sd['worlds'] = arrdict.to_dicts(worlds)
-                sd['chunk'] = arrdict.to_dicts(worlds)
-                storage.named(run, 'bad', sd)
-                raise ValueError()
+            # if bad:
+            #     sd = storage.state_dicts(agent=agent, opt=opt)
+            #     sd['worlds'] = arrdict.to_dicts(worlds)
+            #     sd['chunk'] = arrdict.to_dicts(chunk)
+            #     storage.named(run, 'bad', sd)
+            #     raise ValueError()
 
-            sched.step()
             log.info('learner stepped')
             
             buffer = buffer[buffer_inc:]

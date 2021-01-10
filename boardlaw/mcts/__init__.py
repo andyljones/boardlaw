@@ -195,7 +195,7 @@ def mcts(worlds, evaluator, **kwargs):
 
 class MCTSAgent:
 
-    def __init__(self, evaluator, noise_eps=.2, **kwargs):
+    def __init__(self, evaluator, noise_eps=.05, **kwargs):
         self.evaluator = evaluator
         self.kwargs = kwargs
         self.noise_eps = noise_eps
