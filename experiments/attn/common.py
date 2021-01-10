@@ -74,10 +74,7 @@ class ConvModel(nn.Module):
 
         layers = [nn.Conv2d(2, D, 3, 1, 1)]
         for l in range(n_layers):
-            if l % 2 == 0:
-                layers.append(GlobalPool(D))
-            else:
-                layers.append(ReZeroConv(D, D))
+            layers.append(ReZeroConv(D, D))
             
         layers.append(nn.Conv2d(D, 1, 3, 1, 1))
         self.layers = nn.ModuleList(layers)
