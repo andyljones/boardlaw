@@ -27,7 +27,7 @@ def color_obs(obs):
     keyed[obs[..., 1] == 1.] = 2
     return color_board(keyed)
 
-def plot_board(colors, ax=None, black='dimgray', white='lightgray'):
+def plot_board(colors, ax=None, black='dimgray', white='lightgray', edges=True):
     ax = plt.subplots()[1] if ax is None else ax
     ax.set_aspect(1)
 
@@ -46,8 +46,9 @@ def plot_board(colors, ax=None, black='dimgray', white='lightgray'):
 
     tl, tr = (-1.5, (width)*sin60), (width-.5, (width)*sin60)
     bl, br = (width/2-1, -sin60), (1.5*width, -sin60)
-    ax.add_patch(mpl.patches.Polygon(np.array([tl, tr, bl, br]), linewidth=1, edgecolor='k', facecolor=black, zorder=1))
-    ax.add_patch(mpl.patches.Polygon(np.array([tl, bl, tr, br]), linewidth=1, edgecolor='k', facecolor=white, zorder=1))
+    if edges:
+        ax.add_patch(mpl.patches.Polygon(np.array([tl, tr, bl, br]), linewidth=1, edgecolor='k', facecolor=black, zorder=1))
+        ax.add_patch(mpl.patches.Polygon(np.array([tl, bl, tr, br]), linewidth=1, edgecolor='k', facecolor=white, zorder=1))
 
     radius = .5/sin60
     data_to_pixels = ax.transData.get_matrix()[0, 0]

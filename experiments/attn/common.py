@@ -188,5 +188,9 @@ class AttnModel(nn.Module):
         for l in self.layers:
             x, a = l(x, b)
             attns.append(a)
+        logits = self.head(x, self.pos)
+
+        n_heads = attns[0].shape[-1]
+        attns.append(logits.exp().reshape(logits.shape[0], -1, 1).repeat_interleave(n_heads, -1))
         self.attns = torch.stack(attns, 1)
-        return self.head(x, self.pos)
+        return logits

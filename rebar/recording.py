@@ -102,8 +102,8 @@ class Encoder:
                 self._container.close()
                 self.value = self._content.getvalue()
 
-    def notebook(self):
-        return notebook(self.value)
+    def notebook(self, *args, **kwargs):
+        return notebook(self.value, *args, **kwargs)
 
         
 def html_tag(video, height=None, **kwargs):
