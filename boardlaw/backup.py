@@ -29,7 +29,5 @@ def upload(source, dest):
         local_file=source,
         file_name=dest)
 
-def sync_traces():
-    from . import compression
-    compression.compress_traces() 
-    sync('./output/traces', 'output/traces')
+def backup():
+    sync('./output/pavlov', 'output/pavlov')

@@ -16,6 +16,7 @@ def pandas(run, channel, field=None, rule='60s', **kwargs):
     return df
 
 def compare(rs, *args, fill=False, **kwargs):
+    rs = [rs] if isinstance(rs, str) else rs
     ns = [n for r in rs for n in runs.resolutions(r)]
     return pd.concat({n: pandas(n, *args, **kwargs) for n in ns}, 1)
 

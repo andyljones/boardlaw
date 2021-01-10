@@ -122,15 +122,17 @@ def mix(worlds, T=2500):
 
 def run(device='cuda'):
     buffer_length = 32 
-    batch_size = 48*1024
-    n_envs = 6*1024
+    batch_size = 64*1024
+    n_envs = 8*1024
     buffer_inc = batch_size//n_envs
 
     worlds = worldfunc(n_envs, device=device)
     worlds = mix(worlds)
     agent = agentfunc(device)
-    opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=1e-2, amsgrad=True)
+    opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=1e-3, amsgrad=True)
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
     league = leagues.SimpleLeague(agentfunc, agent.evaluator, worlds.n_envs)
+
 
     parent = warm_start(agent, opt, '')
 
@@ -164,6 +166,7 @@ def run(device='cuda'):
             chunk_stats(chunk, buffer_inc)
 
             bad = optimize(agent.evaluator.prime, opt, chunk[:, next(idxs)])
+            sched.step()
             if bad:
                 sd = storage.state_dicts(agent=agent, opt=opt)
                 sd['worlds'] = arrdict.to_dicts(worlds)
