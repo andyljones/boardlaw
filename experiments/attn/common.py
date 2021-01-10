@@ -140,7 +140,7 @@ class Attention(nn.Module):
         attn = torch.softmax(dots, -2)
         vals = torch.einsum('bph,bphd->bhd', attn, v)
 
-        return F.relu(self.final(vals.view(B, H*Dx)))
+        return F.relu(self.final(vals.view(B, H*Dx))), attn
 
 class ReZeroAttn(nn.Module):
 
@@ -153,14 +153,14 @@ class ReZeroAttn(nn.Module):
         self.register_parameter('α', nn.Parameter(torch.zeros(())))
 
     def forward(self, x, b):
-        y = self.attn(x, b)
+        y, a = self.attn(x, b)
         x = x + self.α*y
 
         y = F.relu(self.fc0(x))
         y = self.fc1(y)
         x = x + self.α*y
 
-        return x
+        return x, a
 
 class AttnModel(nn.Module):
 
@@ -184,6 +184,9 @@ class AttnModel(nn.Module):
     def forward(self, obs):
         b = prepare(obs, self.pos)
         x = torch.zeros((obs.shape[0], self.D), device=obs.device)
+        attns = []
         for l in self.layers:
-            x = l(x, b)
+            x, a = l(x, b)
+            attns.append(a)
+        self.attns = torch.stack(attns)
         return self.head(x, self.pos)

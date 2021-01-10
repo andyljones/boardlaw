@@ -45,21 +45,31 @@ def terminal_actions(worlds):
         terminal[mask, a] = transitions.terminal
     return terminal.float()
 
-def plot(worlds, targets, outputs, i):
+def plot(i, worlds, targets, outputs, attns):
     import matplotlib.pyplot as plt
     from boardlaw.hex import plot_board
 
-    fig, (l, m, r) = plt.subplots(1, 3)
+    fig, axes = plt.subplots(2, 2)
 
-    probs = outputs[i].detach().cpu().exp()
-    colors = np.stack(np.vectorize(plt.cm.viridis)(probs), -1)
-    plot_board(colors, ax=l)
+    ax = axes[0, 0]
+    probs = outputs[i].detach().cpu().exp().numpy()
+    plot_board(plt.cm.viridis(probs), ax=ax)
+    ax.set_title('probs')
 
+    ax = axes[0, 1]
     ts = targets[i].detach().cpu().numpy().reshape(worlds.boardsize, worlds.boardsize)
-    colors = np.stack(np.vectorize(plt.cm.viridis)(ts), -1)
-    plot_board(colors, ax=m)
+    plot_board(plt.cm.viridis(ts), ax=ax)
+    ax.set_title('targets')
 
-    worlds.display(i, ax=r, colors='board')
+    ax = axes[1, 0]
+    worlds.display(i, ax=ax)
+    ax.set_title('board')
+
+    ax = axes[1, 1]
+    attn = attns.mean(0).mean(-1).detach().cpu().numpy()[i]
+    attn = attn.reshape(worlds.boardsize, worlds.boardsize)
+    plot_board(plt.cm.viridis(attn/attn.max()), ax=ax)
+    ax.set_title('attn')
 
     return fig
 
