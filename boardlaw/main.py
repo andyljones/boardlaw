@@ -96,10 +96,10 @@ def optimize(network, opt, batch):
         stats.mean('opt.step-std', (new - old).pow(2).mean().pow(.5))
         stats.max('opt.step-max', (new - old).abs().max())
 
-        return value_loss > 1
+        return value_loss > 2
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=9, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=11, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
@@ -122,8 +122,8 @@ def mix(worlds, T=2500):
 
 def run(device='cuda'):
     buffer_length = 32 
-    batch_size = 32*1024
-    n_envs = 4*1024
+    batch_size = 48*1024
+    n_envs = 6*1024
     buffer_inc = batch_size//n_envs
 
     worlds = worldfunc(n_envs, device=device)
@@ -134,7 +134,7 @@ def run(device='cuda'):
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('no-lr-sched', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('11x11', boardsize=worlds.boardsize, parent=parent)
 
     archive.archive(run)
 
@@ -164,12 +164,12 @@ def run(device='cuda'):
             chunk_stats(chunk, buffer_inc)
 
             bad = optimize(agent.evaluator.prime, opt, chunk[:, next(idxs)])
-            # if bad:
-            #     sd = storage.state_dicts(agent=agent, opt=opt)
-            #     sd['worlds'] = arrdict.to_dicts(worlds)
-            #     sd['chunk'] = arrdict.to_dicts(chunk)
-            #     storage.named(run, 'bad', sd)
-            #     raise ValueError()
+            if bad:
+                sd = storage.state_dicts(agent=agent, opt=opt)
+                sd['worlds'] = arrdict.to_dicts(worlds)
+                sd['chunk'] = arrdict.to_dicts(chunk)
+                storage.named(run, 'bad', sd)
+                raise ValueError()
 
             log.info('learner stepped')
             
