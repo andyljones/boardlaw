@@ -39,7 +39,7 @@ def run(D=32, B=8*1024, T=5000, device='cuda'):
 
     worlds = Hex.initial(B, boardsize=9)
 
-    boardsize = worldfunc(1).board.shape[-1]
+    boardsize = worlds.boardsize
     model = common.AttnModel(common.PosActions, boardsize, D).to(device)
 
     opt = torch.optim.Adam(model.parameters(), lr=1e-2)

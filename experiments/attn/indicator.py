@@ -1,8 +1,8 @@
 import torch
 from torch.nn import functional as F
 from torch import nn
-from .common import Model
-from tqdm import tqdm
+from . import common
+from tqdm.auto import tqdm
 
 def pointer_loss(rows, cols, boardsize, outputs):
     targets = 2*torch.stack([rows/boardsize, cols/boardsize], -1) - 1
@@ -25,9 +25,8 @@ class Mechanical(nn.Module):
         x = x.reshape(obs.shape[:-1])
         return x
 
-
-def indicator_test(T=5000, D=32, B=8*1024, boardsize=9, device='cuda'):
-    model = Model(boardsize, D).cuda()
+def run(T=5000, D=32, B=8*1024, boardsize=9, device='cuda'):
+    model = common.AttnModel(common.PosActions, boardsize, D).cuda()
     opt = torch.optim.Adam(model.parameters(), lr=1e-2)
 
     envs = torch.arange(B, device=device)

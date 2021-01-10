@@ -52,15 +52,27 @@ def positions(boardsize):
     # https://www.redblobgames.com/grids/hexagons/#conversions-axial
     #TODO: Does it help to sin/cos encode this?
     rs, cs = torch.meshgrid(
-            torch.linspace(-1, 1, boardsize),
-            torch.linspace(-1, 1, boardsize))
+            torch.linspace(0, 1, boardsize),
+            torch.linspace(0, 1, boardsize))
     zs = (rs + cs)/2.
     xs = torch.stack([rs, cs, zs], -1)
 
-    ps = [1, 2, 4]
-    return torch.cat([
-        torch.cat([torch.cos(2*np.pi*xs/p) for p in ps], -1),
-        torch.cat([torch.sin(2*np.pi*xs/p) for p in ps], -1)], -1)
+    # Since we're running over [0, 1] in 1/(b-1)-size steps, a period of 4/(b-1) 
+    # gives a highest-freq pattern that goes
+    #
+    # sin:  0 +1  0 -1
+    # cos  +1  0 -1  0
+    #
+    # every 4 steps. Then 16/(b-1) is just 4x slower than that, and between them
+    # all the cells will be well-separated in dot product up to board size 13. 
+    # 
+    # Beyond that, the rightmost values in slower pattern'll start to get close 
+    # to the leftmost values.
+    periods = [4/(boardsize-1), 16/(boardsize-1)]
+    if boardsize > 13:
+        raise ValueError('Need to add support for boardsizes above 13')
+
+    return torch.cat([torch.cat([torch.cos(2*np.pi*xs/p), torch.sin(2*np.pi*xs/p)], -1) for p in periods], -1)
 
 def offset(board, o):
     w = board.shape[-1]
@@ -152,7 +164,7 @@ class ReZeroAttn(nn.Module):
 
 class AttnModel(nn.Module):
 
-    def __init__(self, Head, boardsize, D, n_layers=16):
+    def __init__(self, Head, boardsize, D, n_layers=8):
         super().__init__()
 
         pos = positions(boardsize)

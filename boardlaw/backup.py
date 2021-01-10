@@ -4,6 +4,7 @@ from pathlib import Path
 import json
 import b2sdk.v1 as b2
 import aljpy
+import multiprocessing
 
 @aljpy.memcache()
 def api():
@@ -13,7 +14,8 @@ def api():
     api.authorize_account('production', **keys)
     return api
 
-def sync(source, dest, workers=4):
+def sync(source, dest):
+    workers = multiprocessing.cpu_count()
     syncer = b2.Synchronizer(workers)
     with b2.SyncReport(sys.stdout, False) as reporter:
         syncer.sync_folders(
@@ -31,3 +33,6 @@ def upload(source, dest):
 
 def backup():
     sync('./output/pavlov', 'output/pavlov')
+
+if __name__ == '__main__':
+    backup()
