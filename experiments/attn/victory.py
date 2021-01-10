@@ -143,4 +143,25 @@ def load(run):
     df = {}
     for i, row in snapshots.iterrows():
         df[row.boardsize, row.depth, row.width] = storage.load_snapshot(run, i)['losses']
-    return pd.DataFrame(df)
+    df = pd.DataFrame(df)
+    df.index.name = 'step'
+    df.columns.names = ('boardsize', 'depth', 'width')
+    return df
+
+def plot(run):
+    df = load(run)
+    finals = df.iloc[-1].apply(np.log10).reset_index().rename(columns={999: 'val'})
+
+    fig, axes = plt.subplots(1, 2)
+
+    ax = axes[0]
+    finals.query('depth == 16').groupby(['width', 'boardsize']).val.mean().unstack('width').plot(marker='o', ax=ax)
+    ax.set_title('loss')
+    ax.grid(True)
+
+    ax = axes[1]
+    finals.query('width == 128').groupby(['depth', 'boardsize']).val.mean().unstack('depth').plot(marker='o', ax=ax)
+    ax.set_title('loss')
+    ax.grid(True)
+
+    fig.set_size_inches(15, 6)
