@@ -29,6 +29,7 @@ def plot(*args, fill=False, skip=None, head=None, **kwargs):
     return ax
 
 def purge(minlen=900, cutoff=300):
+    raise ValueError('Make sure this doesn\'t delete snapshot-only runs!')
     from tqdm.auto import tqdm
     for r in tqdm(runs.runs()):
         try:

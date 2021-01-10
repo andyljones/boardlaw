@@ -57,6 +57,27 @@ class ReZeroConv(nn.Conv2d):
     def forward(self, x, *args, **kwargs):
         return x + self.α*F.relu(super().forward(x))
 
+class ConvModel(nn.Module):
+
+    def __init__(self, Head, boardsize, D, n_layers=16):
+        super().__init__()
+
+        layers = [nn.Conv2d(2, D, 3, 1, 1)]
+        for l in range(n_layers):
+            layers.append(ReZeroConv(D, D))
+            
+        layers.append(nn.Conv2d(D, 1, 3, 1, 1))
+        self.layers = nn.ModuleList(layers)
+
+    def forward(self, obs):
+        B, boardsize, boardsize, _ = obs.shape
+        x = obs.permute(0, 3, 1, 2)
+        for l in self.layers:
+            x = l(x)
+        x = x.reshape(B, -1)
+        x = F.log_softmax(x, -1)
+        return x.reshape(B, boardsize, boardsize)
+
 class GlobalPool(nn.Linear):
 
     def __init__(self, D):
@@ -67,14 +88,17 @@ class GlobalPool(nn.Linear):
         y = F.relu(super().forward(x.mean(2).mean(2)))
         return x + self.α*y[:, :, None, None]
 
-class ConvModel(nn.Module):
+class ConvPoolModel(nn.Module):
 
     def __init__(self, Head, boardsize, D, n_layers=16):
         super().__init__()
 
         layers = [nn.Conv2d(2, D, 3, 1, 1)]
         for l in range(n_layers):
-            layers.append(ReZeroConv(D, D))
+            if l % 4 == 0:
+                layers.append(GlobalPool(D))
+            else:
+                layers.append(ReZeroConv(D, D))
             
         layers.append(nn.Conv2d(D, 1, 3, 1, 1))
         self.layers = nn.ModuleList(layers)
