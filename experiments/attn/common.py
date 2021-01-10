@@ -140,7 +140,7 @@ class Attention(nn.Module):
         attn = torch.softmax(dots, -2)
         vals = torch.einsum('bph,bphd->bhd', attn, v)
 
-        return F.relu(self.final(vals.view(B, H*Dx))), attn
+        return F.relu(self.final(vals.view(B, H*Dx))), attn.detach()
 
 class ReZeroAttn(nn.Module):
 
@@ -164,7 +164,7 @@ class ReZeroAttn(nn.Module):
 
 class AttnModel(nn.Module):
 
-    def __init__(self, Head, boardsize, D, n_layers=8):
+    def __init__(self, Head, boardsize, D, n_layers=8, n_heads=1):
         super().__init__()
 
         pos = positions(boardsize)
@@ -176,7 +176,7 @@ class AttnModel(nn.Module):
         self.D = D
         layers = []
         for _ in range(n_layers):
-            layers.append(ReZeroAttn(D, D_prep)) 
+            layers.append(ReZeroAttn(D, D_prep, H=n_heads)) 
         self.layers = nn.ModuleList(layers)
 
         self.head = Head(D, pos.shape[-1])

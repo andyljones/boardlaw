@@ -10,6 +10,10 @@ from boardlaw.hex import Hex, color_obs
 from torch.nn import functional as F
 from boardlaw.main import worldfunc, agentfunc
 from boardlaw.hex import Hex
+from boardlaw.hex import plot_board
+import matplotlib.pyplot as plt
+from rebar.recording import Encoder
+
 
 def gamegen(worlds):
     while True:
@@ -45,10 +49,7 @@ def terminal_actions(worlds):
         terminal[mask, a] = transitions.terminal
     return terminal.float()
 
-def plot(i, obs, targets, outputs, attns):
-    import matplotlib.pyplot as plt
-    from boardlaw.hex import plot_board
-
+def plot_soln(i, obs, targets, outputs, attns=None):
     boardsize = obs.shape[-2]
 
     fig, axes = plt.subplots(2, 2)
@@ -68,10 +69,35 @@ def plot(i, obs, targets, outputs, attns):
     ax.set_title('board')
 
     ax = axes[1, 1]
-    attn = attns.detach().cpu().numpy()[i].max(0).max(-1)
-    attn = attn.reshape(boardsize, boardsize)
-    plot_board(plt.cm.viridis(attn/attn.max()), ax=ax)
-    ax.set_title('attn')
+    if attns is None:
+        ax.axis('off')
+    else:
+        attn = attns.detach().cpu().numpy()[i].max(0).max(-1)
+        attn = attn.reshape(boardsize, boardsize)
+        plot_board(plt.cm.viridis(attn/attn.max()), ax=ax)
+        ax.set_title('attn')
+
+def animate(i, obs, attns):
+    obs = obs[i].detach().cpu().numpy()
+    attn = attns[i].detach().cpu().numpy()
+    boardsize = int(attn.shape[1]**.5)
+    attn = attn.transpose(0, 2, 1).reshape(attn.shape[0], attn.shape[2], boardsize, boardsize)
+
+    rows, cols = attn.shape[:2]
+
+    with Encoder(fps=1) as enc:
+        for r in range(rows+3):
+            r = min(r, rows-1)
+            fig, axes = plt.subplots(1, cols+1, squeeze=False)
+            fig.set_size_inches(8*(cols+1), 8)
+
+            plot_board(color_obs(obs), ax=axes[0, 0])
+            for c in range(cols):
+                colors = plt.cm.viridis(attn[r, c])
+                plot_board(colors, ax=axes[0, c+1])
+            enc(fig)
+            plt.close(fig)
+    enc.notebook()
 
 def run(D=32, B=8*1024, T=5000, device='cuda'):
 
@@ -87,8 +113,8 @@ def run(D=32, B=8*1024, T=5000, device='cuda'):
             targets = terminal_actions(b.worlds)
             outputs = model(b.worlds.obs)
 
-            infs = torch.full_like(targets, np.inf)
-            loss = -outputs.reshape(B, -1).where(targets == 1., infs).min(-1).values.mean()
+            infs = torch.full_like(targets, -np.inf)
+            loss = -outputs.reshape(B, -1).where(targets == 1., infs).max(-1).values.mean()
 
             opt.zero_grad()
             loss.backward()

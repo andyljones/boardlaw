@@ -79,7 +79,6 @@ class Encoder:
         if isinstance(arr, plt.Figure):
             fig = arr
             arr = array(fig)
-            fig.gcf()
 
         if not self._initialized:
             self._initialize(arr)
@@ -102,10 +101,14 @@ class Encoder:
                 self._container.mux(self._stream.encode())
                 self._container.close()
                 self.value = self._content.getvalue()
+
+    def notebook(self):
+        return notebook(self.value)
+
         
 def html_tag(video, height=None, **kwargs):
     video = video.value if isinstance(video, Encoder) else video
-    style = f'style="height: {height}px"' if height else ''
+    style = f'style="height: {height}px"' if height else 'style="height: 100%; width: 100%"'
     b64 = base64.b64encode(video).decode('utf-8')
     return f"""
 <video controls autoplay loop {style}>
@@ -113,7 +116,7 @@ def html_tag(video, height=None, **kwargs):
     Your browser does not support the video tag.
 </video>"""
 
-def notebook(video, height=640):
+def notebook(video, height=None):
     from IPython.display import display, HTML
     return display(HTML(html_tag(video, height)))
 
