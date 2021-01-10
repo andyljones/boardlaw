@@ -1,3 +1,4 @@
+import pandas as pd
 import numpy as np
 import torch
 from torch import nn
@@ -99,15 +100,16 @@ def animate(i, obs, attns):
             plt.close(fig)
     enc.notebook()
 
-def run(D=32, B=8*1024, T=5000, device='cuda'):
+def run_trial(B=4*1024, T=1000, boardsize=7, device='cuda', **kwargs):
 
-    worlds = Hex.initial(B, boardsize=7)
+    worlds = Hex.initial(B, boardsize=boardsize)
 
     boardsize = worlds.boardsize
-    model = common.FCModel(common.PosActions, boardsize, D).to(device)
+    model = common.FCModel(common.PosActions, boardsize, **kwargs).to(device)
 
     opt = torch.optim.Adam(model.parameters(), lr=1e-2)
 
+    losses = {}
     with tqdm(total=T) as pbar:
         for t, b in zip(range(T), batchgen(worlds, B)):
             targets = terminal_actions(b.worlds)
@@ -122,3 +124,14 @@ def run(D=32, B=8*1024, T=5000, device='cuda'):
 
             pbar.update(1)
             pbar.set_description(f'{loss:.2f}')
+            losses[t] = float(loss)
+    
+    return pd.Series(losses)
+
+def run():
+    results = {}
+    for boardsize in (3, 5, 7, 9):
+        for depth in [1, 2, 4, 8, 16]:
+            for width in [8, 16, 32, 64, 128]:
+                print(boardsize, depth, width)
+                results[boardsize, depth, width] = run_trial(boardsize=boardsize, n_layers=depth, D=width)
