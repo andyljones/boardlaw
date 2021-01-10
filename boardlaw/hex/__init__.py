@@ -10,14 +10,15 @@ CHARS = '.bwTBLR'
 ORDS = {c: i for i, c in enumerate(CHARS)}
 
 def color_board(board, colors='obs'):
-    black = 'dimgray'
-    white = 'lightgray'
+    black = (0, 0, .4)
+    white = (0, 0, .8)
+    tan = (.07, .4, .8)
     if colors == 'obs':
-        colors = ['tan', black, white, black, black, white, white] 
+        colors = [tan, black, white, black, black, white, white] 
     elif colors == 'board':
-        colors = ['tan', black, white, 'maroon', 'sienna', 'cornflowerblue', 'plum']
-    colors = np.stack(np.vectorize(mpl.colors.to_rgb)(colors), -1)
-    colors = np.vectorize(colors.__getitem__, signature='()->(3)')(board)
+        colors = [tan, black, white, (.16, .2, .4), (.33, .2, .4), (.66, .2, .8), (.72, .2, .8)]
+    colors = np.stack([mpl.colors.hsv_to_rgb(c) for c in colors])
+    colors = colors[board]
     return colors
 
 def color_obs(obs):
