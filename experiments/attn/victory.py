@@ -6,7 +6,7 @@ import pickle
 from pathlib import Path
 from . import common
 from tqdm.auto import tqdm
-from boardlaw.hex import Hex
+from boardlaw.hex import Hex, color_obs
 from torch.nn import functional as F
 from boardlaw.main import worldfunc, agentfunc
 from boardlaw.hex import Hex
@@ -45,9 +45,11 @@ def terminal_actions(worlds):
         terminal[mask, a] = transitions.terminal
     return terminal.float()
 
-def plot(i, worlds, targets, outputs, attns):
+def plot(i, obs, targets, outputs, attns):
     import matplotlib.pyplot as plt
     from boardlaw.hex import plot_board
+
+    boardsize = obs.shape[-2]
 
     fig, axes = plt.subplots(2, 2)
 
@@ -57,21 +59,19 @@ def plot(i, worlds, targets, outputs, attns):
     ax.set_title('probs')
 
     ax = axes[0, 1]
-    ts = targets[i].detach().cpu().numpy().reshape(worlds.boardsize, worlds.boardsize)
+    ts = targets[i].detach().cpu().numpy().reshape(boardsize, boardsize)
     plot_board(plt.cm.viridis(ts), ax=ax)
     ax.set_title('targets')
 
     ax = axes[1, 0]
-    worlds.display(i, ax=ax)
+    plot_board(color_obs(obs[i].cpu().numpy()), ax=ax)
     ax.set_title('board')
 
     ax = axes[1, 1]
-    attn = attns.mean(0).mean(-1).detach().cpu().numpy()[i]
-    attn = attn.reshape(worlds.boardsize, worlds.boardsize)
+    attn = attns.detach().cpu().numpy()[i].max(0).max(-1)
+    attn = attn.reshape(boardsize, boardsize)
     plot_board(plt.cm.viridis(attn/attn.max()), ax=ax)
     ax.set_title('attn')
-
-    return fig
 
 def run(D=32, B=8*1024, T=5000, device='cuda'):
 
@@ -87,8 +87,8 @@ def run(D=32, B=8*1024, T=5000, device='cuda'):
             targets = terminal_actions(b.worlds)
             outputs = model(b.worlds.obs)
 
-            offset = (targets.sum(-1)*targets.sum(-1).log()).mean()
-            loss = -outputs.reshape(B, -1).mul(targets).sum(-1).mean() - offset
+            infs = torch.full_like(targets, np.inf)
+            loss = -outputs.reshape(B, -1).where(targets == 1., infs).min(-1).values.mean()
 
             opt.zero_grad()
             loss.backward()
