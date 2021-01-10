@@ -6,7 +6,6 @@ import torch.jit
 from rebar import recurrence, arrdict
 from torch.nn import functional as F
 from collections import namedtuple
-from . import attn
 
 FIELDS = ('logits', 'v')
 

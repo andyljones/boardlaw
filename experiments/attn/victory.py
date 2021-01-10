@@ -124,7 +124,7 @@ def run_trial(Model, B=4*1024, T=1000, boardsize=7, device='cuda', **kwargs):
             opt.step()
 
             pbar.update(1)
-            pbar.set_description(f'{loss:.2f}')
+            pbar.set_description(f'{loss:.2f}/{loss.log10():.2f}')
             losses[t] = float(loss)
     
     return pd.Series(losses)
@@ -156,12 +156,12 @@ def plot(run):
 
     ax = axes[0]
     finals.query('depth == 16').groupby(['width', 'boardsize']).val.mean().unstack('width').plot(marker='o', ax=ax)
-    ax.set_title('loss')
-    ax.grid(True)
 
     ax = axes[1]
     finals.query('width == 128').groupby(['depth', 'boardsize']).val.mean().unstack('depth').plot(marker='o', ax=ax)
-    ax.set_title('loss')
-    ax.grid(True)
+
+    for ax in axes:
+        ax.set_title('"victory" toy loss')
+        ax.grid(True)
 
     fig.set_size_inches(15, 6)
