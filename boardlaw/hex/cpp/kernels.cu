@@ -181,8 +181,13 @@ __global__ void observe_kernel(C3D::PTA board, I1D::PTA seats, F4D::PTA obs) {
             auto c = colors[idx];
             // printf("%d/%d %d/%d %d/%d %d/%d\n", b, B, i, S, j, S, c, 2);
 
-            if (c < 2)
-                obs[b][i][j][c] = 1.f;
+            if (c < 2) {
+                if (flip){
+                    obs[b][i][j][1-c] = 1.f;
+                } else {
+                    obs[b][i][j][c] = 1.f;
+                }
+            }
         }
     }
 }
