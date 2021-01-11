@@ -320,7 +320,7 @@ def allocations():
     #TODO: Integrate this with the profiler?
     import gc
     objs = []
-    for obj in gc.get_objects():
+    for obj in gc.get_objects(2):
         try:
             if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
                 objs.append({

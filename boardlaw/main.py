@@ -1,3 +1,4 @@
+import gc
 import time
 import numpy as np
 import profiling
@@ -57,10 +58,10 @@ def optimize(network, opt, batch):
     d = network(w)
 
     zeros = torch.zeros_like(d.logits)
-    policy_loss = -(d0.logits.exp()*d.logits).where(w.valid, zeros).sum(axis=-1)[mask].mean()
+    policy_loss = -(d0.logits.float().exp()*d.logits).where(w.valid, zeros).sum(axis=-1)[mask].mean()
 
     terminal = torch.stack([t.terminal for _ in range(w.n_seats)], -1)
-    target_value = learning.reward_to_go(t.rewards, d0.v, terminal, terminal, gamma=1)
+    target_value = learning.reward_to_go(t.rewards.float(), d0.v.float(), terminal, terminal, gamma=1)
     value_loss = (target_value - d.v).square()[mask].mean()
     
     loss = policy_loss + value_loss 
@@ -121,6 +122,13 @@ def mix(worlds, T=2500):
         worlds, transitions = worlds.step(actions)
     return worlds
 
+@arrdict.mapping
+def half(x):
+    if isinstance(x, torch.Tensor) and x.dtype == torch.float:
+        return x.half()
+    else:
+        return x
+
 def run(device='cuda'):
     buffer_length = 32 
     batch_size = 64*1024
@@ -156,7 +164,7 @@ def run(device='cuda'):
                 buffer.append(arrdict.arrdict(
                     worlds=worlds,
                     decisions=decisions.half(),
-                    transitions=transition.half(),
+                    transitions=half(transition),
                     is_prime=is_prime).detach())
                 worlds = new_worlds
 
