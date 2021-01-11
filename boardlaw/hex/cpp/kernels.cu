@@ -24,17 +24,17 @@ __device__ void flood(C3D::PTA board, int row, int col, uint8_t new_val) {
 
     uint8_t old_val = board[b][row][col];
 
-    extern __shared__ uint8_t shared[];
+    extern __shared__ uint8_t colors[];
 
     // Set up a queue to keep track of which cells need exploring
     int start = 0;
     int end = 1;
-    uint8_t *queue = (uint8_t*)&shared[(3*threadIdx.x+0)*S*S];
+    uint8_t *queue = (uint8_t*)&colors[(3*threadIdx.x+0)*S*S];
     queue[0] = row;
     queue[1] = col;
 
     // Set up a mask to keep track of which cells we've already seen
-    uint8_t *seen = (uint8_t*)&shared[(3*threadIdx.x+2)*S*S];
+    uint8_t *seen = (uint8_t*)&colors[(3*threadIdx.x+2)*S*S];
     for (int s=0; s<S*S; s++) { seen[s] = 0; }
 
     while (true) {
@@ -149,7 +149,67 @@ __host__ TT step(TT board, TT seats, TT actions) {
     return results;
 }
 
+__global__ void observe_kernel(C3D::PTA board, I1D::PTA seats, F4D::PTA obs) {
+    const uint B = board.size(0);
+    const uint S = board.size(1);
+    const int b = blockIdx.x*blockDim.x + threadIdx.x;
+
+    if (b >= B) return;
+
+    extern __shared__ uint8_t shared[];
+    uint8_t* colors = (uint8_t*)&shared[threadIdx.x*S*S];
+
+    // Copy the color into shared memory
+    for (int i=0; i<S; i++) {
+        for (int j=0; j<S; j++) {
+            auto c = board[b][i][j];
+            uint8_t color = 2;
+            if ((c == BLACK) | (c == TOP) | (c == BOT)) {
+                color = 0;
+            } else if ((c == WHITE) | (c == LEFT) | (c == RIGHT)) {
+                color = 1;
+            }
+            colors[i*S+j] = color;
+        }
+    }
+
+    // Copy the colors to the obs 
+    auto flip = seats[b] == 1;
+    for (int i=0; i<S; i++) {
+        for (int j=0; j<S; j++) {
+            auto idx = flip? (j*S+i) : (i*S+j);
+            auto c = colors[idx];
+            // printf("%d/%d %d/%d %d/%d %d/%d\n", b, B, i, S, j, S, c, 2);
+
+            if (c < 2)
+                obs[b][i][j][c] = 1.f;
+        }
+    }
+}
+
 __host__ TT observe(TT board, TT seats) {
+    c10::cuda::CUDAGuard g(board.device());
+
+    auto flatboard = board.clone().view({-1, board.size(-1), board.size(-1)});
+    auto flatseats = seats.clone().view({-1}).to(at::kInt);
+
+    const uint B = flatboard.size(0);
+    const uint S = flatboard.size(1);
+
+    auto obs = flatboard.new_zeros({B, S, S, 2}, at::kFloat);
+
+    const uint n_blocks = (B + BLOCK - 1)/BLOCK;
+    observe_kernel<<<{n_blocks}, {BLOCK}, BLOCK*S*S*sizeof(uint8_t), stream()>>>(
+        C3D(flatboard).pta(), I1D(flatseats).pta(), F4D(obs).pta());
+    C10_CUDA_CHECK(cudaGetLastError());
+
+    auto sizes = board.sizes().vec();
+    sizes.push_back(2);
+    return obs.view(sizes);
+
+}
+
+__host__ TT observe_old(TT board, TT seats) {
     c10::cuda::CUDAGuard g(board.device());
     auto black = ((board == BLACK) | (board == TOP) | (board == BOT));
     auto white = ((board == WHITE) | (board == LEFT) | (board == RIGHT));

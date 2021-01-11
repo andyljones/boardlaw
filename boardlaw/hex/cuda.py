@@ -15,3 +15,7 @@ def step(*args, **kwargs):
 @profiling.nvtx
 def observe(*args, **kwargs):
     return module().observe(*args, **kwargs)
+
+@profiling.nvtx
+def observe_old(*args, **kwargs):
+    return module().observe(*args, **kwargs)

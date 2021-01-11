@@ -43,6 +43,7 @@ struct TensorProxy {
 using F1D = TensorProxy<float, 1>;
 using F2D = TensorProxy<float, 2>;
 using F3D = TensorProxy<float, 3>;
+using F4D = TensorProxy<float, 4>;
 
 using I1D = TensorProxy<int, 1>;
 using I2D = TensorProxy<int, 2>;
@@ -52,7 +53,7 @@ using B1D = TensorProxy<bool, 1>;
 using B2D = TensorProxy<bool, 2>;
 using B3D = TensorProxy<bool, 3>;
 
-//TODO: PyTorch seems to have a problem with these
 using C1D = TensorProxy<uint8_t, 1>;
 using C2D = TensorProxy<uint8_t, 2>;
 using C3D = TensorProxy<uint8_t, 3>;
+using C4D = TensorProxy<uint8_t, 4>;

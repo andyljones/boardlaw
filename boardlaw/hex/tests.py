@@ -1,6 +1,6 @@
 import time
 import numpy as np
-from . import Hex, cuda
+from . import Hex, cuda, CHARS
 import torch
 import torch.distributions
 import torch.cuda
@@ -146,9 +146,8 @@ def open_spiel_board(state):
     return '\n'.join(' '*i + ' '.join(r) for i, r in enumerate(strs))
 
 def open_spiel_display_str(env, e):
-    strs = _CHARS
     board = env.board[e].clone()
-    strings = np.vectorize(strs.__getitem__)(board.cpu().numpy())
+    strings = np.vectorize(CHARS.__getitem__)(board.cpu().numpy())
     return '\n'.join(' '*i + ' '.join(r) for i, r in enumerate(strings))
 
 def test_open_spiel():
@@ -180,12 +179,13 @@ def test_open_spiel():
         their_state = open_spiel_board(state)
         assert our_state == their_state
 
-def benchmark_step(n_envs=8192, n_steps=1024):
+def benchmark_step(n_envs=4096, n_steps=1024):
     worlds = Hex.initial(n_envs)
 
     for _ in range(n_steps):
         actions = torch.distributions.Categorical(probs=worlds.valid.float()).sample()
         worlds, transitions = worlds.step(actions)
+        assert (cuda.observe(worlds.board, worlds.seats) == cuda.observe_old(worlds.board, worlds.seats)).all()
 
     actions = torch.distributions.Categorical(probs=worlds.valid.float()).sample().int()
 
@@ -196,7 +196,7 @@ def benchmark_step(n_envs=8192, n_steps=1024):
     torch.cuda.synchronize()
     print(f'{n_envs*n_steps/(time.time() - start):.0f} samples/sec')
 
-def benchmark_obs(n_envs=8192, n_steps=1024):
+def benchmark_obs(n_envs=4096, n_steps=1024):
     worlds = Hex.initial(n_envs, boardsize=9)
     worlds['seats'] = torch.arange(worlds.n_envs, device=worlds.device) % 2
 
@@ -206,3 +206,8 @@ def benchmark_obs(n_envs=8192, n_steps=1024):
         cuda.observe(worlds.board, worlds.seats)
     torch.cuda.synchronize()
     print(f'{n_envs*n_steps/(time.time() - start):.0f} samples/sec')
+
+def obs_test():
+    board = torch.tensor([[[0, 0], [0, 0]]]).type(torch.uint8).cuda()
+    seats = torch.tensor([1,]).type(torch.long).cuda()
+    cuda.observe(board, seats)
