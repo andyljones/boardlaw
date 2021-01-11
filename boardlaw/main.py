@@ -131,7 +131,7 @@ def run(device='cuda'):
     agent = agentfunc(device)
     opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=1e-3, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
-    league = leagues.SimpleLeague(agentfunc, agent.evaluator, worlds.n_envs)
+    league = leagues.SimpleLeague(agentfunc, agent.evaluator, worlds.n_envs, 0)
 
 
     parent = warm_start(agent, opt, '')

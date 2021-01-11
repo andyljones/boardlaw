@@ -49,8 +49,12 @@ class SimpleLeague:
         self.stable = {i: evaluator.state_dict() for i in range(n_stabled)}
 
         prime_frac = 3/4
-        self.n_prime_envs = int(prime_frac*self.n_envs)
-        self.n_oppo_envs = int((1 - prime_frac)*self.n_envs//self.n_opponents)
+        if self.n_opponents:
+            self.n_prime_envs = int(prime_frac*self.n_envs)
+            self.n_oppo_envs = int((1 - prime_frac)*self.n_envs//self.n_opponents)
+        else:
+            self.n_prime_envs = self.n_envs
+            self.n_oppo_envs = 0
         assert self.n_prime_envs + self.n_oppo_envs*self.n_opponents == self.n_envs
 
         idxs = np.random.choice(list(self.stable), (self.n_opponents,))
