@@ -1,5 +1,5 @@
 """
-CUDA_VISIBLE_DEVICES=1 nsys profile --force-overwrite true -o "output/nsys" -c cudaProfilerApi  -t cublas,nvtx -e EMIT_NVTX=1 python -c "from boardlaw.multinet import *; profile()"
+CUDA_VISIBLE_DEVICES=1 nsys profile --force-overwrite true -o "output/nsys" -c cudaProfilerApi  -t cuda,cublas,nvtx -e EMIT_NVTX=1 python -c "from boardlaw.multinet import *; profile()"
 
 docker cp boardlaw:/code/output/nsys.qdrep ~/Code/tmp/nsys.qdrep
 

@@ -1,5 +1,6 @@
 import time
 import numpy as np
+import profiling
 import torch
 from rebar import arrdict
 from pavlov import stats, logs, runs, storage, archive
@@ -182,6 +183,7 @@ def run(device='cuda'):
             storage.throttled_snapshot(run, sd, 900)
             stats.gpu(worlds.device, 15)
 
+@profiling.profilable
 def benchmark_experience_collection(n_envs=8192, T=16):
     import pandas as pd
 
@@ -201,9 +203,13 @@ def benchmark_experience_collection(n_envs=8192, T=16):
         decisions = agent(worlds)
         new_worlds, transition = worlds.step(decisions.actions)
         worlds = new_worlds
-        log.info('actor stepped')
+        print('actor stepped')
     torch.cuda.synchronize()
     rate = (T*n_envs)/(time.time() - start)
     print(f'{n_envs}: {rate}/sample')
 
     return rate
+
+if __name__ == '__main__':
+    with torch.autograd.profiler.emit_nvtx():
+        benchmark_experience_collection()

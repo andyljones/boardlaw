@@ -6,6 +6,7 @@ import torch.distributions
 from rebar import arrdict
 from . import cuda
 import logging
+from rebar import profiling
 
 log = logging.getLogger(__name__)
 
@@ -84,10 +85,12 @@ class MCTS:
             self.transitions.terminal, 
             self.tree.children)
 
+    @profiling.nvtx
     def descend(self):
         result = cuda.descend(self._cuda())
         return result.parents.long(), result.actions.long()
 
+    @profiling.nvtx
     def backup(self, leaves):
         bk = cuda.Backup(
             v=self.decisions.v,
@@ -98,6 +101,7 @@ class MCTS:
             terminal=self.transitions.terminal)
         cuda.backup(bk, leaves.int())
 
+    @profiling.nvtx
     def simulate(self, evaluator):
         if self.sim >= self.n_nodes:
             raise ValueError('Called simulate more times than were declared in the constructor')
@@ -128,6 +132,7 @@ class MCTS:
 
         self.sim += 1
 
+    @profiling.nvtx
     def root(self):
         #TODO: Bit of a hack this 
         return arrdict.arrdict(
@@ -200,6 +205,7 @@ class MCTSAgent:
         self.kwargs = kwargs
         self.noise_eps = noise_eps
 
+    @profiling.nvtx
     def __call__(self, world, value=True, **kwargs):
         m = mcts(world, self.evaluator, noise_eps=self.noise_eps, **{**self.kwargs, **kwargs})
         r = m.root()

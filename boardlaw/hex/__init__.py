@@ -1,4 +1,4 @@
-from rebar import arrdict
+from rebar import arrdict, profiling
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -101,6 +101,7 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seats'))):
         shape = self.board.shape[:-2]
         self.valid = (self.obs == 0).all(-1).reshape(*shape, -1)
 
+    @profiling.nvtx
     def step(self, actions):
         """Args:
             actions: (n_env, 2)-int tensor between (0, 0) and (boardsize, boardsize). Cells are indexed in row-major
@@ -134,6 +135,16 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seats'))):
             terminal=terminal, 
             rewards=rewards)
         return new_world, transition
+
+    @profiling.nvtx
+    def __getitem__(self, x):
+        # Just exists for profiling
+        return super().__getitem__(x)
+
+    @profiling.nvtx
+    def __setitem__(self, x, y):
+        # Just exists for profiling
+        return super().__setitem__(x, y)
 
     @classmethod
     def plot_worlds(cls, worlds, e=None, ax=None, colors='obs'):

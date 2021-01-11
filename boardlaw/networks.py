@@ -80,6 +80,7 @@ class ConvContextModel(nn.Module):
         pos = positions(boardsize)
         self.register_buffer('pos', pos)
 
+    @profiling.nvtx
     def traced(self, obs, valid, seats):
         if obs.ndim == 5:
             B, T = obs.shape[:2]
@@ -160,7 +161,12 @@ class LeagueNetwork(nn.Module):
         self.streams = [torch.cuda.Stream() for _ in range(2)]
 
         self.prime_only = True
+    
+    @profiling.nvtx
+    def forward_one(self, net, obs, valid, seats):
+        return dict(zip(FIELDS, net.traced(obs, valid, seats)))
 
+    @profiling.nvtx
     def forward(self, worlds):
         if self.prime_only:
             split = worlds.n_envs
@@ -173,14 +179,14 @@ class LeagueNetwork(nn.Module):
         torch.cuda.synchronize()
         with torch.cuda.stream(self.streams[0]):
             s = slice(0, split)
-            parts.append(dict(zip(FIELDS, self.prime.traced(obs[s], valid[s], seats[s]))))
+            parts.append(self.forward_one(self.prime, obs[s], valid[s], seats[s]))
 
         if split < worlds.n_envs:
             chunk = (worlds.n_envs - split)//len(self.opponents)
             assert split + chunk*len(self.opponents) == worlds.n_envs
             with torch.cuda.stream(self.streams[1]):
                 for s, opponent in zip(self.slices, self.opponents): 
-                    parts.append(dict(zip(FIELDS, opponent.traced(obs[s], valid[s], seats[s]))))
+                    parts.append(self.forward_one(opponent, obs[s], valid[s], seats[s]))
 
         torch.cuda.synchronize()
         return arrdict.from_dicts(arrdict.cat(parts))
