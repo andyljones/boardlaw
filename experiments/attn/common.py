@@ -100,7 +100,7 @@ class ConvContextModel(nn.Module):
     def __init__(self, Head, boardsize, D, n_layers=16):
         super().__init__()
 
-        layers = [nn.Conv2d(2, D, 3, 1, 1)]
+        layers = [nn.Conv2d(14, D, 3, 1, 1)]
         for l in range(n_layers):
             layers.append(ReZeroConv(D, D))
             layers.append(GlobalContext(D))
@@ -108,9 +108,13 @@ class ConvContextModel(nn.Module):
         layers.append(nn.Conv2d(D, 1, 3, 1, 1))
         self.layers = nn.ModuleList(layers)
 
+        pos = positions(boardsize)
+        self.register_buffer('pos', pos)
+
     def forward(self, obs):
         B, boardsize, boardsize, _ = obs.shape
-        x = obs.permute(0, 3, 1, 2)
+        prep = torch.cat([obs, self.pos[None].repeat_interleave(B, 0)], -1)
+        x = prep.permute(0, 3, 1, 2)
         for l in self.layers:
             x = l(x)
         x = x.reshape(B, -1)

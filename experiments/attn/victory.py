@@ -110,6 +110,7 @@ def run_trial(Model, B=4*1024, T=1000, boardsize=7, device='cuda', **kwargs):
     opt = torch.optim.Adam(model.parameters(), lr=1e-2)
 
     losses = {}
+    start = time.time()
     with tqdm(total=T) as pbar:
         for t, b in zip(range(T), batchgen(worlds, B)):
             targets = terminal_actions(b.worlds)
@@ -125,41 +126,39 @@ def run_trial(Model, B=4*1024, T=1000, boardsize=7, device='cuda', **kwargs):
             pbar.update(1)
             pbar.set_description(f'{loss:.2f}/{loss.log10():.2f}')
             losses[t] = float(loss)
+    end = time.time()
+    rate = (T*B)/(end - start)
     
-    return pd.Series(losses)
+    return pd.Series(losses), rate
 
-def run():
-    B = 4*1024
-    T = 1000
-
-    Model = common.ConvContextModel
+def run(Model):
     run = runs.new_run('experiments-victory', model=Model.__name__)
     for boardsize in (3, 5, 7, 9):
         for depth in [1, 2, 4, 8, 16]:
             for width in [2, 4, 8, 16, 32, 64]:
                 print(boardsize, depth, width)
-                model = Model(common.PosActions, boardsize, width, depth).cuda()
-                n_macs, n_params = get_model_complexity_info(model, (boardsize, boardsize, 2), as_strings=False, print_per_layer_stat=False)
-
-                losses = run_trial(Model, boardsize=boardsize, n_layers=depth, D=width, B=B, T=T)
+                losses, rate = run_trial(Model, boardsize=boardsize, n_layers=depth, D=width)
     
                 storage.snapshot(run, {'losses': losses.to_dict()}, 
                     boardsize=boardsize, depth=depth, width=width,
-                    n_macs=n_macs, n_params=n_params)
+                    rate=rate)
 
 def load(run):
     snapshots = pd.DataFrame.from_dict(storage.snapshots(run), orient='index')
-    df = {}
+    info, losses = {}, {}
     for i, row in snapshots.iterrows():
-        df[row.boardsize, row.depth, row.width] = storage.load_snapshot(run, i)['losses']
-    df = pd.DataFrame(df)
-    df.index.name = 'step'
-    df.columns.names = ('boardsize', 'depth', 'width')
-    return df
+        losses[row.boardsize, row.depth, row.width] = storage.load_snapshot(run, i)['losses']
+        info[row.boardsize, row.depth, row.width] = {'macs': row.n_macs, 'params': row.n_params}
+    losses = pd.DataFrame(losses)
+    losses.index.name = 'step'
+    losses.columns.names = ('boardsize', 'depth', 'width')
 
-def plot(run):
-    df = load(run)
-    finals = df.apply(np.log10).tail(10).mean(0).reset_index().rename(columns={0: 'val'})
+    info = pd.DataFrame(info)
+    info.columns.names = ('boardsize', 'depth', 'width')
+    return losses, info
+
+def plot(losses):
+    finals = losses.apply(np.log10).tail(10).mean(0).reset_index().rename(columns={0: 'val'})
 
     fig, axes = plt.subplots(1, 2)
 
