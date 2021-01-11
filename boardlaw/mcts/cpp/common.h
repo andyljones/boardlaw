@@ -3,23 +3,23 @@
 
 //TODO: Can I template-ize these classes?
 struct MCTSPTA {
-  H3D::PTA logits;
-  H3D::PTA w; 
-  S2D::PTA n; 
-  H1D::PTA c_puct;
-  S2D::PTA seats; 
+  F3D::PTA logits;
+  F3D::PTA w; 
+  I2D::PTA n; 
+  F1D::PTA c_puct;
+  I2D::PTA seats; 
   B2D::PTA terminal; 
-  S3D::PTA children;
+  I3D::PTA children;
 };
 
 struct MCTS {
-  H3D logits;
-  H3D w; 
-  S2D n; 
-  H1D c_puct;
-  S2D seats; 
+  F3D logits;
+  F3D w; 
+  I2D n; 
+  F1D c_puct;
+  I2D seats; 
   B2D terminal; 
-  S3D children;
+  I3D children;
 
   MCTSPTA pta() {
     return MCTSPTA{
@@ -34,13 +34,13 @@ struct MCTS {
 };
 
 struct DescentPTA {
-  S1D::PTA parents;
-  S1D::PTA actions; 
+  I1D::PTA parents;
+  I1D::PTA actions; 
 };
 
 struct Descent {
-  S1D parents;
-  S1D actions;
+  I1D parents;
+  I1D actions;
 
   DescentPTA pta() {
     return DescentPTA{
@@ -50,20 +50,20 @@ struct Descent {
 };
 
 struct BackupPTA {
-  H3D::PTA v;
-  H3D::PTA w;
-  S2D::PTA n;
-  H3D::PTA rewards;
-  S2D::PTA parents;
+  F3D::PTA v;
+  F3D::PTA w;
+  I2D::PTA n;
+  F3D::PTA rewards;
+  I2D::PTA parents;
   B2D::PTA terminal;
 };
 
 struct Backup {
-  H3D v;
-  H3D w;
-  S2D n;
-  H3D rewards;
-  S2D parents;
+  F3D v;
+  F3D w;
+  I2D n;
+  F3D rewards;
+  I2D parents;
   B2D terminal;
 
   BackupPTA pta() {

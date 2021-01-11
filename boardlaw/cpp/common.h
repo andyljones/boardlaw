@@ -45,18 +45,9 @@ using F2D = TensorProxy<float, 2>;
 using F3D = TensorProxy<float, 3>;
 using F4D = TensorProxy<float, 4>;
 
-using H1D = TensorProxy<at::Half, 1>;
-using H2D = TensorProxy<at::Half, 2>;
-using H3D = TensorProxy<at::Half, 3>;
-using H4D = TensorProxy<at::Half, 4>;
-
 using I1D = TensorProxy<int, 1>;
 using I2D = TensorProxy<int, 2>;
 using I3D = TensorProxy<int, 3>;
-
-using S1D = TensorProxy<short, 1>;
-using S2D = TensorProxy<short, 2>;
-using S3D = TensorProxy<short, 3>;
 
 using B1D = TensorProxy<bool, 1>;
 using B2D = TensorProxy<bool, 2>;

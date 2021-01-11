@@ -23,7 +23,7 @@ def mcts(logits, w, n, c_puct, seats, terminal, children):
     assert (c_puct > 0.).all(), 'Zero c_puct not supported; will lead to an infinite loop in the kernel'
     assert len({logits.device, w.device, n.device, c_puct.device, seats.device, terminal.device, children.device}) == 1, 'Inputs span multiple devices'
 
-    return module().MCTS(logits, w, n, c_puct, seats.short(), terminal, children)
+    return module().MCTS(logits, w, n.int(), c_puct, seats.int(), terminal, children.int())
 
 @profiling.nvtx
 def Backup(*args, **kwargs):

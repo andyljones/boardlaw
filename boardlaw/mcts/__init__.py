@@ -41,30 +41,30 @@ class MCTS:
 
         self.n_actions = np.prod(world.action_space)
         self.tree = arrdict.arrdict(
-            children=self.envs.new_full((world.n_envs, self.n_nodes, self.n_actions), -1, dtype=torch.short),
-            parents=self.envs.new_full((world.n_envs, self.n_nodes), -1, dtype=torch.short),
-            relation=self.envs.new_full((world.n_envs, self.n_nodes), -1, dtype=torch.short))
+            children=self.envs.new_full((world.n_envs, self.n_nodes, self.n_actions), -1),
+            parents=self.envs.new_full((world.n_envs, self.n_nodes), -1),
+            relation=self.envs.new_full((world.n_envs, self.n_nodes), -1)).int()
 
         self.worlds = arrdict.stack([world for _ in range(self.n_nodes)], 1)
         
         self.transitions = arrdict.arrdict(
-            rewards=torch.full((world.n_envs, self.n_nodes, self.n_seats), 0., device=self.device, dtype=torch.half),
+            rewards=torch.full((world.n_envs, self.n_nodes, self.n_seats), 0., device=self.device, dtype=torch.float),
             terminal=torch.full((world.n_envs, self.n_nodes), False, device=self.device, dtype=torch.bool))
 
         self.decisions = arrdict.arrdict(
-            logits=torch.full((world.n_envs, self.n_nodes, self.n_actions), np.nan, device=self.device, dtype=torch.half),
-            v=torch.full((world.n_envs, self.n_nodes, self.n_seats), np.nan, device=self.device, dtype=torch.half))
+            logits=torch.full((world.n_envs, self.n_nodes, self.n_actions), np.nan, device=self.device),
+            v=torch.full((world.n_envs, self.n_nodes, self.n_seats), np.nan, device=self.device))
 
         self.stats = arrdict.arrdict(
-            n=torch.full((world.n_envs, self.n_nodes), 0, device=self.device, dtype=torch.short),
-            w=torch.full((world.n_envs, self.n_nodes, self.n_seats), 0., device=self.device, dtype=torch.half))
+            n=torch.full((world.n_envs, self.n_nodes), 0, device=self.device, dtype=torch.int),
+            w=torch.full((world.n_envs, self.n_nodes, self.n_seats), 0., device=self.device))
 
         self.sim = torch.tensor(0, device=self.device, dtype=torch.long)
         self.worlds[:, 0] = world
 
         # https://github.com/LeelaChessZero/lc0/issues/694
         # Larger c_puct -> greater regularization
-        self.c_puct = torch.full((world.n_envs,), c_puct, device=self.device, dtype=torch.half)
+        self.c_puct = torch.full((world.n_envs,), c_puct, device=self.device)
 
     def initialize(self, evaluator):
         world = self.worlds[:, 0]
@@ -99,7 +99,7 @@ class MCTS:
             rewards=self.transitions.rewards,
             parents=self.tree.parents,
             terminal=self.transitions.terminal)
-        cuda.backup(bk, leaves.short())
+        cuda.backup(bk, leaves.int())
 
     @profiling.nvtx
     def simulate(self, evaluator):
@@ -113,21 +113,20 @@ class MCTS:
         leaves = self.tree.children[self.envs, parents, actions].long()
         leaves[leaves == -1] = self.sim
 
-        self.tree.children[self.envs, parents, actions] = leaves.short()
-        self.tree.parents[self.envs, leaves] = parents.short()
-        self.tree.relation[self.envs, leaves] = actions.short()
+        self.tree.children[self.envs, parents, actions] = leaves.int()
+        self.tree.parents[self.envs, leaves] = parents.int()
+        self.tree.relation[self.envs, leaves] = actions.int()
 
         old_world = self.worlds[self.envs, parents]
         world, transition = old_world.step(actions)
 
         self.worlds[self.envs, leaves] = world
-        self.transitions.rewards[self.envs, leaves] = transition.rewards.half()
-        self.transitions.terminal[self.envs, leaves] = transition.terminal
+        self.transitions[self.envs, leaves] = transition
 
         with torch.no_grad(), torch.cuda.amp.autocast():
             decisions = evaluator(world)
-        self.decisions.logits[self.envs, leaves] = decisions.logits.half()
-        self.decisions.v[self.envs, leaves] = decisions.v.half()
+        self.decisions.logits[self.envs, leaves] = decisions.logits.float()
+        self.decisions.v[self.envs, leaves] = decisions.v.float()
 
         self.backup(leaves)
 
@@ -211,8 +210,7 @@ class MCTSAgent:
         m = mcts(world, self.evaluator, noise_eps=self.noise_eps, **{**self.kwargs, **kwargs})
         r = m.root()
 
-        # Need to go back to float here because `sample` doesn't like halves
-        actions = torch.distributions.Categorical(logits=r.logits.float()).sample()
+        actions = torch.distributions.Categorical(logits=r.logits).sample()
 
         return arrdict.arrdict(
             logits=r.logits,

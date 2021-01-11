@@ -123,14 +123,14 @@ def mix(worlds, T=2500):
 
 def run(device='cuda'):
     buffer_length = 32 
-    batch_size = 64*1024
-    n_envs = 8*1024
+    batch_size = 32*1024
+    n_envs = 4*1024
     buffer_inc = batch_size//n_envs
 
     worlds = worldfunc(n_envs, device=device)
     worlds = mix(worlds)
     agent = agentfunc(device)
-    opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=1e-2, amsgrad=True)
+    opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=1e-3, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
     league = leagues.SimpleLeague(agentfunc, agent.evaluator, worlds.n_envs)
 
@@ -155,8 +155,8 @@ def run(device='cuda'):
 
                 buffer.append(arrdict.arrdict(
                     worlds=worlds,
-                    decisions=decisions.half(),
-                    transitions=transition.half(),
+                    decisions=decisions,
+                    transitions=transition,
                     is_prime=is_prime).detach())
                 worlds = new_worlds
 
