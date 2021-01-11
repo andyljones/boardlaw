@@ -15,16 +15,17 @@ log = aljpy.logger()
 def nvtx(f):
     name = f'{f.__module__}.{f.__qualname__}'
     emit = os.environ.get('EMIT_NVTX') == '1'
-    @wraps(f)
-    def g(*args, **kwargs):
-        if emit:
+    if emit:
+        @wraps(f)
+        def g(*args, **kwargs):
             torch.cuda.nvtx.range_push(name)
-        try:
-            return f(*args, **kwargs)
-        finally:
-            if emit:
+            try:
+                return f(*args, **kwargs)
+            finally:
                 torch.cuda.nvtx.range_pop()
-    return g
+        return g
+    else:
+        return f
 
 def nvtxgen(f):
     name = f'{f.__module__}.{f.__qualname__}'

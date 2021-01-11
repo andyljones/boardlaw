@@ -1,5 +1,6 @@
+import time
 import numpy as np
-from . import Hex, _CHARS, cuda
+from . import Hex, cuda
 import torch
 import torch.distributions
 import torch.cuda
@@ -179,14 +180,29 @@ def test_open_spiel():
         their_state = open_spiel_board(state)
         assert our_state == their_state
 
-def benchmark(n_envs=1024, n_steps=512):
-    import aljpy
+def benchmark_step(n_envs=8192, n_steps=1024):
     worlds = Hex.initial(n_envs)
 
+    for _ in range(n_steps):
+        actions = torch.distributions.Categorical(probs=worlds.valid.float()).sample()
+        worlds, transitions = worlds.step(actions)
+
+    actions = torch.distributions.Categorical(probs=worlds.valid.float()).sample().int()
+
     torch.cuda.synchronize()
-    with aljpy.timer() as timer:
-        for _ in range(n_steps):
-            actions = torch.distributions.Categorical(probs=worlds.valid.float()).sample()
-            worlds, _ = worlds.step(actions)
-        torch.cuda.synchronize()
-    print(f'{n_envs*n_steps/timer.time():.0f} samples/sec')
+    start = time.time()
+    for _ in range(n_steps):
+        cuda.step(worlds.board, worlds.seats, actions)
+    torch.cuda.synchronize()
+    print(f'{n_envs*n_steps/(time.time() - start):.0f} samples/sec')
+
+def benchmark_obs(n_envs=8192, n_steps=1024):
+    worlds = Hex.initial(n_envs, boardsize=9)
+    worlds['seats'] = torch.arange(worlds.n_envs, device=worlds.device) % 2
+
+    torch.cuda.synchronize()
+    start = time.time()
+    for _ in range(n_steps):
+        cuda.observe(worlds.board, worlds.seats)
+    torch.cuda.synchronize()
+    print(f'{n_envs*n_steps/(time.time() - start):.0f} samples/sec')
