@@ -82,6 +82,7 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seats'))):
             board=torch.full((n_envs, boardsize, boardsize), 0, device=device, dtype=torch.uint8),
             seats=torch.full((n_envs,), 0, device=device, dtype=torch.int))
 
+    @profiling.nvtx
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if not isinstance(self.board, torch.Tensor):

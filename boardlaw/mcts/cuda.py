@@ -1,6 +1,7 @@
 import torch
 import torch.cuda
 from .. import cuda
+from rebar import profiling
 
 _cache = None
 def module():
@@ -9,6 +10,7 @@ def module():
         _cache = cuda.load(__package__)
     return _cache 
 
+@profiling.nvtx
 def mcts(logits, w, n, c_puct, seats, terminal, children):
     B, T, A = logits.shape
     S = w.shape[-1]
@@ -23,14 +25,18 @@ def mcts(logits, w, n, c_puct, seats, terminal, children):
 
     return module().MCTS(logits, w, n.int(), c_puct, seats.int(), terminal, children.int())
 
+@profiling.nvtx
 def Backup(*args, **kwargs):
     return module().Backup(*args, **kwargs)
 
+@profiling.nvtx
 def descend(*args, **kwargs):
     return module().descend(*args, **kwargs)
 
+@profiling.nvtx
 def root(*args, **kwargs):
     return module().root(*args, **kwargs)
 
+@profiling.nvtx
 def backup(*args, **kwargs):
     return module().backup(*args, **kwargs)

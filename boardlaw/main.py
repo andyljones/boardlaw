@@ -184,7 +184,7 @@ def run(device='cuda'):
             stats.gpu(worlds.device, 15)
 
 @profiling.profilable
-def benchmark_experience_collection(n_envs=8192, T=16):
+def benchmark_experience_collection(n_envs=8192, T=4):
     import pandas as pd
 
     if n_envs is None:
