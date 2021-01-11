@@ -3,7 +3,7 @@ import torch
 from . import heads
 from torch import nn
 import torch.jit
-from rebar import recurrence, arrdict
+from rebar import recurrence, arrdict, profiling
 from torch.nn import functional as F
 from collections import namedtuple
 

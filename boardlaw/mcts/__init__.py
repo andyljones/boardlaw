@@ -119,10 +119,10 @@ class MCTS:
         self.worlds[self.envs, leaves] = world
         self.transitions[self.envs, leaves] = transition
 
-        with torch.no_grad():
+        with torch.no_grad(), torch.cuda.amp.autocast():
             decisions = evaluator(world)
-        self.decisions.logits[self.envs, leaves] = decisions.logits
-        self.decisions.v[self.envs, leaves] = decisions.v
+        self.decisions.logits[self.envs, leaves] = decisions.logits.float()
+        self.decisions.v[self.envs, leaves] = decisions.v.float()
 
         self.backup(leaves)
 
