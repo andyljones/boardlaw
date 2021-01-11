@@ -65,9 +65,9 @@ __device__ float newton_search(Policy p) {
     return alpha;
 }
 
-__device__ Policy policy(MCTSPTA m, F3D::PTA pi, F3D::PTA q, int t) {
+__device__ Policy policy(MCTSPTA m, F3D::PTA q, int t) {
 
-    const uint A = pi.size(2);
+    const uint A = m.logits.size(2);
     const int b = blockIdx.x*blockDim.x + threadIdx.x;
 
     Policy p(A);
@@ -80,11 +80,11 @@ __device__ Policy policy(MCTSPTA m, F3D::PTA pi, F3D::PTA q, int t) {
 
         if (child > -1) {
             p.q[a] = q[b][child][seat];
-            p.pi[a] = pi[b][t][a];
+            p.pi[a] = expf(m.logits[b][t][a]);
             N += m.n[b][child];
         } else {
             p.q[a] = 0.f;
-            p.pi[a] = pi[b][t][a];
+            p.pi[a] = expf(m.logits[b][t][a]);
             N += 1;
         }
     }
@@ -102,13 +102,13 @@ __host__ TT transition_q(MCTS m) {
     return q;
 }
 
-__global__ void root_kernel(MCTSPTA m, F3D::PTA pi, F3D::PTA q, F2D::PTA probs) {
+__global__ void root_kernel(MCTSPTA m, F3D::PTA q, F2D::PTA probs) {
     const uint B = m.logits.size(0);
     const uint A = m.logits.size(2);
     const int b = blockIdx.x*blockDim.x + threadIdx.x;
     if (b >= B) return;
 
-    auto p = policy(m, pi, q, 0);
+    auto p = policy(m, q, 0);
 
     for (int a=0; a<A; a++) {
         probs[b][a] = p.prob(a);
@@ -121,24 +121,23 @@ __host__ TT root(MCTS m) {
     const uint B = m.logits.size(0);
     const uint A = m.logits.size(2);
 
-    auto pi = m.logits.t.exp();
     auto q = transition_q(m);
 
-    auto probs = at::empty_like(pi.select(1, 0));
+    auto probs = at::empty_like(m.logits.t.select(1, 0));
 
     const uint n_blocks = (B + BLOCK - 1)/BLOCK;
     root_kernel<<<{n_blocks}, {BLOCK}, Policy::memory(A), stream()>>>(
-        m.pta(), F3D(pi).pta(), F3D(q).pta(), F2D(probs).pta());
+        m.pta(), F3D(q).pta(), F2D(probs).pta());
     C10_CUDA_CHECK(cudaGetLastError());
 
     return probs;
 }
 
 __global__ void descend_kernel(
-    MCTSPTA m, F3D::PTA pi, F3D::PTA q, F2D::PTA rands, DescentPTA descent) {
+    MCTSPTA m, F3D::PTA q, F2D::PTA rands, DescentPTA descent) {
 
-    const uint B = pi.size(0);
-    const uint A = pi.size(2);
+    const uint B = m.logits.size(0);
+    const uint A = m.logits.size(2);
     const int b = blockIdx.x*blockDim.x + threadIdx.x;
 
     if (b >= B) return;
@@ -151,7 +150,7 @@ __global__ void descend_kernel(
         if (t == -1) break;
         if (m.terminal[b][t]) break;
 
-        auto p = policy(m, pi, q, t);
+        auto p = policy(m, q, t);
 
         float rand = rands[b][t];
         float total = 0.f;
@@ -185,7 +184,6 @@ __host__ Descent descend(MCTS m) {
     const uint B = m.logits.size(0);
     const uint A = m.logits.size(2);
 
-    auto pi = m.logits.t.exp();
     auto q = transition_q(m);
     auto rands = at::rand_like(m.logits.t.select(2, 0));
 
@@ -195,7 +193,7 @@ __host__ Descent descend(MCTS m) {
 
     const uint n_blocks = (B + BLOCK - 1)/BLOCK;
     descend_kernel<<<{n_blocks}, {BLOCK}, Policy::memory(A), stream()>>>(
-        m.pta(), F3D(pi).pta(), F3D(q).pta(), F2D(rands).pta(), descent.pta());
+        m.pta(), F3D(q).pta(), F2D(rands).pta(), descent.pta());
     C10_CUDA_CHECK(cudaGetLastError());
 
     return descent;
