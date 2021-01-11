@@ -333,3 +333,10 @@ def allocations():
     objs = pd.DataFrame(objs)
 
     return objs.groupby(['name', 'dtype', 'dims']).mb.agg(['count', 'sum', 'mean'])
+
+def size(d):
+    if isinstance(d, dict):
+        return sum(size(v) for v in d.values()) 
+    if isinstance(d, torch.Tensor):
+        return d.nelement()*d.element_size()
+    return 0
