@@ -1,20 +1,19 @@
+import time
 from pavlov import stats, runs, storage
 import pandas as pd
 import numpy as np
 import torch
 from torch import nn
 from rebar import arrdict
-import pickle
-from pathlib import Path
 from . import common
 from tqdm.auto import tqdm
 from boardlaw.hex import Hex, color_obs
 from torch.nn import functional as F
-from boardlaw.main import worldfunc, agentfunc
 from boardlaw.hex import Hex
 from boardlaw.hex import plot_board
 import matplotlib.pyplot as plt
 from rebar.recording import Encoder
+from ptflops import get_model_complexity_info
 
 
 def gamegen(worlds):
@@ -130,14 +129,23 @@ def run_trial(Model, B=4*1024, T=1000, boardsize=7, device='cuda', **kwargs):
     return pd.Series(losses)
 
 def run():
+    B = 4*1024
+    T = 1000
+
     Model = common.ConvContextModel
     run = runs.new_run('experiments-victory', model=Model.__name__)
     for boardsize in (3, 5, 7, 9):
         for depth in [1, 2, 4, 8, 16]:
             for width in [2, 4, 8, 16, 32, 64]:
                 print(boardsize, depth, width)
-                losses = run_trial(Model, boardsize=boardsize, n_layers=depth, D=width)
-                storage.snapshot(run, {'losses': losses.to_dict()}, boardsize=boardsize, depth=depth, width=width)
+                model = Model(common.PosActions, boardsize, width, depth).cuda()
+                n_macs, n_params = get_model_complexity_info(model, (boardsize, boardsize, 2), as_strings=False, print_per_layer_stat=False)
+
+                losses = run_trial(Model, boardsize=boardsize, n_layers=depth, D=width, B=B, T=T)
+    
+                storage.snapshot(run, {'losses': losses.to_dict()}, 
+                    boardsize=boardsize, depth=depth, width=width,
+                    n_macs=n_macs, n_params=n_params)
 
 def load(run):
     snapshots = pd.DataFrame.from_dict(storage.snapshots(run), orient='index')
@@ -151,15 +159,15 @@ def load(run):
 
 def plot(run):
     df = load(run)
-    finals = df.iloc[-1].apply(np.log10).reset_index().rename(columns={999: 'val'})
+    finals = df.apply(np.log10).tail(10).mean(0).reset_index().rename(columns={0: 'val'})
 
     fig, axes = plt.subplots(1, 2)
 
     ax = axes[0]
-    finals.query('depth == 16').groupby(['width', 'boardsize']).val.mean().unstack('width').plot(marker='o', ax=ax)
+    finals.groupby(['width', 'boardsize']).val.mean().unstack('width').plot(marker='o', ax=ax)
 
     ax = axes[1]
-    finals.query('width == 128').groupby(['depth', 'boardsize']).val.mean().unstack('depth').plot(marker='o', ax=ax)
+    finals.groupby(['depth', 'boardsize']).val.mean().unstack('depth').plot(marker='o', ax=ax)
 
     for ax in axes:
         ax.set_title('"victory" toy loss')
