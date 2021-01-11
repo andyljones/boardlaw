@@ -33,13 +33,13 @@ def assert_distribution(xs, freqs):
 
 def test_one_node():
     data = arrdict.arrdict(
-        logits=torch.tensor([[1/3, 2/3]]).log(),
-        w=torch.tensor([[0.]]),
-        n=torch.tensor([0]),
-        c_puct=torch.tensor(1.),
-        seats=torch.tensor([0]),
+        logits=torch.tensor([[1/3, 2/3]]).log().half(),
+        w=torch.tensor([[0.]]).half(),
+        n=torch.tensor([0]).short(),
+        c_puct=torch.tensor(1.).half(),
+        seats=torch.tensor([0]).short(),
         terminal=torch.tensor([False]),
-        children=torch.tensor([[-1, -1]]))
+        children=torch.tensor([[-1, -1]]).short())
     
     m = cuda.mcts(**data.cuda()[None].repeat_interleave(1024, 0))
     result = cuda.descend(m)
@@ -52,16 +52,16 @@ def test_high_cpuct():
         logits=torch.tensor([
             [1/3, 2/3],
             [1/4, 3/4],
-            [1/5, 4/5]]).log(),
-        w=torch.tensor([[0.], [0.], [1.,]]),
-        n=torch.tensor([2, 1, 1]),
-        c_puct=torch.tensor(1000.),
-        seats=torch.tensor([0, 0, 0]),
+            [1/5, 4/5]]).log().half(),
+        w=torch.tensor([[0.], [0.], [1.,]]).half(),
+        n=torch.tensor([2, 1, 1]).short(),
+        c_puct=torch.tensor(1000.).half(),
+        seats=torch.tensor([0, 0, 0]).short(),
         terminal=torch.tensor([False, False, False]),
         children=torch.tensor([
             [1, 2], 
             [-1, -1], 
-            [-1, -1]]))
+            [-1, -1]]).short())
 
     m = cuda.mcts(**data.cuda()[None].repeat_interleave(1024, 0))
     result = cuda.descend(m)
@@ -74,16 +74,16 @@ def test_low_cpuct():
         logits=torch.tensor([
             [1/3, 2/3],
             [1/4, 3/4],
-            [1/5, 4/5]]).log(),
-        w=torch.tensor([[0.], [0.], [1.,]]),
-        n=torch.tensor([2, 1, 1]),
-        c_puct=torch.tensor(.001),
-        seats=torch.tensor([0, 0, 0]),
+            [1/5, 4/5]]).log().half(),
+        w=torch.tensor([[0.], [0.], [1.,]]).half(),
+        n=torch.tensor([2, 1, 1]).short(),
+        c_puct=torch.tensor(.001).half(),
+        seats=torch.tensor([0, 0, 0]).short(),
         terminal=torch.tensor([False, False, False]),
         children=torch.tensor([
             [1, 2], 
             [-1, -1], 
-            [-1, -1]]))
+            [-1, -1]]).short())
 
     m = cuda.mcts(**data.cuda()[None].repeat_interleave(1024, 0))
     result = cuda.descend(m)
@@ -96,16 +96,16 @@ def test_balanced_cpuct():
         logits=torch.tensor([
             [1/3, 2/3],
             [1/4, 3/4],
-            [1/5, 4/5]]).log(),
-        w=torch.tensor([[0.], [0.], [1.,]]),
-        n=torch.tensor([2, 1, 1]),
-        c_puct=torch.tensor(2.),
-        seats=torch.tensor([0, 0, 0]),
+            [1/5, 4/5]]).log().half(),
+        w=torch.tensor([[0.], [0.], [1.,]]).half(),
+        n=torch.tensor([2, 1, 1]).short(),
+        c_puct=torch.tensor(2.).half(),
+        seats=torch.tensor([0, 0, 0]).short(),
         terminal=torch.tensor([False, False, False]),
         children=torch.tensor([
             [1, 2], 
             [-1, -1], 
-            [-1, -1]]))
+            [-1, -1]]).short())
 
     m = cuda.mcts(**data.cuda()[None].repeat_interleave(1024, 0))
     result = cuda.descend(m)
@@ -117,8 +117,8 @@ def test_balanced_cpuct():
     A = data.logits.shape[1]
     N = data.n[0]
     lambda_n = data.c_puct*N/(A + N)
-    pi = data.logits[0].exp()
-    q = (data.w[:, 0]/data.n)[data.children[0]]
+    pi = data.logits[0].float().exp()
+    q = (data.w[:, 0]/data.n)[data.children[0].long()]
     alphas = lambda_n*pi/p + q
 
     alpha = alphas.mean()
@@ -133,16 +133,16 @@ def test_terminal():
         logits=torch.tensor([
             [1/3, 2/3],
             [1/4, 3/4],
-            [1/5, 4/5]]).log(),
-        w=torch.tensor([[0.], [0.], [1.,]]),
-        n=torch.tensor([2, 1, 1]),
-        c_puct=torch.tensor(1000.),
-        seats=torch.tensor([0, 0, 0]),
+            [1/5, 4/5]]).log().half(),
+        w=torch.tensor([[0.], [0.], [1.,]]).half(),
+        n=torch.tensor([2, 1, 1]).short(),
+        c_puct=torch.tensor(1000.).half(),
+        seats=torch.tensor([0, 0, 0]).short(),
         terminal=torch.tensor([False, True, False]),
         children=torch.tensor([
             [1, 2], 
             [-1, -1], 
-            [-1, -1]]))
+            [-1, -1]]).short())
 
     m = cuda.mcts(**data.cuda()[None].repeat_interleave(1024, 0))
     result = cuda.descend(m)

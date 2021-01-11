@@ -34,7 +34,7 @@ __device__ float newton_search(Policy p) {
     // Find the initial alpha
     float alpha = 0.f;
     for (int a = 0; a<p.A; a++) {
-        float gap = fmaxf(p.lambda_n*p.pi[a], 1.e-6f);
+        float gap = fmaxf(p.lambda_n*p.pi[a], 1.e-4f);
         alpha = fmaxf(alpha, p.q[a] + gap);
     }
 
@@ -65,7 +65,7 @@ __device__ float newton_search(Policy p) {
     return alpha;
 }
 
-__device__ Policy policy(MCTSPTA m, F3D::PTA q, int t) {
+__device__ Policy policy(MCTSPTA m, H3D::PTA q, int t) {
 
     const uint A = m.logits.size(2);
     const int b = blockIdx.x*blockDim.x + threadIdx.x;
@@ -97,12 +97,12 @@ __device__ Policy policy(MCTSPTA m, F3D::PTA q, int t) {
 }
 
 __host__ TT transition_q(MCTS m) {
-    auto q = m.w.t/(m.n.t.unsqueeze(-1) + 1e-6);
-    q = (q - q.min())/(q.max() - q.min() + 1e-6);
-    return q;
+    auto q = m.w.t/(m.n.t.unsqueeze(-1) + 1.e-4f);
+    q = (q - q.min())/(q.max() - q.min() + 1.e-4f);
+    return q.to(at::kHalf);
 }
 
-__global__ void root_kernel(MCTSPTA m, F3D::PTA q, F2D::PTA probs) {
+__global__ void root_kernel(MCTSPTA m, H3D::PTA q, H2D::PTA probs) {
     const uint B = m.logits.size(0);
     const uint A = m.logits.size(2);
     const int b = blockIdx.x*blockDim.x + threadIdx.x;
@@ -127,14 +127,14 @@ __host__ TT root(MCTS m) {
 
     const uint n_blocks = (B + BLOCK - 1)/BLOCK;
     root_kernel<<<{n_blocks}, {BLOCK}, Policy::memory(A), stream()>>>(
-        m.pta(), F3D(q).pta(), F2D(probs).pta());
+        m.pta(), H3D(q).pta(), H2D(probs).pta());
     C10_CUDA_CHECK(cudaGetLastError());
 
     return probs;
 }
 
 __global__ void descend_kernel(
-    MCTSPTA m, F3D::PTA q, F2D::PTA rands, DescentPTA descent) {
+    MCTSPTA m, H3D::PTA q, H2D::PTA rands, DescentPTA descent) {
 
     const uint B = m.logits.size(0);
     const uint A = m.logits.size(2);
@@ -193,13 +193,13 @@ __host__ Descent descend(MCTS m) {
 
     const uint n_blocks = (B + BLOCK - 1)/BLOCK;
     descend_kernel<<<{n_blocks}, {BLOCK}, Policy::memory(A), stream()>>>(
-        m.pta(), F3D(q).pta(), F2D(rands).pta(), descent.pta());
+        m.pta(), H3D(q).pta(), H2D(rands).pta(), descent.pta());
     C10_CUDA_CHECK(cudaGetLastError());
 
     return descent;
 }
 
-__global__ void backup_kernel(BackupPTA bk, I1D::PTA leaves) {
+__global__ void backup_kernel(BackupPTA bk, S1D::PTA leaves) {
     const uint B = bk.v.size(0);
     const uint S = bk.v.size(2);
     const int b = blockIdx.x*blockDim.x + threadIdx.x;
@@ -240,6 +240,6 @@ __host__ void backup(Backup b, TT leaves) {
 
     const uint n_blocks = (B + BLOCK - 1)/BLOCK;
     backup_kernel<<<{n_blocks}, {BLOCK}, BLOCK*S*sizeof(float), stream()>>>(
-        b.pta(), I1D(leaves).pta());
+        b.pta(), S1D(leaves).pta());
     C10_CUDA_CHECK(cudaGetLastError());
 }
