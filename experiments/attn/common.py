@@ -121,6 +121,61 @@ class ConvContextModel(nn.Module):
         x = F.log_softmax(x, -1)
         return x.reshape(B, boardsize, boardsize)
 
+class FullAttention(nn.Module):
+    # Based on https://github.com/lucidrains/linear-attention-transformer/blob/master/linear_attention_transformer/images.py
+
+    def __init__(self, D):
+        super().__init__()
+
+        self.D = D
+
+        self.qkv = nn.Conv2d(D, 3*D, 1, 1)
+        self.out = nn.Conv2d(D, D, 3, 1, 1)
+
+        self.register_parameter('α', nn.Parameter(torch.zeros(())))
+
+    def forward(self, x):
+        B, C, W, W = x.shape
+
+        q, k, v = self.qkv(x).chunk(3, 1)
+
+        q, k, v = map(lambda t: t.reshape(B, -1, W*W), (q, k, v))
+
+        attn = torch.einsum('bcq,bck->bqk', q, k).div(self.D**.5).softmax(-1)
+        out = torch.einsum('bqk,bck->bqc', attn, v).reshape(B, C, W, W)
+
+        x = x + self.α*F.relu(out)
+        x = x + self.α*F.relu(self.out(x))
+        return x
+
+class FullAttnModel(nn.Module):
+
+    def __init__(self, Head, boardsize, D, n_layers=16):
+        super().__init__()
+
+        layers = [nn.Conv2d(14, D, 3, 1, 1)]
+        for l in range(n_layers):
+            layers.append(FullAttention(D))
+            
+        layers.append(nn.Conv2d(D, 1, 3, 1, 1))
+        self.layers = nn.ModuleList(layers)
+
+        pos = positions(boardsize)
+        self.register_buffer('pos', pos)
+
+    def forward(self, obs):
+        B, boardsize, boardsize, _ = obs.shape
+        prep = torch.cat([obs, self.pos[None].repeat_interleave(B, 0)], -1)
+        x = prep.permute(0, 3, 1, 2)
+        for l in self.layers:
+            x = l(x)
+        x = x.reshape(B, -1)
+        x = F.log_softmax(x, -1)
+        return x.reshape(B, boardsize, boardsize)
+
+
+
+
 
 def positions(boardsize):
     # https://www.redblobgames.com/grids/hexagons/#conversions-axial

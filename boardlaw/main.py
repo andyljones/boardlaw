@@ -99,7 +99,7 @@ def optimize(network, opt, batch):
         return value_loss > 2
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=11, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=9, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
@@ -122,8 +122,8 @@ def mix(worlds, T=2500):
 
 def run(device='cuda'):
     buffer_length = 32 
-    batch_size = 64*1024
-    n_envs = 8*1024
+    batch_size = 32*1024
+    n_envs = 4*1024
     buffer_inc = batch_size//n_envs
 
     worlds = worldfunc(n_envs, device=device)
@@ -136,7 +136,7 @@ def run(device='cuda'):
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('11x11', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('9x9-conv', boardsize=worlds.boardsize, parent=parent)
 
     archive.archive(run)
 
