@@ -78,27 +78,32 @@ class ConvModel(nn.Module):
         x = F.log_softmax(x, -1)
         return x.reshape(B, boardsize, boardsize)
 
-class GlobalPool(nn.Linear):
+class GlobalContext(nn.Module):
+    # Based on https://github.com/lucidrains/lightweight-gan/blob/main/lightweight_gan/lightweight_gan.py#L297
 
     def __init__(self, D):
-        super().__init__(D, D)
+        super().__init__()
         self.register_parameter('α', nn.Parameter(torch.zeros(())))
 
-    def forward(self, x):
-        y = F.relu(super().forward(x.mean(2).mean(2)))
-        return x + self.α*y[:, :, None, None]
+        self.attn = nn.Conv2d(D, 1, 1, 1)
+        self.compress = nn.Linear(D, D//2)
+        self.expand = nn.Linear(D//2, D)
 
-class ConvPoolModel(nn.Module):
+    def forward(self, x):
+        attn = self.attn(x).flatten(2).softmax(dim=-1).squeeze(-2)
+        vals = torch.einsum('bn,bcn->bc', attn, x.flatten(2))
+        excited = self.expand(F.relu(self.compress(vals)))
+        return x + self.α*excited[..., None, None]
+
+class ConvContextModel(nn.Module):
 
     def __init__(self, Head, boardsize, D, n_layers=16):
         super().__init__()
 
         layers = [nn.Conv2d(2, D, 3, 1, 1)]
         for l in range(n_layers):
-            if l % 4 == 0:
-                layers.append(GlobalPool(D))
-            else:
-                layers.append(ReZeroConv(D, D))
+            layers.append(ReZeroConv(D, D))
+            layers.append(GlobalContext(D))
             
         layers.append(nn.Conv2d(D, 1, 3, 1, 1))
         self.layers = nn.ModuleList(layers)

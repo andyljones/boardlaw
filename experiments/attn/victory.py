@@ -130,7 +130,7 @@ def run_trial(Model, B=4*1024, T=1000, boardsize=7, device='cuda', **kwargs):
     return pd.Series(losses)
 
 def run():
-    Model = common.ConvPoolModel
+    Model = common.ConvContextModel
     run = runs.new_run('experiments-victory', model=Model.__name__)
     for boardsize in (3, 5, 7, 9):
         for depth in [1, 2, 4, 8, 16]:
