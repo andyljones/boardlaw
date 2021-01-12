@@ -44,6 +44,16 @@ def path(run, filename):
 def exists(run, filename):
     return path(run, filename).exists()
 
+def remove(run, filename):
+    with runs.update(run) as info:
+        p = path(run, filename)
+        if filename not in info['_files']:
+            raise IOError(f'File "{filename}" not in run "{run}"') 
+        del info['_files'][filename]
+        if p.exists():
+            p.unlink()
+
+
 def assure(run, filename, default):
     with runs.lock(run):
         isstr = isinstance(default, str)
