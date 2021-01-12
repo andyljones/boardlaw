@@ -38,11 +38,13 @@ def positions(boardsize):
 class ReZeroConv(nn.Conv2d):
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, padding=1, stride=1, kernel_size=3, **kwargs)
+        super().__init__(*args, padding=0, stride=1, kernel_size=3, **kwargs)
         self.register_parameter('α', nn.Parameter(torch.zeros(())))
 
     def forward(self, x, *args, **kwargs):
-        return x + self.α*F.relu(super().forward(x))
+        y = self.α*F.relu(super().forward(x))
+        y[:, :self.in_channels] += x[:, :, 1:-1, 1:-1]
+        return y
 
 class GlobalContext(nn.Module):
     # Based on https://github.com/lucidrains/lightweight-gan/blob/main/lightweight_gan/lightweight_gan.py#L297
@@ -63,19 +65,23 @@ class GlobalContext(nn.Module):
 
 class ConvContextModel(nn.Module):
 
-    def __init__(self, obs_space, action_space, width=16, depth=4):
+    def __init__(self, obs_space, action_space, width=32, depth=8):
         super().__init__()
         boardsize = obs_space.dim[-2]
 
-        layers = [nn.Conv2d(14, width, 3, 1, 1)]
-        for l in range(depth):
-            layers.append(ReZeroConv(width, width))
-            layers.append(GlobalContext(width))
-        self.layers = nn.ModuleList(layers)
+        self.convs = nn.ModuleList([
+            ReZeroConv(2, 8),
+            ReZeroConv(8, 16),
+            ReZeroConv(16, 32)])
+        self.body = nn.ModuleList([
+            ReZeroResidual(32*3*3, 128),
+            ReZeroResidual(128, 128),
+            ReZeroResidual(128, 128),
+            ReZeroResidual(128, 128),
+            ReZeroResidual(128, 128)])
 
-        self.policy = nn.Conv2d(width, 1, 1)
-        self.value1 = nn.Conv2d(width, 1, 1)
-        self.value2 = nn.Linear(boardsize**2, 1)
+        self.policy = heads.MaskedOutput(action_space, 128)
+        self.value = heads.ValueOutput(128)
 
         pos = positions(boardsize)
         self.register_buffer('pos', pos)
@@ -88,18 +94,16 @@ class ConvContextModel(nn.Module):
             return p.reshape(B, T, -1), v.reshape(B, T, 2)
 
         B, boardsize, boardsize, _ = obs.shape
-        prep = torch.cat([obs, self.pos[None].repeat_interleave(B, 0)], -1)
-        x = prep.permute(0, 3, 1, 2)
+        x = obs.permute(0, 3, 1, 2)
 
-        for l in self.layers:
+        for l in self.convs:
+            x = l(x)
+        x = x.flatten(1)
+        for l in self.body:
             x = l(x)
 
-        p = self.policy(x).flatten(1)
-        p = p.where(valid, torch.full_like(p, -np.inf)).log_softmax(-1)
-
-        v = F.relu(self.value1(x)).flatten(1)
-        v = torch.tanh(self.value2(v).squeeze(-1))
-        v = heads.scatter_values(v, seats)
+        p = self.policy(x, valid)
+        v = self.value(x, valid, seats)
 
         return p, v
 
@@ -108,13 +112,15 @@ class ConvContextModel(nn.Module):
 
 class ReZeroResidual(nn.Linear):
 
-    def __init__(self, width):
-        super().__init__(width, width)
+    def __init__(self, i, o):
+        super().__init__(i, o)
         nn.init.orthogonal_(self.weight, gain=2**.5)
         self.register_parameter('α', nn.Parameter(torch.zeros(())))
 
     def forward(self, x, *args, **kwargs):
-        return x + self.α*F.relu(super().forward(x))
+        y = self.α*F.relu(super().forward(x))
+        y = x[:, :self.out_features]
+        return y
 
 class Network(nn.Module):
 

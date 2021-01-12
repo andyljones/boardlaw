@@ -20,7 +20,7 @@ def chunk_stats(chunk, n_new):
         n_trajs = t.terminal.sum()
         n_inputs = t.terminal.size(0)
         n_samples = t.terminal.nelement()
-        n_sims = d.n_sims.sum()
+        n_sims = d.n_sims.int().sum()
         stats.rate('sample-rate.actor', n_samples)
         stats.mean('traj-length', n_samples, n_trajs)
         stats.cumsum('count.traj', n_trajs)
@@ -78,8 +78,8 @@ def optimize(network, opt, batch):
         stats.mean('loss.value', value_loss)
         stats.mean('loss.policy', policy_loss)
         stats.mean('progress.resid-var', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
-        stats.mean('progress.kl-div.prior', (d0.logits - d.logits).mul(d0.logits.exp()).where(w.valid, zeros).sum(-1).mean())
-        stats.mean('progress.kl-div.target', (d0.prior - d.logits).mul(d0.prior.exp()).where(w.valid, zeros).sum(-1).mean())
+        stats.mean('progress.kl-div.prior', (d0.logits - d.logits).mul(d0.logits.exp()).where(w.valid, zeros).float().sum(-1).mean())
+        stats.mean('progress.kl-div.target', (d0.prior - d.logits).mul(d0.prior.exp()).where(w.valid, zeros).float().sum(-1).mean())
 
         stats.mean('rel-entropy.policy', *rel_entropy(d.logits, w.valid)) 
         stats.mean('rel-entropy.targets', *rel_entropy(d0.logits, w.valid))
@@ -131,7 +131,7 @@ def half(x):
 
 def run(device='cuda'):
     buffer_length = 32 
-    batch_size = 64*1024
+    batch_size = 32*1024
     n_envs = 8*1024
     buffer_inc = batch_size//n_envs
 
@@ -144,7 +144,7 @@ def run(device='cuda'):
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('9x9-conv', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('9x9-hybrid', boardsize=worlds.boardsize, parent=parent)
 
     archive.archive(run)
 
