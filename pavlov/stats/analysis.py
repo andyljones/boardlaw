@@ -2,6 +2,9 @@ import numpy as np
 import pandas as pd
 from . import registry
 from .. import runs
+from logging import getLogger
+
+log = getLogger(__name__)
 
 def array(run, channel):
     return registry.reader(run, channel).array()
@@ -18,7 +21,14 @@ def pandas(run, channel, field=None, rule='60s', **kwargs):
 def compare(rs, *args, fill=False, **kwargs):
     rs = [rs] if isinstance(rs, str) else rs
     ns = [n for r in rs for n in runs.resolutions(r)]
-    return pd.concat({n: pandas(n, *args, **kwargs) for n in ns}, 1)
+    df = {}
+    for n in ns:
+        try:
+            df[n] = pandas(n, *args, **kwargs)
+        except OSError:
+            log.info(f'Couldn\'t find data for "{n}"')
+
+    return pd.concat(df, 1)
 
 def plot(*args, fill=False, skip=None, head=None, **kwargs):
     df = compare(*args, **kwargs)

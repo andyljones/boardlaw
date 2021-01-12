@@ -36,7 +36,7 @@ def offers():
 
 def suggest():
     o = offers()
-    viable = o.query('gpu_name == "RTX 2080 Ti" & num_gpus == 1 & cuda_max_good >= 11.1')
+    viable = o.query('gpu_name == "RTX 2080 Ti" & num_gpus == 1 & cuda_max_good >= 11.1 & bundled_results == 1')
     return viable.sort_values('dph_total').iloc[0]
 
 def launch():
@@ -55,6 +55,7 @@ def launch():
     # resp = resp[8:]
     resp = json.loads(resp)
     assert resp['success']
+    log.info(f'Launched "{label}"')
     return label
 
 def destroy(label):
@@ -122,7 +123,7 @@ def deploy(label):
 
 def run(label):
     conn = connection(label)
-    conn.run('cd /code && python -c "from boardlaw.main import *; run()"', pty=False, disown=True)
+    conn.run('cd /code && python -c "from boardlaw.main import *; run()"', pty=False, disown=False)
 
 
 def fetch(label):
