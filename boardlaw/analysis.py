@@ -156,7 +156,7 @@ def grad_student_descent():
     import matplotlib.pyplot as plt
 
     # date of the first 9x9 run
-    valid = runs.pandas().query('_created > "2020-12-23 09:52Z"')
+    valid = runs.pandas().query('_created > "2020-12-23 09:52Z" & boardsize == 9 & parent == ""')
 
     results = {}
     for name in valid.index:
@@ -165,10 +165,10 @@ def grad_student_descent():
             if len(s) > 60:
                 results[name] = s.μ
     df = pd.concat(results, 1)
-    df = df.ffill().where(df.bfill().notnull())
+    smoothed = df.rolling(60, 15).mean()
 
     with plt.style.context('seaborn-poster'):
-        ax = df.plot(cmap='viridis', legend=False)
+        ax = smoothed.plot(cmap='viridis', legend=False)
         ax.set_facecolor('whitesmoke')
         ax.grid(axis='y')
         ax.set_ylim(-13, -2)

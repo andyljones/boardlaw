@@ -2,7 +2,7 @@ import gc
 import time
 import numpy as np
 import torch
-from rebar import arrdict, profiling
+from rebar import arrdict, profiling, pickle
 from pavlov import stats, logs, runs, storage, archive
 from . import hex, mcts, networks, learning, validation, analysis, arena, leagues
 from torch.nn import functional as F
@@ -188,6 +188,7 @@ def run(device='cuda'):
             sd = storage.state_dicts(agent=agent, opt=opt)
             storage.throttled_latest(run, sd, 60)
             storage.throttled_snapshot(run, sd, 900)
+            storage.throttled_raw(run, 'model', lambda: pickle.dumps(agent.evaluator.prime), 900)
             stats.gpu(worlds.device, 15)
 
 @profiling.profilable

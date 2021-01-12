@@ -6,6 +6,7 @@ from io import BytesIO
 
 LATEST = 'storage.latest.pkl'
 SNAPSHOT = 'storage.snapshot.{n}.pkl'
+NAMED = 'storage.named.{name}.pkl'
 
 def collapse(state_dict, depth=np.inf):
     if depth == 0:
@@ -44,25 +45,28 @@ def state_dicts(**objs):
             dicts[k] = v
     return dicts
 
-def save(path, objs):
+def _save_raw(path, bs):
+    path.with_suffix('.tmp').write_bytes(bs)
+    path.with_suffix('.tmp').rename(path)
+
+def _save(path, objs):
     #TODO: Is there a better way to do this?
     bs = BytesIO()
     torch.save(objs, bs)
-    path.with_suffix('.tmp').write_bytes(bs.getvalue())
-    path.with_suffix('.tmp').rename(path)
+    _save_raw(path, bs.getvalue())
 
-def load(path, device='cpu'):
+def _load(path, device='cpu'):
     return torch.load(path, map_location=device)
 
 def save_latest(run, objs):
     path = files.path(run, LATEST)
     if not path.exists():
         files.new_file(run, LATEST)
-    save(path, objs)
+    _save(path, objs)
 
 def load_latest(run=-1, device='cpu'):
     path = files.path(run, LATEST)
-    return load(path, device)
+    return _load(path, device)
 
 def timestamp_latest(run=-1):
     return pd.Timestamp(files.path(run, LATEST).stat().st_mtime, unit='s')
@@ -77,17 +81,16 @@ def throttled_latest(run, objs, throttle):
         save_latest(run, objs)
 
 def snapshot(run, objs, **kwargs):
-    name = 'storage.snapshot.{n}.pkl'
-    path = files.new_file(run, name, **kwargs)
-    save(path, objs)
+    path = files.new_file(run, SNAPSHOT, **kwargs)
+    _save(path, objs)
 
 def snapshots(run=-1):
     return {files.idx(run, fn): {**info, 'path': files.path(run, fn)} for fn, info in files.seq(run, SNAPSHOT).items()}
 
 def load_snapshot(run=-1, n=-1, device='cpu'):
     n = list(snapshots(run))[n]
-    path = files.path(run, f'storage.snapshot.{n}.pkl')
-    return load(path, device)
+    path = files.path(run, SNAPSHOT.format(n=n))
+    return _load(path, device)
 
 def throttled_snapshot(run, objs, throttle):
     files = snapshots(run)
@@ -100,6 +103,22 @@ def throttled_snapshot(run, objs, throttle):
         snapshot(run, objs)
 
 def named(run, name, objs):
-    name = f'storage.named.{name}.{{n}}.pkl'
+    name = NAMED.format(name=name)
+    if not files.exists(run, name):
+        files.new_file(run, name)
+    _save(files.path(run, name), objs)
+
+def raw(run, name, bs):
+    name = NAMED.format(name=name)
     path = files.new_file(run, name)
-    save(path, objs)
+    _save_raw(path, bs)
+
+def throttled_raw(run, name, f, throttle):
+    name = NAMED.format(name=name)
+    if files.exists(run, name):
+        last = pd.to_datetime(files.info(run, LATEST)['_created'])
+    else:
+        last = pd.Timestamp(0, unit='s', tz='UTC')
+
+    if tests.timestamp() > last + pd.Timedelta(throttle, 's'):
+        raw(run, name, f()) 
