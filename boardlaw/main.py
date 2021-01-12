@@ -64,24 +64,28 @@ def rel_entropy(logits, valid):
     probs = logits.exp().where(valid, zeros)
     return (-(logits*probs).sum(-1).mean(), torch.log(valid.sum(-1).float()).mean())
 
-def optimize(network, opt, batch):
+def optimize(network, scaler, opt, batch):
     w, d0, t = batch.worlds, batch.decisions, batch.transitions
     mask = batch.is_prime
-    d = network(w)
 
-    zeros = torch.zeros_like(d.logits)
-    policy_loss = -(d0.logits.float().exp()*d.logits).where(w.valid, zeros).sum(axis=-1)[mask].mean()
+    with torch.cuda.amp.autocast():
+        d = network(w)
 
-    target_value = batch.reward_to_go
-    value_loss = (target_value - d.v).square()[mask].mean()
-    
-    loss = policy_loss + value_loss 
-    
-    opt.zero_grad()
-    loss.backward()
+        zeros = torch.zeros_like(d.logits)
+        policy_loss = -(d0.logits.float().exp()*d.logits).where(w.valid, zeros).sum(axis=-1)[mask].mean()
+
+        target_value = batch.reward_to_go
+        value_loss = (target_value - d.v).square()[mask].mean()
+        
+        loss = policy_loss + value_loss 
 
     old = torch.cat([p.flatten() for p in network.parameters()])
-    opt.step()
+
+    opt.zero_grad()
+    scaler.scale(loss).backward()
+    scaler.step(opt)
+    scaler.update()
+
     new = torch.cat([p.flatten() for p in network.parameters()])
 
     with stats.defer():
@@ -112,7 +116,7 @@ def optimize(network, opt, batch):
         return value_loss > 2
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=9, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=11, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
@@ -152,10 +156,11 @@ def run(device='cuda'):
     opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=3e-4, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
     league = leagues.SimpleLeague(agentfunc, agent.evaluator, worlds.n_envs)
+    scaler = torch.cuda.amp.GradScaler()
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('9x9-conv-slow', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('11x11-conv-slow', boardsize=worlds.boardsize, parent=parent)
 
     archive.archive(run)
 
@@ -182,7 +187,7 @@ def run(device='cuda'):
                 log.info('actor stepped')
 
             chunk, buffer = to_chunk(buffer, buffer_inc)
-            bad = optimize(agent.evaluator.prime, opt, chunk[next(idxs)])
+            bad = optimize(agent.evaluator.prime, scaler, opt, chunk[next(idxs)])
             sched.step()
             if bad:
                 sd = storage.state_dicts(agent=agent, opt=opt)
