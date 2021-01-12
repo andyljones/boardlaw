@@ -174,6 +174,28 @@ class FullAttnModel(nn.Module):
         return x.reshape(B, boardsize, boardsize)
 
 
+class HybridModel(nn.Module):
+
+    def __init__(self, Head, boardsize, D, n_layers=16):
+        super().__init__()
+
+        layers = [
+            nn.Conv2d(2, D, 3, 1, 1),
+            ReZeroConv(D, D)]
+
+            
+        layers.append(nn.Conv2d(D, 1, 3, 1, 1))
+        self.layers = nn.ModuleList(layers)
+
+    def forward(self, obs):
+        B, boardsize, boardsize, _ = obs.shape
+        x = obs.permute(0, 3, 1, 2)
+        for l in self.layers:
+            x = l(x)
+        x = x.reshape(B, -1)
+        x = F.log_softmax(x, -1)
+        return x.reshape(B, boardsize, boardsize)
+
 
 
 

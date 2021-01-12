@@ -1,3 +1,4 @@
+import os
 import torch
 import pandas as pd
 from io import BytesIO
@@ -27,6 +28,11 @@ def dataframe():
     df.columns = list(params.keys())
     df = df.set_index('device')
     df = df.apply(pd.to_numeric, errors='coerce')
+
+    visible = os.getenv('CUDA_VISIBLE_DEVICES')
+    if visible:
+        indices = [int(i.strip()) for i in visible.split(',')]
+        df = df.loc[indices].reset_index(drop=True)
     return df
 
 _last = -1
