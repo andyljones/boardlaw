@@ -115,10 +115,12 @@ def raw(run, name, bs):
 
 def throttled_raw(run, name, f, throttle):
     name = NAMED.format(name=name)
-    if files.exists(run, name):
+    path = files.path(run, name)
+    if path.exists():
         last = pd.to_datetime(files.info(run, LATEST)['_created'])
     else:
+        files.new_file(run, name)
         last = pd.Timestamp(0, unit='s', tz='UTC')
 
     if tests.timestamp() > last + pd.Timedelta(throttle, 's'):
-        raw(run, name, f()) 
+        _save_raw(path, f())

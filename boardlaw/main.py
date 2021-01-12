@@ -129,9 +129,9 @@ def half(x):
         return x
 
 def run(device='cuda'):
-    buffer_length = 32 
-    batch_size = 4*1024
-    n_envs = 2*1024
+    buffer_length = 16 
+    batch_size = 8*1024
+    n_envs = 4*1024
     buffer_inc = batch_size//n_envs
 
     worlds = worldfunc(n_envs, device=device)
@@ -141,7 +141,7 @@ def run(device='cuda'):
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
     league = leagues.SimpleLeague(agentfunc, agent.evaluator, worlds.n_envs)
 
-    parent = warm_start(agent, opt, '')
+    parent = warm_start(agent, opt, '*blast 9x9-conv-slow*')
 
     run = runs.new_run('9x9-conv-slow', boardsize=worlds.boardsize, parent=parent)
 
