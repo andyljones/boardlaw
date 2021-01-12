@@ -68,9 +68,15 @@ def snapshot_arena(run, worldfunc, agentfunc, device='cuda'):
                 i += 1
 
 def mohex_arena(run, worldfunc, agentfunc, device='cuda'):
-    run = runs.resolve(run)
-    log.info(f'Running arena for "{run}"')
-    with logs.to_run(run), stats.to_run(run):
+    if isinstance(run, tuple):
+        source_run = runs.resolve(run[0])
+        stats_run = runs.resolve(run[1])
+    else:
+        source_run = runs.resolve(run)
+        stats_run = runs.resolve(run)
+
+    log.info(f'Running arena for "{source_run}", storing in "{stats_run}"')
+    with logs.to_run(stats_run), stats.to_run(stats_run):
         trialer = mohex.Trialer(worldfunc, device)
         
         i = 0
@@ -79,7 +85,7 @@ def mohex_arena(run, worldfunc, agentfunc, device='cuda'):
         while True:
             if time.time() - last_load > 15:
                 last_load = time.time()
-                agents = latest_agent(run, agentfunc, device=device)
+                agents = latest_agent(source_run, agentfunc, device=device)
                 if agents:
                     agent = list(agents.values())[0]
                 else:

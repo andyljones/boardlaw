@@ -22,6 +22,10 @@ FILENAME = r'(?P<prefix>.*)\.(?P<idx>.*)\.(?P<ext>.*)'
 
 @contextmanager
 def to_run(run):
+    if run is None:
+        yield
+        return 
+
     run = runs.resolve(run)
     try:
         if hasattr(T, 'run'):

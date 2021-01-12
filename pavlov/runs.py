@@ -147,6 +147,8 @@ def resolutions(run):
         return [n for n in names if fnmatch(n, run)]
 
 def resolve(run):
+    if run is None:
+        return None
     hits = resolutions(run)
     if len(hits) == 0:
         raise ValueError(f'Found no runs that match query "{run}"')

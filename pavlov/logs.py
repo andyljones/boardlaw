@@ -46,6 +46,10 @@ def handlers(*new_handlers):
 
 @contextmanager
 def to_run(run):
+    if run is None:
+        yield
+        return
+
     path = files.new_file(run, 'logs.{n}.txt')
     handler = logging.FileHandler(path)
     handler.setLevel(logging.INFO)
