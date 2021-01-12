@@ -1,9 +1,8 @@
 import gc
 import time
 import numpy as np
-import profiling
 import torch
-from rebar import arrdict
+from rebar import arrdict, profiling
 from pavlov import stats, logs, runs, storage, archive
 from . import hex, mcts, networks, learning, validation, analysis, arena, leagues
 from torch.nn import functional as F
@@ -131,20 +130,20 @@ def half(x):
 
 def run(device='cuda'):
     buffer_length = 32 
-    batch_size = 32*1024
-    n_envs = 8*1024
+    batch_size = 4*1024
+    n_envs = 2*1024
     buffer_inc = batch_size//n_envs
 
     worlds = worldfunc(n_envs, device=device)
     worlds = mix(worlds)
     agent = agentfunc(device)
-    opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=1e-2, amsgrad=True)
+    opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=3e-4, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
     league = leagues.SimpleLeague(agentfunc, agent.evaluator, worlds.n_envs)
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('9x9-hybrid', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('9x9-conv-slow', boardsize=worlds.boardsize, parent=parent)
 
     archive.archive(run)
 
