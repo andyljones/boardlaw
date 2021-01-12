@@ -7,7 +7,6 @@ from pavlov import stats, logs, runs, storage, archive
 from . import hex, mcts, networks, learning, validation, analysis, arena, leagues
 from torch.nn import functional as F
 from logging import getLogger
-from itertools import cycle
 
 log = getLogger(__name__)
 
@@ -45,6 +44,20 @@ def chunk_stats(chunk, n_new):
         r = t.rewards[1:][t.terminal[1:]]
         stats.mean('progress.corr.penultimate', ((v - v.mean())*(r - r.mean())).mean()/(v.var()*r.var())**.5)
 
+def to_chunk(buffer, buffer_inc):
+    chunk = arrdict.stack(buffer)
+    terminal = torch.stack([chunk.transitions.terminal for _ in range(chunk.worlds.n_seats)], -1)
+    chunk['reward_to_go'] = learning.reward_to_go(
+        chunk.transitions.rewards.float(), 
+        chunk.decisions.v.float(), 
+        terminal, 
+        terminal, gamma=1).half()
+    chunk_stats(chunk, buffer_inc)
+            
+    buffer = buffer[buffer_inc:]
+
+    return chunk, buffer
+
 def rel_entropy(logits, valid):
     zeros = torch.zeros_like(logits)
     logits = logits.where(valid, zeros)
@@ -59,8 +72,7 @@ def optimize(network, opt, batch):
     zeros = torch.zeros_like(d.logits)
     policy_loss = -(d0.logits.float().exp()*d.logits).where(w.valid, zeros).sum(axis=-1)[mask].mean()
 
-    terminal = torch.stack([t.terminal for _ in range(w.n_seats)], -1)
-    target_value = learning.reward_to_go(t.rewards.float(), d0.v.float(), terminal, terminal, gamma=1)
+    target_value = batch.reward_to_go
     value_loss = (target_value - d.v).square()[mask].mean()
     
     loss = policy_loss + value_loss 
@@ -141,14 +153,14 @@ def run(device='cuda'):
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
     league = leagues.SimpleLeague(agentfunc, agent.evaluator, worlds.n_envs)
 
-    parent = warm_start(agent, opt, '*blast 9x9-conv-slow*')
+    parent = warm_start(agent, opt, '')
 
     run = runs.new_run('9x9-conv-slow', boardsize=worlds.boardsize, parent=parent)
 
     archive.archive(run)
 
     buffer = []
-    idxs = cycle(learning.batch_indices(buffer_length, n_envs, batch_size, worlds.device))
+    idxs = learning.batch_indices(buffer_length, n_envs, batch_size, worlds.device)
     with logs.to_run(run), stats.to_run(run), \
             arena.monitor(run, worldfunc, agentfunc, device=worlds.device):
         while True:
@@ -168,11 +180,9 @@ def run(device='cuda'):
                 worlds = new_worlds
 
                 log.info('actor stepped')
-                
-            chunk = arrdict.stack(buffer)
-            chunk_stats(chunk, buffer_inc)
 
-            bad = optimize(agent.evaluator.prime, opt, chunk[:, next(idxs)])
+            chunk, buffer = to_chunk(buffer, buffer_inc)
+            bad = optimize(agent.evaluator.prime, opt, chunk[next(idxs)])
             sched.step()
             if bad:
                 sd = storage.state_dicts(agent=agent, opt=opt)
@@ -182,8 +192,6 @@ def run(device='cuda'):
                 raise ValueError()
 
             log.info('learner stepped')
-            
-            buffer = buffer[buffer_inc:]
 
             sd = storage.state_dicts(agent=agent, opt=opt)
             storage.throttled_latest(run, sd, 60)

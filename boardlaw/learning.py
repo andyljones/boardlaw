@@ -1,11 +1,39 @@
 import torch
 import numpy as np
+from itertools import cycle
 
-def batch_indices(T, B, batch_size, device='cuda'):
-    batch_width = batch_size//T
-    indices = torch.randperm(B, device=device)
-    indices = [indices[i:i+batch_width] for i in range(0, B, batch_width)]
-    return indices
+PRIME = 160481219
+
+def batch_indices_fancy(buffer_length, buffer_inc, n_envs, batch_size, device='cuda'):
+    #TODO: This is supposed to account for the movement of the buffer so that each sample gets used exactly
+    # once. But it doesn't work. 
+    assert n_envs <= batch_size
+    assert batch_size % n_envs == 0 
+    assert (n_envs*buffer_length) % batch_size == 0
+
+    batch_height = batch_size // n_envs
+    cols = torch.arange(n_envs, device=device)[None, :].repeat_interleave(batch_height, 1)
+
+    offsets = PRIME*torch.arange(n_envs, device=device)
+
+    rowperm = torch.arange(buffer_length, device=device)
+    i = 0
+    while True:
+        start = batch_height*i % buffer_length
+        end = start + batch_height
+
+        seeds = rowperm[start:end] - i*buffer_inc
+        rows = (seeds[:, None] + offsets[None, :]) % buffer_length
+
+        yield (rows, cols)
+
+        i += 1
+
+def batch_indices(buffer_length, n_envs, batch_size, device='cuda'):
+    while True:
+        cols = torch.arange(batch_size, device=device) % n_envs
+        rows = torch.randperm(batch_size) % buffer_length
+        yield rows, cols
 
 def gather(arr, indices):
     if isinstance(arr, dict):
@@ -66,3 +94,23 @@ def test_reward_to_go():
     terminal = torch.tensor([False, True, False])
     actual = reward_to_go(reward, value, reset, terminal, gamma)
     torch.testing.assert_allclose(actual, torch.tensor([3., 2., 6.]))
+
+def test_batch_indices():
+    buffer_length = 16
+    buffer_inc = 4
+    n_envs = 1
+
+    batch_size = 4
+
+    n_incs = 16
+    counts = torch.zeros(buffer_length+n_incs*buffer_inc)
+    buffer = torch.arange(buffer_length)
+
+    idxs = batch_indices_fancy(buffer_length, buffer_inc, n_envs, batch_size, device='cpu')
+    for _, (rows, cols) in zip(range(n_incs), idxs):
+        counts[buffer[rows]] += 1
+
+        buffer = torch.cat([
+            buffer[buffer_inc:],
+            torch.arange(buffer.max()+1, buffer.max()+1+buffer_inc)])
+
