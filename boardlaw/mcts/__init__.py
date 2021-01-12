@@ -207,12 +207,13 @@ class MCTSAgent:
         self.noise_eps = noise_eps
 
     @profiling.nvtx
-    def __call__(self, world, value=True, **kwargs):
-        m = mcts(world, self.evaluator, noise_eps=self.noise_eps, **{**self.kwargs, **kwargs})
+    def __call__(self, world, value=True, eval=False, **kwargs):
+        noise_eps = 0. if eval else self.noise_eps 
+        m = mcts(world, self.evaluator, noise_eps=noise_eps, **{**self.kwargs, **kwargs})
         r = m.root()
 
         # Need to go back to float here because `sample` doesn't like halves
-        actions = torch.distributions.Categorical(logits=r.logits.float()).sample()
+        actions = r.logits.argmax(-1) if eval else torch.distributions.Categorical(logits=r.logits.float()).sample()
 
         return arrdict.arrdict(
             logits=r.logits,
