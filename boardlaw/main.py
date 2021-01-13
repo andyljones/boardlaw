@@ -116,7 +116,7 @@ def optimize(network, scaler, opt, batch):
         return value_loss > 2
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=11, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=7, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
@@ -146,21 +146,21 @@ def half(x):
 
 def run(device='cuda'):
     buffer_length = 16 
-    batch_size = 8*1024
-    n_envs = 4*1024
+    batch_size = 64*1024
+    n_envs = 8*1024
     buffer_inc = batch_size//n_envs
 
     worlds = worldfunc(n_envs, device=device)
     worlds = mix(worlds)
     agent = agentfunc(device)
-    opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=3e-4, amsgrad=True)
+    opt = torch.optim.Adam(agent.evaluator.prime.parameters(), lr=1e-2, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
     league = leagues.SimpleLeague(agentfunc, agent.evaluator, worlds.n_envs)
     scaler = torch.cuda.amp.GradScaler()
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('11x11-conv-slow', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('7x7-baseline', boardsize=worlds.boardsize, parent=parent)
 
     archive.archive(run)
 
