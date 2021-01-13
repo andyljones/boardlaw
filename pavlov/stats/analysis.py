@@ -18,9 +18,9 @@ def pandas(run, channel, field=None, rule='60s', **kwargs):
         df = df[field]
     return df
 
-def compare(rs, *args, fill=False, **kwargs):
+def compare(rs, *args, fill=False, query='', **kwargs):
     rs = [rs] if isinstance(rs, str) else rs
-    ns = [n for r in rs for n in runs.resolutions(r)]
+    ns = [n for r in rs for n in (runs.pandas(r).query(query) if query else runs.pandas(r)).index]
     df = {}
     for n in ns:
         try:

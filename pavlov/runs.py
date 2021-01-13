@@ -104,7 +104,11 @@ def new_run(suffix='', **kwargs):
     return run
 
 _cache = {}
-def runs():
+def runs(pattern=None):
+    if pattern is not None:
+        res = set(resolutions(pattern))
+        return {k: v for k, v in runs().items() if k in res}
+
     global _cache
 
     cache = {}
@@ -125,9 +129,9 @@ def runs():
     _cache = {n: cache[n] for n in order}
     return _cache
 
-def pandas():
+def pandas(pattern=None):
     df = {}
-    for run, info in runs().items():
+    for run, info in runs(pattern).items():
         df[run] = {k: v for k, v in info.items() if k != '_files'}
     df = pd.DataFrame.from_dict(df, orient='index')
     df['_created'] = pd.to_datetime(df['_created'])
