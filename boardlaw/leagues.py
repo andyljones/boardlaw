@@ -39,13 +39,14 @@ def assemble(agentfunc, state_dict):
 
 class LeagueEvaluator(nn.Module):
 
-    def __init__(self, slices, opponents):
+    def __init__(self, names, slices, field):
         super().__init__()
 
         self.evaluator = None
 
+        self.names = names
         self.slices = slices
-        self.opponents = nn.ModuleList(opponents)
+        self.field = nn.ModuleList(field)
 
         self.streams = [torch.cuda.Stream() for _ in range(2)]
 
@@ -61,10 +62,10 @@ class LeagueEvaluator(nn.Module):
             parts.append(self.evaluator(worlds[s]))
 
         if split < worlds.n_envs:
-            chunk = (worlds.n_envs - split)//len(self.opponents)
-            assert split + chunk*len(self.opponents) == worlds.n_envs
+            chunk = (worlds.n_envs - split)//len(self.field)
+            assert split + chunk*len(self.field) == worlds.n_envs
             with torch.cuda.stream(self.streams[1]):
-                for s, opponent in zip(self.slices, self.opponents): 
+                for s, opponent in zip(self.slices, self.field): 
                     parts.append(opponent(worlds[s]))
 
         torch.cuda.synchronize()
@@ -76,88 +77,129 @@ class LeagueEvaluator(nn.Module):
     def load_state_dict(self, sd):
         self.evaluator.load_state_dict(sd)
 
+def league_evaluator(stable, agentfunc, n_envs, n_fielded, prime_frac):
+
+    if n_fielded:
+        n_prime_envs = int(prime_frac*n_envs)
+        n_oppo_envs = int((1 - prime_frac)*n_envs//n_fielded)
+    else:
+        n_prime_envs = n_envs
+        n_oppo_envs = 0
+    assert n_prime_envs + n_oppo_envs*n_fielded == n_envs
+
+    names, slices, field = [], [], []
+    for i in range(n_fielded):
+        name, sd = stable.draw()
+        names.append(name)
+
+        start = n_prime_envs + i*n_oppo_envs
+        end = n_prime_envs + (i+1)*n_oppo_envs
+        slices.append(slice(start, end))
+
+        evaluator = agentfunc().evaluator
+        evaluator.load_state_dict(sd)
+        field.append(evaluator)
+
+    return LeagueEvaluator(names, slices, field)
+
+class Stable:
+
+    def __init__(self, agentfunc, n_stabled, stable_interval):
+        self.stable_interval = stable_interval
+
+        self.stable = {i: agentfunc().evaluator.state_dict() for i in range(n_stabled)}
+
+        self.games = np.zeros((n_stabled,),)
+        self.wins = np.zeros((n_stabled,),)
+
+        self.step = 0
+
+    def update_stats(self, league_eval, transition):
+        transition = transition.detach().cpu().numpy()
+        for n, s in zip(league_eval.names, league_eval.slices):
+            self.games[n] += transition.terminal[s].sum()
+            self.wins[n] += (transition.rewards[s] == 1).sum()
+
+    def update_stable(self, evaluator):
+        if self.step % self.stable_interval == 0:
+            old = np.random.choice(list(self.stable))
+            del self.stable[old]
+            self.stable[self.step] = clone(evaluator.state_dict())
+
+            log.info(f'Network #{self.step} stabled; #{old} removed')
+
+        self.step += 1
+
+    def draw(self):
+        name = np.random.choice(np.array(list(self.stable)))
+        return name, self.stable[name]
+
+class Field:
+
+    def __init__(self, n_fielded):
+        self.n_fielded = n_fielded
+        self.games = np.zeros((n_fielded,))
+
+    def update_stats(self, league_eval, transition):
+        transition = transition.detach().cpu().numpy()
+        for i, s in enumerate(league_eval.slices):
+            self.games[i] += transition.terminal[s].sum()
+
+    def update_field(self, league_eval, stable):
+        # Figure out who's been playing too long. Stagger it a bit so they don't all change at once
+        threshold = np.linspace(1.5, 2.5, self.n_fielded)
+        for i, (n, s) in enumerate(zip(league_eval.names, league_eval.slices)):
+            replace = self.games[i] >= threshold[i]*(s.stop - s.start)
+        # Swap out any over the limit
+            if replace:
+                name, sd = stable.draw()
+                league_eval.field[i].load_state_dict(sd)
+
+                log.info(f'New opponent is #{name}')
+
+                self.games[i] = 0
 
 class League:
 
-    def __init__(self, agentfunc, n_envs, n_opponents=4, n_stabled=16, prime_frac=3/4, stable_interval=600, device='cuda'):
+    def __init__(self, agentfunc, n_envs, 
+            n_fielded=4, n_stabled=16, prime_frac=3/4, 
+            stable_interval=600, device='cuda'):
+
         self.n_envs = n_envs
-        self.n_opponents = n_opponents
+        self.n_opponents = n_fielded
         self.n_stabled = n_stabled
         self.stable_interval = stable_interval
         self.device = device
 
-        self.n_games = torch.zeros((n_opponents,), device=device)
+        self.stable = Stable(agentfunc, n_stabled, stable_interval)
+        self.field = Field(n_fielded)
+        self.league_eval = league_evaluator(self.stable, agentfunc, n_envs, n_fielded, prime_frac)
 
-        self.step = 0
-        self.stable = {}
+        self.update_mask(False)
 
-        prime_frac = 3/4
-        if self.n_opponents:
-            self.n_prime_envs = int(prime_frac*self.n_envs)
-            self.n_oppo_envs = int((1 - prime_frac)*self.n_envs//self.n_opponents)
-        else:
-            self.n_prime_envs = self.n_envs
-            self.n_oppo_envs = 0
-        assert self.n_prime_envs + self.n_oppo_envs*self.n_opponents == self.n_envs
-
-        self.stable = {i: agentfunc().evaluator.state_dict() for i in range(self.n_stabled)}
-
-        idxs = np.random.choice(list(self.stable), (self.n_opponents,))
-        start, chunk = self.n_prime_envs, self.n_oppo_envs
-        self.league_eval = LeagueEvaluator(
-            [slice(start + i*chunk, start + (i+1)*chunk) for i, idx in enumerate(idxs)],
-            [agentfunc().evaluator for idx in idxs])
-
-        self._update_mask(False)
-
-    def _is_league(self, agent):
+    def is_league(self, agent):
         return agent.evaluator == self.league_eval
 
-    def _update_mask(self, is_league):
+    def update_mask(self, is_league):
         is_prime = torch.full((self.n_envs,), True, device=self.device)
         if is_league:
             for s in self.league_eval.slices:
                 is_prime[s] = False
         self.is_prime = is_prime
 
-    def _update_stats(self, transition):
-        # Update the games count
-        for i, s in enumerate(self.league_eval.slices):
-            self.n_games[i] += transition.terminal[s].sum()
-    
-    def _update_opponents(self):
-        # Figure out who's been playing too long. Stagger it a bit so they don't all change at once
-        threshold = torch.linspace(1.5, 2.5, self.n_opponents, device=self.device).mul(self.n_oppo_envs).int()
-        (replace,) = (self.n_games >= threshold).nonzero(as_tuple=True)
-        # Swap out any over the limit
-        for i in replace:
-            new = np.random.choice(list(self.stable))
-            self.league_eval.opponents[i].load_state_dict(self.stable[new])
-            log.info(f'New opponent #{new} is {self.step - new} steps old')
-
-            self.n_games[i] = 0
-
-    def _update_stable(self, evaluator):
-        if self.step % self.stable_interval == 0:
-            old = np.random.choice(list(self.stable))
-            del self.stable[old]
-            self.stable[self.step] = clone(evaluator.state_dict())
-            log.info(f'Network #{self.step} stabled; #{old} removed')
-
     def update(self, agent, transition):
         # Toggle whether the network is running only the prime copy, or many.
-        if self._is_league(agent):
+        if self.is_league(agent):
             agent.evaluator = self.league_eval.evaluator
         else:
             self.league_eval.evaluator = agent.evaluator
             agent.evaluator = self.league_eval
 
-        self._update_mask(self._is_league(agent))
-        self._update_stats(transition)
-        self._update_opponents()
-        self._update_stable(agent.evaluator)
-
-        self.step += 1
+        self.update_mask(self.is_league(agent))
+        self.stable.update_stats(self.league_eval, transition)
+        self.field.update_stats(self.league_eval, transition)
+        self.field.update_field(self.league_eval, self.stable)
+        self.stable.update_stable(agent.evaluator)
 
 class MockWorlds(arrdict.arrdict):
 
@@ -200,7 +242,8 @@ def demo():
     for _ in range(400):
         skills = agent(worlds)
         transitions = arrdict.arrdict(
-            terminal=torch.rand_like(skills) < .25)
+            terminal=torch.rand_like(skills) < .25,
+            rewards=torch.zeros_like(skills))
         league.update(agent, transitions)
 
         evaluator.skill += 1
