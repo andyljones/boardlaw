@@ -126,17 +126,11 @@ def demo_rollout():
 
     trace.responses.rewards.sum(0).sum(0)
 
-def monitor(run_name=-1):
-    compositor = widgets.Compositor()
-    with logging.from_dir(run_name, compositor), stats.from_dir(run_name, compositor):
-        while True:
-            time.sleep(1)
-
 def grad_noise_scale(B):
     import pandas as pd
 
     results = {}
-    for i, row in storing.stored_periodic('2020-12-24 16-22-48 residual-9x9').iterrows():
+    for i, row in storage.stored_periodic('2020-12-24 16-22-48 residual-9x9').iterrows():
         sd = torch.load(row.path, map_location='cpu')['opt.state']
         m0 = torch.cat([s['exp_avg'].flatten() for s in sd.values()])
         v0 = torch.cat([s['exp_avg_sq'].flatten() for s in sd.values()])

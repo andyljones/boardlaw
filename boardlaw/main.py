@@ -122,7 +122,7 @@ def worldfunc(n_envs, device='cuda'):
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
-    network = networks.Network(worlds.obs_space, worlds.action_space).to(worlds.device)
+    network = networks.ConvContextModel(worlds.obs_space, worlds.action_space).to(worlds.device)
     return mcts.MCTSAgent(network, n_nodes=64)
 
 def warm_start(agent, opt, parent):
