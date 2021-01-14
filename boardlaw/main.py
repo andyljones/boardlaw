@@ -68,23 +68,25 @@ def optimize(network, scaler, opt, batch):
     w, d0, t = batch.worlds, batch.decisions, batch.transitions
     mask = batch.is_prime
 
-    with torch.cuda.amp.autocast():
-        d = network(w)
+    # with torch.cuda.amp.autocast():
+    d = network(w)
 
-        zeros = torch.zeros_like(d.logits)
-        policy_loss = -(d0.logits.float().exp()*d.logits).where(w.valid, zeros).sum(axis=-1)[mask].mean()
+    zeros = torch.zeros_like(d.logits)
+    policy_loss = -(d0.logits.float().exp()*d.logits).where(w.valid, zeros).sum(axis=-1)[mask].mean()
 
-        target_value = batch.reward_to_go
-        value_loss = (target_value - d.v).square()[mask].mean()
-        
-        loss = policy_loss + value_loss 
+    target_value = batch.reward_to_go
+    value_loss = (target_value - d.v).square()[mask].mean()
+    
+    loss = policy_loss + value_loss 
 
     old = torch.cat([p.flatten() for p in network.parameters()])
 
     opt.zero_grad()
-    scaler.scale(loss).backward()
-    scaler.step(opt)
-    scaler.update()
+    # scaler.scale(loss).backward()
+    # scaler.step(opt)
+    # scaler.update()
+    loss.backward()
+    opt.step()
 
     new = torch.cat([p.flatten() for p in network.parameters()])
 
@@ -146,7 +148,7 @@ def half(x):
 
 def run(device='cuda'):
     buffer_length = 16 
-    batch_size = 64*1024
+    batch_size = 32*1024
     n_envs = 8*1024
     buffer_inc = batch_size//n_envs
 
