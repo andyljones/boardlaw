@@ -104,35 +104,50 @@ def league_network(stable, agentfunc, n_envs, n_fielded, prime_frac):
 
 class Stable:
 
-    def __init__(self, agentfunc, n_stabled, stable_interval):
+    def __init__(self, default, n_stabled, stable_interval):
+        #TODO: This is a bit lazy; doesn't deal with games that have multiple networks playing in them,
+        # and doesn't deal with networks that get evicted from the stable while they're still on the field.
+        self.n_stabled = n_stabled
+
         self.stable_interval = stable_interval
 
-        self.stable = {i: agentfunc().network.state_dict() for i in range(n_stabled)}
+        self.names = [-1]
+        self.stable = [default]
 
-        self.games = np.zeros((n_stabled,),)
-        self.wins = np.zeros((n_stabled,),)
+        self.losses = np.full((n_stabled,), 1)
+        self.wins = np.full((n_stabled,), 1)
 
         self.step = 0
 
-    def update_stats(self, league_eval, transition):
-        transition = transition.detach().cpu().numpy()
+    def update_stats(self, league_eval, league_seat, transition):
+        rewards = transition.rewards.gather(1, league_seat[:, None]).squeeze(-1).cpu().numpy()
         for n, s in zip(league_eval.names, league_eval.slices):
-            self.games[n] += transition.terminal[s].sum()
-            self.wins[n] += (transition.rewards[s] == 1).sum()
+            i = self.names.index(n)
+            self.wins[i] += (rewards[s] == 1).sum()
+            self.losses[i] += (rewards[s] == -1).sum()
 
     def update_stable(self, network):
         if self.step % self.stable_interval == 0:
-            old = np.random.choice(list(self.stable))
-            del self.stable[old]
-            self.stable[self.step] = clone(network.state_dict())
-
-            log.info(f'Network #{self.step} stabled; #{old} removed')
+            if len(self.stable) == self.n_stabled:
+                old = np.random.randint(len(self.names))
+                self.names[old] = self.step
+                self.stable[old] = clone(network.state_dict())
+                self.losses[old] = 0
+                self.wins[old] = 1
+                log.info(f'Network #{self.step} stabled; #{old} removed')
+            else:
+                self.names.append(self.step)
+                self.stable.append(clone(network.state_dict()))
+                log.info(f'Network #{self.step} stabled')
 
         self.step += 1
 
     def draw(self):
-        name = np.random.choice(np.array(list(self.stable)))
-        return name, self.stable[name]
+        rates = (self.wins/(self.wins + self.losses))[:len(self.stable)]
+        dist = np.exp(rates)/np.exp(rates).sum()
+
+        i = np.random.choice(np.arange(len(dist)), p=dist)
+        return self.names[i], self.stable[i]
 
 class Field:
 
@@ -162,8 +177,8 @@ class Field:
 class League:
 
     def __init__(self, agentfunc, n_envs, 
-            n_fielded=4, n_stabled=16, prime_frac=3/4, 
-            stable_interval=600, device='cuda'):
+            n_fielded=4, n_stabled=1024, prime_frac=3/4, 
+            stable_interval=10, device='cuda'):
 
         self.n_envs = n_envs
         self.n_opponents = n_fielded
@@ -171,7 +186,7 @@ class League:
         self.stable_interval = stable_interval
         self.device = device
 
-        self.stable = Stable(agentfunc, n_stabled, stable_interval)
+        self.stable = Stable(agentfunc().network.state_dict(), n_stabled, stable_interval)
         self.field = Field(n_fielded)
         self.league_eval = league_network(self.stable, agentfunc, n_envs, n_fielded, prime_frac)
 
@@ -187,25 +202,30 @@ class League:
                 is_prime[s] = False
         self.is_prime = is_prime
 
-    def update(self, agent, transition):
+    def update(self, agent, seats, transition):
         # Toggle whether the network is running only the prime copy, or many.
-        if self.is_league(agent):
+        league_stepped = self.is_league(agent)
+        if league_stepped:
+            league_seat = seats
             agent.network = self.league_eval.network
         else:
+            league_seat = 1 - seats
             self.league_eval.network = agent.network
             agent.network = self.league_eval
 
-        self.update_mask(self.is_league(agent))
-        self.stable.update_stats(self.league_eval, transition)
+        self.stable.update_stats(self.league_eval, league_seat, transition)
         self.field.update_stats(self.league_eval, transition)
         self.field.update_field(self.league_eval, self.stable)
         self.stable.update_stable(agent.network)
+
+        self.update_mask(self.is_league(agent))
 
 class MockWorlds(arrdict.arrdict):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.n_envs = len(self.dummy)
+        self.seats = torch.zeros_like(self.dummy).long()
 
 class MockNetwork(nn.Module):
 
@@ -241,10 +261,14 @@ def demo():
     results = []
     for _ in range(400):
         skills = agent(worlds)
+        terminal = torch.rand_like(skills) < .25
+        rewards = terminal * (2*(torch.rand_like(skills) < .5).float() - 1)
+        rewards = torch.stack([rewards, -rewards], -1)
+        
         transitions = arrdict.arrdict(
-            terminal=torch.rand_like(skills) < .25,
-            rewards=torch.zeros_like(skills))
-        league.update(agent, transitions)
+            terminal=terminal,
+            rewards=rewards)
+        league.update(agent, worlds.seats, transitions)
 
         network.skill += 1
 
@@ -256,3 +280,4 @@ def demo():
         y = results[1::2, i].cpu()
         x = np.arange(len(y))
         plt.scatter(x, y, marker='.')
+

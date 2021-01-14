@@ -225,7 +225,7 @@ class MCTSAgent:
 
     def load_state_dict(self, sd):
         #TODO: Systematize this
-        network = {k[10:]: v for k, v in sd.items() if k.startswith('network.')}
+        network = {k[8:]: v for k, v in sd.items() if k.startswith('network.')}
         kwargs = {k[7:]: v for k, v in sd.items() if k.startswith('kwargs.')}
         self.network.load_state_dict(network)
         self.kwargs.update(kwargs)
