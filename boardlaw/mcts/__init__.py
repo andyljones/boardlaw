@@ -66,10 +66,10 @@ class MCTS:
         # Larger c_puct -> greater regularization
         self.c_puct = torch.full((world.n_envs,), c_puct, device=self.device, dtype=torch.half)
 
-    def initialize(self, evaluator):
+    def initialize(self, network):
         world = self.worlds[:, 0]
         with torch.no_grad():
-            decisions = evaluator(world)
+            decisions = network(world)
         self.decisions.logits[:, self.sim] = dirichlet_noise(decisions.logits, world.valid, self.noise_eps)
         self.decisions.v[:, 0] = decisions.v
 
@@ -102,7 +102,7 @@ class MCTS:
         cuda.backup(bk, leaves.short())
 
     @profiling.nvtx
-    def simulate(self, evaluator):
+    def simulate(self, network):
         if self.sim >= self.n_nodes:
             raise ValueError('Called simulate more times than were declared in the constructor')
 
@@ -125,7 +125,7 @@ class MCTS:
         self.transitions.terminal[self.envs, leaves] = transition.terminal
 
         with torch.no_grad(), torch.cuda.amp.autocast():
-            decisions = evaluator(world)
+            decisions = network(world)
         self.decisions.logits[self.envs, leaves] = decisions.logits.half()
         self.decisions.v[self.envs, leaves] = decisions.v.half()
 
@@ -190,26 +190,26 @@ class MCTS:
 
         return plt.gca()
 
-def mcts(worlds, evaluator, **kwargs):
+def mcts(worlds, network, **kwargs):
     mcts = MCTS(worlds, **kwargs)
 
-    mcts.initialize(evaluator)
+    mcts.initialize(network)
     for _ in range(mcts.n_nodes-1):
-        mcts.simulate(evaluator)
+        mcts.simulate(network)
 
     return mcts
 
 class MCTSAgent:
 
-    def __init__(self, evaluator, noise_eps=.05, **kwargs):
-        self.evaluator = evaluator
+    def __init__(self, network, noise_eps=.05, **kwargs):
+        self.network = network
         self.kwargs = kwargs
         self.noise_eps = noise_eps
 
     @profiling.nvtx
     def __call__(self, world, value=True, eval=False, **kwargs):
         noise_eps = 0. if eval else self.noise_eps 
-        m = mcts(world, self.evaluator, noise_eps=noise_eps, **{**self.kwargs, **kwargs})
+        m = mcts(world, self.network, noise_eps=noise_eps, **{**self.kwargs, **kwargs})
         r = m.root()
 
         # Need to go back to float here because `sample` doesn't like halves
@@ -225,14 +225,14 @@ class MCTSAgent:
 
     def load_state_dict(self, sd):
         #TODO: Systematize this
-        evaluator = {k[10:]: v for k, v in sd.items() if k.startswith('evaluator.')}
+        network = {k[10:]: v for k, v in sd.items() if k.startswith('network.')}
         kwargs = {k[7:]: v for k, v in sd.items() if k.startswith('kwargs.')}
-        self.evaluator.load_state_dict(evaluator)
+        self.network.load_state_dict(network)
         self.kwargs.update(kwargs)
         self.noise_eps = sd['noise_eps']
 
     def state_dict(self):
-        evaluator = {f'evaluator.{k}': v for k, v in self.evaluator.state_dict().items()}
+        network = {f'network.{k}': v for k, v in self.network.state_dict().items()}
         kwargs = {f'kwargs.{k}': v for k, v in self.kwargs.items()}
-        return {**evaluator, **kwargs, 'noise_eps': self.noise_eps}
+        return {**network, **kwargs, 'noise_eps': self.noise_eps}
 

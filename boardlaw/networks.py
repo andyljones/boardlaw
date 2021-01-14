@@ -116,7 +116,7 @@ class ReZeroResidual(nn.Linear):
     def forward(self, x, *args, **kwargs):
         return x + self.α*F.relu(super().forward(x))
 
-class Evaluator(nn.Module):
+class Network(nn.Module):
 
     def __init__(self, obs_space, action_space, width=256, depth=8):
         super().__init__()

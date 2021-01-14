@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from rebar import arrdict, profiling, pickle
 from pavlov import stats, logs, runs, storage, archive
-from . import hex, mcts, evaluators, learning, validation, analysis, arena, leagues
+from . import hex, mcts, networks, learning, validation, analysis, arena, leagues
 from torch.nn import functional as F
 from logging import getLogger
 
@@ -122,8 +122,8 @@ def worldfunc(n_envs, device='cuda'):
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
-    evaluator = evaluators.Evaluator(worlds.obs_space, worlds.action_space).to(worlds.device)
-    return mcts.MCTSAgent(evaluator, n_nodes=64)
+    network = networks.Network(worlds.obs_space, worlds.action_space).to(worlds.device)
+    return mcts.MCTSAgent(network, n_nodes=64)
 
 def warm_start(agent, opt, parent):
     if parent:
@@ -155,7 +155,7 @@ def run(device='cuda'):
     worlds = worldfunc(n_envs, device=device)
     worlds = mix(worlds)
     agent = agentfunc(device)
-    opt = torch.optim.Adam(agent.evaluator.parameters(), lr=3e-4, amsgrad=True)
+    opt = torch.optim.Adam(agent.network.parameters(), lr=3e-4, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
     league = leagues.League(agentfunc, worlds.n_envs, device=worlds.device)
     scaler = torch.cuda.amp.GradScaler()
@@ -189,7 +189,7 @@ def run(device='cuda'):
                 log.info('actor stepped')
 
             chunk, buffer = to_chunk(buffer, buffer_inc)
-            bad = optimize(agent.evaluator, scaler, opt, chunk[next(idxs)])
+            bad = optimize(agent.network, scaler, opt, chunk[next(idxs)])
             sched.step()
             if bad:
                 sd = storage.state_dicts(agent=agent, opt=opt)
@@ -203,7 +203,7 @@ def run(device='cuda'):
             sd = storage.state_dicts(agent=agent, opt=opt)
             storage.throttled_latest(run, sd, 60)
             storage.throttled_snapshot(run, sd, 900)
-            storage.throttled_raw(run, 'model', lambda: pickle.dumps(agent.evaluator), 900)
+            storage.throttled_raw(run, 'model', lambda: pickle.dumps(agent.network), 900)
             stats.gpu(worlds.device, 15)
 
 @profiling.profilable

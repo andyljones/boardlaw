@@ -33,16 +33,16 @@ def clone(x):
         return x
 
 def assemble(agentfunc, state_dict):
-    new = agentfunc().evaluator
+    new = agentfunc().network
     new.load_state_dict(state_dict)
     return new
 
-class LeagueEvaluator(nn.Module):
+class LeagueNetwork(nn.Module):
 
     def __init__(self, names, slices, field):
         super().__init__()
 
-        self.evaluator = None
+        self.network = None
 
         self.names = names
         self.slices = slices
@@ -59,7 +59,7 @@ class LeagueEvaluator(nn.Module):
         torch.cuda.synchronize()
         with torch.cuda.stream(self.streams[0]):
             s = slice(0, split)
-            parts.append(self.evaluator(worlds[s]))
+            parts.append(self.network(worlds[s]))
 
         if split < worlds.n_envs:
             chunk = (worlds.n_envs - split)//len(self.field)
@@ -72,12 +72,12 @@ class LeagueEvaluator(nn.Module):
         return arrdict.from_dicts(arrdict.cat(parts))
 
     def state_dict(self):
-        return self.evaluator.state_dict()
+        return self.network.state_dict()
 
     def load_state_dict(self, sd):
-        self.evaluator.load_state_dict(sd)
+        self.network.load_state_dict(sd)
 
-def league_evaluator(stable, agentfunc, n_envs, n_fielded, prime_frac):
+def league_network(stable, agentfunc, n_envs, n_fielded, prime_frac):
 
     if n_fielded:
         n_prime_envs = int(prime_frac*n_envs)
@@ -96,18 +96,18 @@ def league_evaluator(stable, agentfunc, n_envs, n_fielded, prime_frac):
         end = n_prime_envs + (i+1)*n_oppo_envs
         slices.append(slice(start, end))
 
-        evaluator = agentfunc().evaluator
-        evaluator.load_state_dict(sd)
-        field.append(evaluator)
+        network = agentfunc().network
+        network.load_state_dict(sd)
+        field.append(network)
 
-    return LeagueEvaluator(names, slices, field)
+    return LeagueNetwork(names, slices, field)
 
 class Stable:
 
     def __init__(self, agentfunc, n_stabled, stable_interval):
         self.stable_interval = stable_interval
 
-        self.stable = {i: agentfunc().evaluator.state_dict() for i in range(n_stabled)}
+        self.stable = {i: agentfunc().network.state_dict() for i in range(n_stabled)}
 
         self.games = np.zeros((n_stabled,),)
         self.wins = np.zeros((n_stabled,),)
@@ -120,11 +120,11 @@ class Stable:
             self.games[n] += transition.terminal[s].sum()
             self.wins[n] += (transition.rewards[s] == 1).sum()
 
-    def update_stable(self, evaluator):
+    def update_stable(self, network):
         if self.step % self.stable_interval == 0:
             old = np.random.choice(list(self.stable))
             del self.stable[old]
-            self.stable[self.step] = clone(evaluator.state_dict())
+            self.stable[self.step] = clone(network.state_dict())
 
             log.info(f'Network #{self.step} stabled; #{old} removed')
 
@@ -173,12 +173,12 @@ class League:
 
         self.stable = Stable(agentfunc, n_stabled, stable_interval)
         self.field = Field(n_fielded)
-        self.league_eval = league_evaluator(self.stable, agentfunc, n_envs, n_fielded, prime_frac)
+        self.league_eval = league_network(self.stable, agentfunc, n_envs, n_fielded, prime_frac)
 
         self.update_mask(False)
 
     def is_league(self, agent):
-        return agent.evaluator == self.league_eval
+        return agent.network == self.league_eval
 
     def update_mask(self, is_league):
         is_prime = torch.full((self.n_envs,), True, device=self.device)
@@ -190,16 +190,16 @@ class League:
     def update(self, agent, transition):
         # Toggle whether the network is running only the prime copy, or many.
         if self.is_league(agent):
-            agent.evaluator = self.league_eval.evaluator
+            agent.network = self.league_eval.network
         else:
-            self.league_eval.evaluator = agent.evaluator
-            agent.evaluator = self.league_eval
+            self.league_eval.network = agent.network
+            agent.network = self.league_eval
 
         self.update_mask(self.is_league(agent))
         self.stable.update_stats(self.league_eval, transition)
         self.field.update_stats(self.league_eval, transition)
         self.field.update_field(self.league_eval, self.stable)
-        self.stable.update_stable(agent.evaluator)
+        self.stable.update_stable(agent.network)
 
 class MockWorlds(arrdict.arrdict):
 
@@ -207,7 +207,7 @@ class MockWorlds(arrdict.arrdict):
         super().__init__(*args, **kwargs)
         self.n_envs = len(self.dummy)
 
-class MockEvaluator(nn.Module):
+class MockNetwork(nn.Module):
 
     def __init__(self, skill):
         super().__init__()
@@ -225,10 +225,10 @@ class MockEvaluator(nn.Module):
 class MockAgent:
 
     def __init__(self, skill=0):
-        self.evaluator = MockEvaluator(skill)
+        self.network = MockNetwork(skill)
 
     def __call__(self, worlds):
-        return self.evaluator(worlds)
+        return self.network(worlds)
 
 def demo():
     worlds = MockWorlds(dummy=torch.zeros((128,)))
@@ -236,7 +236,7 @@ def demo():
     league = League(MockAgent, worlds.n_envs, stable_interval=8)
 
     agent = MockAgent(0)
-    evaluator = agent.evaluator
+    network = agent.network
 
     results = []
     for _ in range(400):
@@ -246,7 +246,7 @@ def demo():
             rewards=torch.zeros_like(skills))
         league.update(agent, transitions)
 
-        evaluator.skill += 1
+        network.skill += 1
 
         results.append(skills)
     results = torch.stack(results)
