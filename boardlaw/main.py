@@ -118,11 +118,11 @@ def optimize(network, scaler, opt, batch):
         return value_loss > 2
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=9, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=7, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
-    network = networks.ConvContextModel(worlds.obs_space, worlds.action_space).to(worlds.device)
+    network = networks.FCModel(worlds.obs_space, worlds.action_space).to(worlds.device)
     return mcts.MCTSAgent(network, n_nodes=64)
 
 def warm_start(agent, opt, parent):
@@ -155,14 +155,14 @@ def run(device='cuda'):
     worlds = worldfunc(n_envs, device=device)
     worlds = mix(worlds)
     agent = agentfunc(device)
-    opt = torch.optim.Adam(agent.network.parameters(), lr=3e-4, amsgrad=True)
+    opt = torch.optim.Adam(agent.network.parameters(), lr=1e-2, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
     league = leagues.League(agentfunc, worlds.n_envs, device=worlds.device)
     scaler = torch.cuda.amp.GradScaler()
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('9x9-baseline', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('7x7-validation', boardsize=worlds.boardsize, parent=parent)
 
     archive.archive(run)
 
@@ -184,7 +184,7 @@ def run(device='cuda'):
                     is_prime=league.is_prime).detach())
                 worlds = new_worlds
 
-                league.update(agent, transition)
+                league.update(agent, worlds.seats, transition)
 
                 log.info('actor stepped')
 

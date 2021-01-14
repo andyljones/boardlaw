@@ -120,7 +120,7 @@ class Stable:
         self.step = 0
 
     def update_stats(self, league_eval, league_seat, transition):
-        rewards = transition.rewards.gather(1, league_seat[:, None]).squeeze(-1).cpu().numpy()
+        rewards = transition.rewards.gather(1, league_seat[:, None].long()).squeeze(-1).cpu().numpy()
         for n, s in zip(league_eval.names, league_eval.slices):
             i = self.names.index(n)
             self.wins[i] += (rewards[s] == 1).sum()
@@ -178,7 +178,7 @@ class League:
 
     def __init__(self, agentfunc, n_envs, 
             n_fielded=4, n_stabled=1024, prime_frac=3/4, 
-            stable_interval=10, device='cuda'):
+            stable_interval=100, device='cuda'):
 
         self.n_envs = n_envs
         self.n_opponents = n_fielded
