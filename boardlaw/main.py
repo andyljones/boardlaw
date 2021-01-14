@@ -149,13 +149,13 @@ def half(x):
 def run(device='cuda'):
     buffer_length = 16 
     batch_size = 32*1024
-    n_envs = 8*1024
+    n_envs = 16*1024
     buffer_inc = batch_size//n_envs
 
     worlds = worldfunc(n_envs, device=device)
     worlds = mix(worlds)
     agent = agentfunc(device)
-    opt = torch.optim.Adam(agent.evaluator.parameters(), lr=1e-2, amsgrad=True)
+    opt = torch.optim.Adam(agent.evaluator.parameters(), lr=3e-4, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
     league = leagues.SimpleLeague(agentfunc, worlds.n_envs, device=worlds.device)
     scaler = torch.cuda.amp.GradScaler()
@@ -181,7 +181,7 @@ def run(device='cuda'):
                     worlds=worlds,
                     decisions=decisions.half(),
                     transitions=half(transition),
-                    is_prime=league.is_prime).detach())
+                    is_prime=league._is_prime).detach())
                 worlds = new_worlds
 
                 league.update(agent, transition)
