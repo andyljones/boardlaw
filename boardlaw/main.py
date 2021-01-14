@@ -66,16 +66,16 @@ def rel_entropy(logits, valid):
 
 def optimize(network, scaler, opt, batch):
     w, d0, t = batch.worlds, batch.decisions, batch.transitions
-    mask = batch.is_prime
+    # mask = batch.is_prime
 
     # with torch.cuda.amp.autocast():
     d = network(w)
 
     zeros = torch.zeros_like(d.logits)
-    policy_loss = -(d0.logits.float().exp()*d.logits).where(w.valid, zeros).sum(axis=-1)[mask].mean()
+    policy_loss = -(d0.logits.float().exp()*d.logits).where(w.valid, zeros).sum(axis=-1).mean()
 
     target_value = batch.reward_to_go
-    value_loss = (target_value - d.v).square()[mask].mean()
+    value_loss = (target_value - d.v).square().mean()
     
     loss = policy_loss + value_loss 
 
@@ -157,12 +157,12 @@ def run(device='cuda'):
     agent = agentfunc(device)
     opt = torch.optim.Adam(agent.network.parameters(), lr=1e-2, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
-    league = leagues.League(agentfunc, worlds.n_envs, device=worlds.device)
+    # league = leagues.League(agentfunc, worlds.n_envs, device=worlds.device, n_fielded=0)
     scaler = torch.cuda.amp.GradScaler()
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('7x7-validation', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('7x7-no-league', boardsize=worlds.boardsize, parent=parent)
 
     archive.archive(run)
 
@@ -181,10 +181,11 @@ def run(device='cuda'):
                     worlds=worlds,
                     decisions=decisions.half(),
                     transitions=half(transition),
-                    is_prime=league.is_prime).detach())
+                    # is_prime=league.is_prime
+                    ).detach())
                 worlds = new_worlds
 
-                league.update(agent, worlds.seats, transition)
+                # league.update(agent, worlds.seats, transition)
 
                 log.info('actor stepped')
 
