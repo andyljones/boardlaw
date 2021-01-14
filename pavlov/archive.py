@@ -8,7 +8,7 @@ log = getLogger(__name__)
 
 def archive(run=-1):
     with NamedTemporaryFile() as f:
-        # Ignores .gitignore automagically, and doesn't depend on a git repo existing
+        # ag ignores .gitignore automagically, and doesn't depend on a git repo existing
         # so that we can use it on remote machines we've rsync'd to. Hooray!
         try:
             # /dev/null fixes this bug: https://github.com/ggreer/the_silver_searcher/issues/943#issuecomment-426096765

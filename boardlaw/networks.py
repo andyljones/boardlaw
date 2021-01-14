@@ -63,7 +63,7 @@ class GlobalContext(nn.Module):
 
 class ConvContextModel(nn.Module):
 
-    def __init__(self, obs_space, action_space, width=16, depth=8):
+    def __init__(self, obs_space, action_space, width=64, depth=8):
         super().__init__()
         boardsize = obs_space.dim[-2]
 

@@ -148,21 +148,21 @@ def half(x):
 
 def run(device='cuda'):
     buffer_length = 16 
-    batch_size = 32*1024
+    batch_size = 16*1024
     n_envs = 16*1024
     buffer_inc = batch_size//n_envs
 
     worlds = worldfunc(n_envs, device=device)
     worlds = mix(worlds)
     agent = agentfunc(device)
-    opt = torch.optim.Adam(agent.network.parameters(), lr=3e-4, amsgrad=True)
+    opt = torch.optim.Adam(agent.network.parameters(), lr=1e-2, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
     # league = leagues.League(agentfunc, worlds.n_envs, device=worlds.device, n_fielded=0)
     scaler = torch.cuda.amp.GradScaler()
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('7x7-no-league', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('7x7-conv', boardsize=worlds.boardsize, parent=parent)
 
     archive.archive(run)
 
