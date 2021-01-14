@@ -116,7 +116,7 @@ def optimize(network, scaler, opt, batch):
         return value_loss > 2
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=7, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=9, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
@@ -160,7 +160,7 @@ def run(device='cuda'):
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('7x7-baseline', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('9x9-baseline', boardsize=worlds.boardsize, parent=parent)
 
     archive.archive(run)
 
