@@ -77,7 +77,7 @@ class LeagueEvaluator(nn.Module):
         self.evaluator.load_state_dict(sd)
 
 
-class SimpleLeague:
+class League:
 
     def __init__(self, agentfunc, n_envs, n_opponents=4, n_stabled=16, prime_frac=3/4, stable_interval=600, device='cuda'):
         self.n_envs = n_envs
@@ -191,7 +191,7 @@ class MockAgent:
 def demo():
     worlds = MockWorlds(dummy=torch.zeros((128,)))
 
-    league = SimpleLeague(MockAgent, worlds.n_envs, stable_interval=8)
+    league = League(MockAgent, worlds.n_envs, stable_interval=8)
 
     agent = MockAgent(0)
     evaluator = agent.evaluator

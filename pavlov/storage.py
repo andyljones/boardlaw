@@ -11,13 +11,14 @@ NAMED = 'storage.named.{name}.pkl'
 def collapse(state_dict, depth=np.inf):
     if depth == 0:
         return state_dict
-    if not isinstance(state_dict, dict):
-        return state_dict
 
     collapsed = {}
     for prefix, d in state_dict.items():
-        for k, v in d.items():
-            collapsed[f'{prefix}.{k}'] = collapse(v, depth-1)
+        if isinstance(d, dict):
+            for k, v in d.items():
+                collapsed[f'{prefix}.{k}'] = collapse(v, depth-1)
+        else:
+            collapsed[prefix] = d
     return collapsed
 
 def expand(state_dict, depth=np.inf):

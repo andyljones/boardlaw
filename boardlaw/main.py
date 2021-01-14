@@ -157,7 +157,7 @@ def run(device='cuda'):
     agent = agentfunc(device)
     opt = torch.optim.Adam(agent.evaluator.parameters(), lr=3e-4, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
-    league = leagues.SimpleLeague(agentfunc, worlds.n_envs, device=worlds.device)
+    league = leagues.League(agentfunc, worlds.n_envs, device=worlds.device)
     scaler = torch.cuda.amp.GradScaler()
 
     parent = warm_start(agent, opt, '')
