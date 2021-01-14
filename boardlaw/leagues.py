@@ -54,19 +54,18 @@ class LeagueEvaluator(nn.Module):
         split = min([s.start for s in self.slices], default=worlds.n_envs)
 
         parts = []
-        obs, valid, seats = worlds.obs, worlds.valid, worlds.seats
 
         torch.cuda.synchronize()
         with torch.cuda.stream(self.streams[0]):
             s = slice(0, split)
-            parts.append(self.evaluator._forward(obs[s], valid[s], seats[s]))
+            parts.append(self.evaluator(worlds[s]))
 
         if split < worlds.n_envs:
             chunk = (worlds.n_envs - split)//len(self.opponents)
             assert split + chunk*len(self.opponents) == worlds.n_envs
             with torch.cuda.stream(self.streams[1]):
                 for s, opponent in zip(self.slices, self.opponents): 
-                    parts.append(opponent._forward(obs[s], valid[s], seats[s]))
+                    parts.append(opponent(worlds[s]))
 
         torch.cuda.synchronize()
         return arrdict.from_dicts(arrdict.cat(parts))
@@ -80,10 +79,11 @@ class LeagueEvaluator(nn.Module):
 
 class SimpleLeague:
 
-    def __init__(self, agentfunc, n_envs, n_opponents=4, n_stabled=16, prime_frac=3/4, device='cuda'):
+    def __init__(self, agentfunc, n_envs, n_opponents=4, n_stabled=16, prime_frac=3/4, stable_interval=600, device='cuda'):
         self.n_envs = n_envs
         self.n_opponents = n_opponents
         self.n_stabled = n_stabled
+        self.stable_interval = stable_interval
         self.device = device
 
         self.n_games = torch.zeros((n_opponents,), device=device)
@@ -138,7 +138,7 @@ class SimpleLeague:
             self.n_games[i] = 0
 
     def _update_stable(self, evaluator):
-        if self.step % 600 == 0:
+        if self.step % self.stable_interval == 0:
             old = np.random.choice(list(self.stable))
             del self.stable[old]
             self.stable[self.step] = clone(evaluator.state_dict())
@@ -158,3 +158,58 @@ class SimpleLeague:
         self._update_stable(agent.evaluator)
 
         self.step += 1
+
+class MockWorlds(arrdict.arrdict):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.n_envs = len(self.dummy)
+
+class MockEvaluator(nn.Module):
+
+    def __init__(self, skill):
+        super().__init__()
+        self.skill = skill
+
+    def forward(self, worlds):
+        return torch.full_like(worlds.dummy, self.skill)
+
+    def state_dict(self):
+        return self.skill
+
+    def load_state_dict(self, sd):
+        self.skill = sd
+
+class MockAgent:
+
+    def __init__(self, skill=0):
+        self.evaluator = MockEvaluator(skill)
+
+    def __call__(self, worlds):
+        return self.evaluator(worlds)
+
+def demo():
+    worlds = MockWorlds(dummy=torch.zeros((128,)))
+
+    league = SimpleLeague(MockAgent, worlds.n_envs, stable_interval=8)
+
+    agent = MockAgent(0)
+    evaluator = agent.evaluator
+
+    results = []
+    for _ in range(400):
+        skills = agent(worlds)
+        transitions = arrdict.arrdict(
+            terminal=torch.rand_like(skills) < .25)
+        league.update(agent, transitions)
+
+        evaluator.skill += 1
+
+        results.append(skills)
+    results = torch.stack(results)
+
+    import matplotlib.pyplot as plt
+    for i in range(88, 128, 8):
+        y = results[1::2, i].cpu()
+        x = np.arange(len(y))
+        plt.scatter(x, y, marker='.')
