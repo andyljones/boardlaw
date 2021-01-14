@@ -116,9 +116,9 @@ def demo_record(run_name=-1):
     analysis.record(world, [agent, mhx], n_reps=1, N=0).notebook()
 
 def demo_rollout():
-    from . import networks, mcts, mohex
+    from . import evaluators, mcts, mohex
     env = hex.Hex.initial(n_envs=4, boardsize=9, device='cuda')
-    network = networks.Network(env.obs_space, env.action_space, D=128).to(env.device)
+    network = evaluators.Evaluators(env.obs_space, env.action_space, D=128).to(env.device)
     agent = mcts.MCTSAgent(env, network, n_nodes=16)
     oppo = mohex.MoHexAgent(env)
 

@@ -18,8 +18,9 @@ import numpy as np
 import torch
 from logging import getLogger
 from torch import nn
+import torch.cuda
 from torch.nn import functional as F
-from copy import deepcopy
+from rebar import arrdict, profiling
 
 log = getLogger(__name__)
 
@@ -32,21 +33,63 @@ def clone(x):
         return x
 
 def assemble(agentfunc, state_dict):
-    new = agentfunc().evaluator.prime
+    new = agentfunc().evaluator
     new.load_state_dict(state_dict)
     return new
 
+class LeagueEvaluator(nn.Module):
+
+    def __init__(self, slices, opponents):
+        super().__init__()
+
+        self.evaluator = None
+
+        self.slices = slices
+        self.opponents = nn.ModuleList(opponents)
+
+        self.streams = [torch.cuda.Stream() for _ in range(2)]
+
+    @profiling.nvtx
+    def forward(self, worlds):
+        split = min([s.start for s in self.slices], default=worlds.n_envs)
+
+        parts = []
+        obs, valid, seats = worlds.obs, worlds.valid, worlds.seats
+
+        torch.cuda.synchronize()
+        with torch.cuda.stream(self.streams[0]):
+            s = slice(0, split)
+            parts.append(self.evaluator(obs[s], valid[s], seats[s]))
+
+        if split < worlds.n_envs:
+            chunk = (worlds.n_envs - split)//len(self.opponents)
+            assert split + chunk*len(self.opponents) == worlds.n_envs
+            with torch.cuda.stream(self.streams[1]):
+                for s, opponent in zip(self.slices, self.opponents): 
+                    parts.append(opponent(obs[s], valid[s], seats[s]))
+
+        torch.cuda.synchronize()
+        return arrdict.from_dicts(arrdict.cat(parts))
+
+    def state_dict(self):
+        return self.evaluator.state_dict()
+
+    def load_state_dict(self, sd):
+        self.evaluator.load_state_dict(sd)
+
+
 class SimpleLeague:
 
-    def __init__(self, agentfunc, evaluator, n_envs, n_opponents=4, n_stabled=16, prime_frac=3/4):
+    def __init__(self, agentfunc, n_envs, n_opponents=4, n_stabled=16, prime_frac=3/4, device='cuda'):
         self.n_envs = n_envs
         self.n_opponents = n_opponents
+        self.n_stabled = n_stabled
+        self.device = device
 
-        [device] = {p.device for p in evaluator.parameters() if isinstance(p, torch.Tensor)}
         self.n_games = torch.zeros((n_opponents,), device=device)
 
         self.step = 0
-        self.stable = {i: evaluator.state_dict() for i in range(n_stabled)}
+        self.stable = {}
 
         prime_frac = 3/4
         if self.n_opponents:
@@ -57,42 +100,61 @@ class SimpleLeague:
             self.n_oppo_envs = 0
         assert self.n_prime_envs + self.n_oppo_envs*self.n_opponents == self.n_envs
 
+        self.stable = {i: agentfunc().evaluator.state_dict() for i in range(self.n_stabled)}
+
         idxs = np.random.choice(list(self.stable), (self.n_opponents,))
         start, chunk = self.n_prime_envs, self.n_oppo_envs
-        evaluator.slices = [slice(start + i*chunk, start + (i+1)*chunk) for i, idx in enumerate(idxs)]
-        evaluator.opponents = nn.ModuleList([assemble(agentfunc, self.stable[idx]) for idx in idxs])
+        self.league_eval = LeagueEvaluator(
+            [slice(start + i*chunk, start + (i+1)*chunk) for i, idx in enumerate(idxs)],
+            [agentfunc().evaluator for idx in idxs])
 
-    def update(self, evaluator, transition):
-        # Toggle the prime-only
-        evaluator.prime_only = not evaluator.prime_only
+        self._update_mask(False)
 
-        # Generate the prime mask
-        is_prime = torch.full((self.n_envs,), True, device=transition.terminal.device)
-        for s in evaluator.slices:
-            is_prime[s] = False
-            
+    def _is_league(self, agent):
+        return agent.evaluator == self.league_eval
+
+    def _update_mask(self, is_league):
+        is_prime = torch.full((self.n_envs,), True, device=self.device)
+        if is_league:
+            for s in self.league_eval.slices:
+                is_prime[s] = False
+        self.prime_mask = is_prime
+
+    def _update_stats(self, transition):
         # Update the games count
-        for i, s in enumerate(evaluator.slices):
+        for i, s in enumerate(self.league_eval.slices):
             self.n_games[i] += transition.terminal[s].sum()
-
+    
+    def _update_opponents(self):
         # Figure out who's been playing too long. Stagger it a bit so they don't all change at once
-        threshold = torch.linspace(1.5, 2.5, self.n_opponents, device=transition.terminal.device).mul(self.n_oppo_envs).int()
+        threshold = torch.linspace(1.5, 2.5, self.n_opponents, device=self.device).mul(self.n_oppo_envs).int()
         (replace,) = (self.n_games >= threshold).nonzero(as_tuple=True)
         # Swap out any over the limit
         for i in replace:
             new = np.random.choice(list(self.stable))
-            evaluator.opponents[i].load_state_dict(self.stable[new])
+            self.league_eval.opponents[i].load_state_dict(self.stable[new])
             log.info(f'New opponent #{new} is {self.step - new} steps old')
 
             self.n_games[i] = 0
 
-        # Add to the stable
+    def _update_stable(self, evaluator):
         if self.step % 600 == 0:
             old = np.random.choice(list(self.stable))
             del self.stable[old]
             self.stable[self.step] = clone(evaluator.state_dict())
             log.info(f'Network #{self.step} stabled; #{old} removed')
 
-        self.step += 1
+    def update(self, agent, transition):
+        # Toggle whether the network is running only the prime copy, or many.
+        if self._is_league(agent):
+            agent.evaluator = self.league_eval.evaluator
+        else:
+            self.league_eval.evaluator = agent.evaluator
+            agent.evaluator = self.league_eval
 
-        return is_prime
+        self._update_mask(self._is_league(agent))
+        self._update_stats(transition)
+        self._update_opponents()
+        self._update_stable(agent.evaluator)
+
+        self.step += 1

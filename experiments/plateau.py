@@ -36,7 +36,7 @@ def run():
     n_envs = 8
     world = worldfunc(n_envs)
     agent = agentfunc()
-    agent.evaluator = agent.evaluator.prime
+    agent.evaluator = agent.evaluator
     agent.kwargs['n_nodes'] = 512
 
     sd = storage.load_snapshot('*perky-boxes*', 64)
