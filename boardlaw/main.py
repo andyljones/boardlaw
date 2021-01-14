@@ -181,7 +181,7 @@ def run(device='cuda'):
                     worlds=worlds,
                     decisions=decisions.half(),
                     transitions=half(transition),
-                    is_prime=league._is_prime).detach())
+                    is_prime=league.is_prime).detach())
                 worlds = new_worlds
 
                 league.update(agent, transition)

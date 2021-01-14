@@ -59,14 +59,14 @@ class LeagueEvaluator(nn.Module):
         torch.cuda.synchronize()
         with torch.cuda.stream(self.streams[0]):
             s = slice(0, split)
-            parts.append(self.evaluator(obs[s], valid[s], seats[s]))
+            parts.append(self.evaluator._forward(obs[s], valid[s], seats[s]))
 
         if split < worlds.n_envs:
             chunk = (worlds.n_envs - split)//len(self.opponents)
             assert split + chunk*len(self.opponents) == worlds.n_envs
             with torch.cuda.stream(self.streams[1]):
                 for s, opponent in zip(self.slices, self.opponents): 
-                    parts.append(opponent(obs[s], valid[s], seats[s]))
+                    parts.append(opponent._forward(obs[s], valid[s], seats[s]))
 
         torch.cuda.synchronize()
         return arrdict.from_dicts(arrdict.cat(parts))
@@ -118,7 +118,7 @@ class SimpleLeague:
         if is_league:
             for s in self.league_eval.slices:
                 is_prime[s] = False
-        self.prime_mask = is_prime
+        self.is_prime = is_prime
 
     def _update_stats(self, transition):
         # Update the games count
