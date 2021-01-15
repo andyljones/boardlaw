@@ -122,9 +122,10 @@ class Stable:
     def update_stats(self, league_eval, league_seat, transition):
         rewards = transition.rewards.gather(1, league_seat[:, None].long()).squeeze(-1).cpu().numpy()
         for n, s in zip(league_eval.names, league_eval.slices):
-            i = self.names.index(n)
-            self.wins[i] += (rewards[s] == 1).sum()
-            self.losses[i] += (rewards[s] == -1).sum()
+            if n in self.names:
+                i = self.names.index(n)
+                self.wins[i] += (rewards[s] == 1).sum()
+                self.losses[i] += (rewards[s] == -1).sum()
 
     def update_stable(self, network):
         if self.step % self.stable_interval == 0:
@@ -177,7 +178,7 @@ class Field:
 class League:
 
     def __init__(self, agentfunc, n_envs, 
-            n_fielded=4, n_stabled=1024, prime_frac=3/4, 
+            n_fielded=4, n_stabled=10, prime_frac=3/4, 
             stable_interval=100, device='cuda'):
 
         self.n_envs = n_envs
@@ -220,31 +221,45 @@ class League:
 
         self.update_mask(self.is_league(agent))
 
-class MockWorlds(arrdict.namedarrtuple(fields=('seats',))):
+### TESTS ###
+
+class MockWorlds(arrdict.namedarrtuple(fields=('seats', 'cumulator', 'lengths'))):
     """One-step one-seat win (+1)"""
 
     @classmethod
-    def initial(cls, n_envs=1, device='cuda'):
-        return cls(seats=torch.full(n_envs, 0, device=device))
+    def initial(cls, n_envs=1, device='cpu'):
+        return cls(
+            seats=torch.full((n_envs,), 0, device=device),
+            lengths=torch.full((n_envs,), 1, device=device),
+            cumulator=torch.full((n_envs,), 0., device=device))
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if not isinstance(self.envs, torch.Tensor):
+        if not isinstance(self.seats, torch.Tensor):
             return 
 
         self.n_envs = len(self.seats)
         self.device = self.seats.device
         self.n_seats = 2
 
-    def step(self):
-        terminal = torch.rand(self.n_envs, device=self.device) < 1/4
-        rewards = terminal * (2*(torch.rand(self.n_envs, device=self.device) < .5) - 1)
+    def step(self, skills):
+        terminal = self.lengths == 4
+        new_lengths = self.lengths + 1
+        new_lengths[terminal] = 1
+
+        new_cumulator = self.cumulator - 2*(self.seats - .5)*skills
+
+        rates = torch.sigmoid(new_cumulator/4)
+        rewards = terminal * (2*(torch.rand((self.n_envs,),) <= rates) - 1)
+        rewards = torch.stack([rewards, -rewards], -1)
+
+        new_cumulator[terminal] = 0
 
         new_seats = 1 - self.seats
         new_seats[terminal] = 0
 
         trans = arrdict.arrdict(terminal=terminal, rewards=rewards)
-        return type(self)(seats=new_seats), trans
+        return type(self)(seats=new_seats, lengths=new_lengths, cumulator=new_cumulator), trans
 
 class MockNetwork(nn.Module):
 
@@ -253,7 +268,7 @@ class MockNetwork(nn.Module):
         self.skill = skill
 
     def forward(self, worlds):
-        return torch.full_like(worlds.dummy, self.skill)
+        return torch.full_like(worlds.seats, self.skill)
 
     def state_dict(self):
         return self.skill
@@ -270,7 +285,7 @@ class MockAgent:
         return self.network(worlds)
 
 def demo():
-    worlds = MockWorlds(dummy=torch.zeros((128,)))
+    worlds = MockWorlds.initial(128)
 
     league = League(MockAgent, worlds.n_envs, stable_interval=8)
 
@@ -278,25 +293,27 @@ def demo():
     network = agent.network
 
     results = []
-    for _ in range(400):
+    for t in range(1000):
         skills = agent(worlds)
-        terminal = torch.rand_like(skills) < .25
-        rewards = terminal * (2*(torch.rand_like(skills) < .5).float() - 1)
-        rewards = torch.stack([rewards, -rewards], -1)
-        
-        transitions = arrdict.arrdict(
-            terminal=terminal,
-            rewards=rewards)
+        worlds, transitions = worlds.step(skills)
         league.update(agent, worlds.seats, transitions)
 
-        network.skill += 1
+        network.skill = t**.5
 
-        results.append(skills)
-    results = torch.stack(results)
+        names = np.zeros(worlds.n_envs)
+        for n, s in zip(league.league_eval.names, league.league_eval.slices):
+            names[s] = n
+        results.append(names)
 
+    results = np.stack(results)
+
+    return league, results
+
+def plot_results(results):
     import matplotlib.pyplot as plt
     for i in range(88, 128, 8):
         y = results[1::2, i].cpu()
         x = np.arange(len(y))
         plt.scatter(x, y, marker='.')
+
 

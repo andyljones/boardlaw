@@ -64,7 +64,7 @@ def rel_entropy(logits, valid):
     probs = logits.exp().where(valid, zeros)
     return (-(logits*probs).sum(-1).mean(), torch.log(valid.sum(-1).float()).mean())
 
-def optimize(network, scaler, opt, batch):
+def optimize(network, scaler, opt, batch, entropy=.01):
     w, d0, t = batch.worlds, batch.decisions, batch.transitions
     # mask = batch.is_prime
 
@@ -76,8 +76,10 @@ def optimize(network, scaler, opt, batch):
 
         target_value = batch.reward_to_go
         value_loss = (target_value - d.v).square().mean()
+
+        entropy_loss = d.logits.where(w.valid, zeros).sum(axis=-1).mean()
         
-        loss = policy_loss + value_loss 
+        loss = policy_loss + value_loss + entropy*entropy_loss
 
     old = torch.cat([p.flatten() for p in network.parameters()])
 
@@ -160,7 +162,7 @@ def run(device='cuda'):
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('7x7-fast', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('7x7-entropy', boardsize=worlds.boardsize, parent=parent)
 
     archive.archive(run)
 

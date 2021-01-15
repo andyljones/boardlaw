@@ -25,7 +25,7 @@ def dirichlet_noise(logits, valid, eps, alpha=None):
 
 class MCTS:
 
-    def __init__(self, world, n_nodes, noise_eps, c_puct=2.5):
+    def __init__(self, world, n_nodes, c_puct=2.5):
         """
         c_puct high: concentrates on prior
         c_puct low: concentrates on value
@@ -34,7 +34,6 @@ class MCTS:
         self.n_envs = world.n_envs
         self.n_nodes = n_nodes
         self.n_seats = world.n_seats
-        self.noise_eps = noise_eps
         assert n_nodes > 1, 'MCTS requires at least two nodes'
 
         self.envs = torch.arange(world.n_envs, device=self.device)
@@ -70,7 +69,7 @@ class MCTS:
         world = self.worlds[:, 0]
         with torch.no_grad():
             decisions = network(world)
-        self.decisions.logits[:, self.sim] = dirichlet_noise(decisions.logits, world.valid, self.noise_eps)
+        self.decisions.logits[:, self.sim] = decisions.logits
         self.decisions.v[:, 0] = decisions.v
 
         self.sim += 1
@@ -201,15 +200,13 @@ def mcts(worlds, network, **kwargs):
 
 class MCTSAgent:
 
-    def __init__(self, network, noise_eps=.05, **kwargs):
+    def __init__(self, network, **kwargs):
         self.network = network
         self.kwargs = kwargs
-        self.noise_eps = noise_eps
 
     @profiling.nvtx
     def __call__(self, world, value=True, eval=False, **kwargs):
-        noise_eps = 0. if eval else self.noise_eps 
-        m = mcts(world, self.network, noise_eps=noise_eps, **{**self.kwargs, **kwargs})
+        m = mcts(world, self.network, **{**self.kwargs, **kwargs})
         r = m.root()
 
         # Need to go back to float here because `sample` doesn't like halves
@@ -229,10 +226,9 @@ class MCTSAgent:
         kwargs = {k[7:]: v for k, v in sd.items() if k.startswith('kwargs.')}
         self.network.load_state_dict(network)
         self.kwargs.update(kwargs)
-        self.noise_eps = sd['noise_eps']
 
     def state_dict(self):
         network = {f'network.{k}': v for k, v in self.network.state_dict().items()}
         kwargs = {f'kwargs.{k}': v for k, v in self.kwargs.items()}
-        return {**network, **kwargs, 'noise_eps': self.noise_eps}
+        return {**network, **kwargs}
 
