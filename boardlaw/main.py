@@ -58,8 +58,8 @@ def to_chunk(buffer, buffer_inc):
 
     return chunk, buffer
 
-def rel_entropy(logits, valid):
-    valid = valid & (logits > -np.inf)
+def rel_entropy(logits):
+    valid = (logits > -np.inf)
     zeros = torch.zeros_like(logits)
     logits = logits.where(valid, zeros)
     probs = logits.exp().where(valid, zeros)
@@ -69,33 +69,28 @@ def optimize(network, scaler, opt, batch, entropy_bonus=0.01):
     w, d0, t = batch.worlds, batch.decisions, batch.transitions
     # mask = batch.is_prime
 
-    # with torch.cuda.amp.autocast():
-    d = network(w)
+    with torch.cuda.amp.autocast():
+        d = network(w)
 
-    zeros = torch.zeros_like(d.logits)
-    l = d.logits.where(d.logits > -np.inf, zeros)
-    l0 = d0.logits.float().where(d0.logits > -np.inf, zeros)
+        zeros = torch.zeros_like(d.logits)
+        l = d.logits.where(d.logits > -np.inf, zeros)
+        l0 = d0.logits.float().where(d0.logits > -np.inf, zeros)
 
-    policy_loss = -(l0.exp()*l).sum(axis=-1).mean()
+        policy_loss = -(l0.exp()*l).sum(axis=-1).mean()
 
-    target_value = batch.reward_to_go
-    value_loss = (target_value - d.v).square().mean()
+        target_value = batch.reward_to_go
+        value_loss = (target_value - d.v).square().mean()
 
-    entropy = -(l.exp()*l).sum(axis=-1).mean()
+        entropy = -(l.exp()*l).sum(axis=-1).mean()
 
     loss = policy_loss + value_loss - entropy*entropy_bonus
 
     old = torch.cat([p.flatten() for p in network.parameters()])
 
     opt.zero_grad()
-    # scaler.scale(loss).backward()
-    # scaler.step(opt)
-    # scaler.update()
-    loss.backward()
-    grads = torch.cat([p.grad.flatten() for p in network.parameters() if p.grad is not None]) 
-    if torch.isnan(grads).any():
-        breakpoint()
-    opt.step()
+    scaler.scale(loss).backward()
+    scaler.step(opt)
+    scaler.update()
 
     new = torch.cat([p.flatten() for p in network.parameters()])
 
@@ -110,8 +105,8 @@ def optimize(network, scaler, opt, batch, entropy_bonus=0.01):
         stats.mean('progress.kl-div.prior', (l0 - l).mul(l0.exp()).sum(-1).mean())
         stats.mean('progress.kl-div.target', (p0 - l).mul(p0.exp()).sum(-1).mean())
 
-        stats.mean('rel-entropy.policy', *rel_entropy(d.logits, w.valid)) 
-        stats.mean('rel-entropy.targets', *rel_entropy(d0.logits, w.valid))
+        stats.mean('rel-entropy.policy', *rel_entropy(d.logits)) 
+        stats.mean('rel-entropy.targets', *rel_entropy(d0.logits))
 
         stats.mean('v.target.mean', target_value.mean())
         stats.mean('v.target.std', target_value.std())
