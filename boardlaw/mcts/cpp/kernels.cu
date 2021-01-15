@@ -83,7 +83,7 @@ __device__ Policy policy(MCTSPTA m, H3D::PTA q, int t) {
             p.pi[a] = expf(m.logits[b][t][a]);
             N += m.n[b][child];
         } else {
-            p.q[a] = 0.f;
+            p.q[a] = 1.f;
             p.pi[a] = expf(m.logits[b][t][a]);
             N += 1;
         }
