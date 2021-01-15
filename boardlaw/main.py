@@ -64,29 +64,31 @@ def rel_entropy(logits, valid):
     probs = logits.exp().where(valid, zeros)
     return (-(logits*probs).sum(-1).mean(), torch.log(valid.sum(-1).float()).mean())
 
-def optimize(network, scaler, opt, batch, entropy_bonus=0.):
+def optimize(network, scaler, opt, batch, entropy_bonus=0.01):
     w, d0, t = batch.worlds, batch.decisions, batch.transitions
     # mask = batch.is_prime
 
-    with torch.cuda.amp.autocast():
-        d = network(w)
+    # with torch.cuda.amp.autocast():
+    d = network(w)
 
-        zeros = torch.zeros_like(d.logits)
-        policy_loss = -(d0.logits.float().exp()*d.logits).where(w.valid, zeros).sum(axis=-1).mean()
+    zeros = torch.zeros_like(d.logits)
+    policy_loss = -(d0.logits.float().exp()*d.logits).where(w.valid, zeros).sum(axis=-1).mean()
 
-        target_value = batch.reward_to_go
-        value_loss = (target_value - d.v).square().mean()
+    target_value = batch.reward_to_go
+    value_loss = (target_value - d.v).square().mean()
 
-        entropy = -(d.logits.exp()*d.logits).where(w.valid, zeros).sum(axis=-1).mean()
-        
-        loss = policy_loss + value_loss
+    entropy = -(d.logits.exp()*d.logits).where(w.valid, zeros).sum(axis=-1).mean()
+    
+    loss = policy_loss + value_loss
 
     old = torch.cat([p.flatten() for p in network.parameters()])
 
     opt.zero_grad()
-    scaler.scale(loss).backward()
-    scaler.step(opt)
-    scaler.update()
+    # scaler.scale(loss).backward()
+    # scaler.step(opt)
+    # scaler.update()
+    loss.backward()
+    opt.step()
 
     new = torch.cat([p.flatten() for p in network.parameters()])
 
