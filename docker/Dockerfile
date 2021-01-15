@@ -45,9 +45,10 @@ RUN git config --global user.name "Andrew Jones" && \
 
 # Install the Python packages I usually use
 # Install Jupyter 7.5 because 7.6.1 has a bunch of lag with autoreload 
+RUN pip install torch==1.7.1+cu110 torchvision==0.8.2+cu110 torchaudio===0.7.2 -f https://download.pytorch.org/whl/torch_stable.html
 RUN pip install  \
         # Core reqs
-        numpy torch torchvision tqdm matplotlib beautifulsoup4 psutil ninja pytest b2sdk sympy portalocker fabric patchwork \ 
+        numpy torchvision tqdm matplotlib beautifulsoup4 psutil ninja pytest b2sdk sympy portalocker fabric patchwork \ 
         # Things I find useful
         pandas jupyter seaborn bokeh setproctitle wurlitzer ipython av flake8 gitpython networkx \ 
         # Docs

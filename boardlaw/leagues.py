@@ -220,12 +220,31 @@ class League:
 
         self.update_mask(self.is_league(agent))
 
-class MockWorlds(arrdict.arrdict):
+class MockWorlds(arrdict.namedarrtuple(fields=('seats',))):
+    """One-step one-seat win (+1)"""
+
+    @classmethod
+    def initial(cls, n_envs=1, device='cuda'):
+        return cls(seats=torch.full(n_envs, 0, device=device))
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.n_envs = len(self.dummy)
-        self.seats = torch.zeros_like(self.dummy).long()
+        if not isinstance(self.envs, torch.Tensor):
+            return 
+
+        self.n_envs = len(self.seats)
+        self.device = self.seats.device
+        self.n_seats = 2
+
+    def step(self):
+        terminal = torch.rand(self.n_envs, device=self.device) < 1/4
+        rewards = terminal * (2*(torch.rand(self.n_envs, device=self.device) < .5) - 1)
+
+        new_seats = 1 - self.seats
+        new_seats[terminal] = 0
+
+        trans = arrdict.arrdict(terminal=terminal, rewards=rewards)
+        return type(self)(seats=new_seats), trans
 
 class MockNetwork(nn.Module):
 
