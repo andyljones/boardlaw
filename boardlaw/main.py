@@ -59,6 +59,7 @@ def to_chunk(buffer, buffer_inc):
     return chunk, buffer
 
 def rel_entropy(logits, valid):
+    valid = valid & (logits > -np.inf)
     zeros = torch.zeros_like(logits)
     logits = logits.where(valid, zeros)
     probs = logits.exp().where(valid, zeros)
@@ -72,14 +73,17 @@ def optimize(network, scaler, opt, batch, entropy_bonus=0.01):
     d = network(w)
 
     zeros = torch.zeros_like(d.logits)
-    policy_loss = -(d0.logits.float().exp()*d.logits).where(w.valid, zeros).sum(axis=-1).mean()
+    l = d.logits.where(d.logits > -np.inf, zeros)
+    l0 = d0.logits.float().where(d0.logits > -np.inf, zeros)
+
+    policy_loss = -(l0.exp()*l).sum(axis=-1).mean()
 
     target_value = batch.reward_to_go
     value_loss = (target_value - d.v).square().mean()
 
-    entropy = -(d.logits.exp()*d.logits).where(w.valid, zeros).sum(axis=-1).mean()
-    
-    loss = policy_loss + value_loss
+    entropy = -(l.exp()*l).sum(axis=-1).mean()
+
+    loss = policy_loss + value_loss - entropy*entropy_bonus
 
     old = torch.cat([p.flatten() for p in network.parameters()])
 
@@ -88,6 +92,9 @@ def optimize(network, scaler, opt, batch, entropy_bonus=0.01):
     # scaler.step(opt)
     # scaler.update()
     loss.backward()
+    grads = torch.cat([p.grad.flatten() for p in network.parameters() if p.grad is not None]) 
+    if torch.isnan(grads).any():
+        breakpoint()
     opt.step()
 
     new = torch.cat([p.flatten() for p in network.parameters()])
@@ -98,8 +105,10 @@ def optimize(network, scaler, opt, batch, entropy_bonus=0.01):
         stats.mean('loss.policy', policy_loss)
         stats.mean('loss.entropy', entropy_bonus*entropy)
         stats.mean('progress.resid-var', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
-        stats.mean('progress.kl-div.prior', (d0.logits - d.logits).mul(d0.logits.exp()).where(w.valid, zeros).float().sum(-1).mean())
-        stats.mean('progress.kl-div.target', (d0.prior - d.logits).mul(d0.prior.exp()).where(w.valid, zeros).float().sum(-1).mean())
+
+        p0 = d0.prior.float().where(d0.prior > -np.inf, zeros)
+        stats.mean('progress.kl-div.prior', (l0 - l).mul(l0.exp()).sum(-1).mean())
+        stats.mean('progress.kl-div.target', (p0 - l).mul(p0.exp()).sum(-1).mean())
 
         stats.mean('rel-entropy.policy', *rel_entropy(d.logits, w.valid)) 
         stats.mean('rel-entropy.targets', *rel_entropy(d0.logits, w.valid))
