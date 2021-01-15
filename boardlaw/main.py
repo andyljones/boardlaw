@@ -64,7 +64,7 @@ def rel_entropy(logits, valid):
     probs = logits.exp().where(valid, zeros)
     return (-(logits*probs).sum(-1).mean(), torch.log(valid.sum(-1).float()).mean())
 
-def optimize(network, scaler, opt, batch, entropy=.01):
+def optimize(network, scaler, opt, batch, entropy=.1):
     w, d0, t = batch.worlds, batch.decisions, batch.transitions
     # mask = batch.is_prime
 
@@ -114,8 +114,6 @@ def optimize(network, scaler, opt, batch, entropy=.01):
         stats.mean('opt.lr', np.mean([p['lr'] for p in opt.param_groups]))
         stats.mean('opt.step-std', (new - old).pow(2).mean().pow(.5))
         stats.max('opt.step-max', (new - old).abs().max())
-
-        return value_loss > 2
 
 def worldfunc(n_envs, device='cuda'):
     return hex.Hex.initial(n_envs=n_envs, boardsize=7, device=device)
@@ -190,15 +188,9 @@ def run(device='cuda'):
                 log.info('actor stepped')
 
             chunk, buffer = to_chunk(buffer, buffer_inc)
-            bad = optimize(agent.network, scaler, opt, chunk[next(idxs)])
+            optimize(agent.network, scaler, opt, chunk[next(idxs)])
             sched.step()
-            if bad:
-                sd = storage.state_dicts(agent=agent, opt=opt)
-                sd['worlds'] = arrdict.to_dicts(worlds)
-                sd['chunk'] = arrdict.to_dicts(chunk)
-                storage.named(run, 'bad', sd)
-                raise ValueError()
-
+            
             log.info('learner stepped')
 
             sd = storage.state_dicts(agent=agent, opt=opt)
