@@ -31,18 +31,18 @@ def chunk_stats(chunk, n_new):
         stats.rate('sim-rate', n_sims)
         stats.mean('mcts-n-leaves', d.n_leaves.float().mean())
 
-        rewards = t.rewards.sum(0).sum(0)
-        for i, r in enumerate(rewards):
-            stats.mean(f'reward.seat-{i}', r, n_trajs)
+        wins = (t.rewards == 1).sum(0).sum(0)
+        for i, w in enumerate(wins):
+            stats.mean(f'wins.seat-{i}', w, n_trajs)
 
         d, t = chunk.decisions, chunk.transitions
         v = d.v[t.terminal]
-        r = t.rewards[t.terminal]
-        stats.mean('progress.corr.terminal', ((v - v.mean())*(r - r.mean())).mean()/(v.var()*r.var())**.5)
+        w = t.rewards[t.terminal]
+        stats.mean('progress.corr.terminal', ((v - v.mean())*(w - w.mean())).mean()/(v.var()*w.var())**.5)
 
         v = d.v[:-1][t.terminal[1:]]
-        r = t.rewards[1:][t.terminal[1:]]
-        stats.mean('progress.corr.penultimate', ((v - v.mean())*(r - r.mean())).mean()/(v.var()*r.var())**.5)
+        w = t.rewards[1:][t.terminal[1:]]
+        stats.mean('progress.corr.penultimate', ((v - v.mean())*(w - w.mean())).mean()/(v.var()*w.var())**.5)
 
 def to_chunk(buffer, buffer_inc):
     chunk = arrdict.stack(buffer)
