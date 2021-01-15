@@ -68,25 +68,23 @@ def optimize(network, scaler, opt, batch):
     w, d0, t = batch.worlds, batch.decisions, batch.transitions
     # mask = batch.is_prime
 
-    # with torch.cuda.amp.autocast():
-    d = network(w)
+    with torch.cuda.amp.autocast():
+        d = network(w)
 
-    zeros = torch.zeros_like(d.logits)
-    policy_loss = -(d0.logits.float().exp()*d.logits).where(w.valid, zeros).sum(axis=-1).mean()
+        zeros = torch.zeros_like(d.logits)
+        policy_loss = -(d0.logits.float().exp()*d.logits).where(w.valid, zeros).sum(axis=-1).mean()
 
-    target_value = batch.reward_to_go
-    value_loss = (target_value - d.v).square().mean()
-    
-    loss = policy_loss + value_loss 
+        target_value = batch.reward_to_go
+        value_loss = (target_value - d.v).square().mean()
+        
+        loss = policy_loss + value_loss 
 
     old = torch.cat([p.flatten() for p in network.parameters()])
 
     opt.zero_grad()
-    # scaler.scale(loss).backward()
-    # scaler.step(opt)
-    # scaler.update()
-    loss.backward()
-    opt.step()
+    scaler.scale(loss).backward()
+    scaler.step(opt)
+    scaler.update()
 
     new = torch.cat([p.flatten() for p in network.parameters()])
 
@@ -155,7 +153,7 @@ def run(device='cuda'):
     worlds = worldfunc(n_envs, device=device)
     worlds = mix(worlds)
     agent = agentfunc(device)
-    opt = torch.optim.Adam(agent.network.parameters(), lr=1e-2, amsgrad=True)
+    opt = torch.optim.Adam(agent.network.parameters(), lr=3e-4, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
     # league = leagues.League(agentfunc, worlds.n_envs, device=worlds.device, n_fielded=0)
     scaler = torch.cuda.amp.GradScaler()
