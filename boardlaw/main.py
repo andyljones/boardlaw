@@ -120,7 +120,7 @@ def worldfunc(n_envs, device='cuda'):
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
-    network = networks.ConvContextModel(worlds.obs_space, worlds.action_space).to(worlds.device)
+    network = networks.FCModel(worlds.obs_space, worlds.action_space).to(worlds.device)
     return mcts.MCTSAgent(network, n_nodes=64)
 
 def warm_start(agent, opt, parent):
@@ -153,14 +153,14 @@ def run(device='cuda'):
     worlds = worldfunc(n_envs, device=device)
     worlds = mix(worlds)
     agent = agentfunc(device)
-    opt = torch.optim.Adam(agent.network.parameters(), lr=3e-4, amsgrad=True)
+    opt = torch.optim.Adam(agent.network.parameters(), lr=1e-2, amsgrad=True)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
     # league = leagues.League(agentfunc, worlds.n_envs, device=worlds.device, n_fielded=0)
     scaler = torch.cuda.amp.GradScaler()
 
     parent = warm_start(agent, opt, '')
 
-    run = runs.new_run('7x7-conv', boardsize=worlds.boardsize, parent=parent)
+    run = runs.new_run('7x7-fast', boardsize=worlds.boardsize, parent=parent)
 
     archive.archive(run)
 
