@@ -4,8 +4,8 @@ echo "Setting up SSH server"
 env | egrep -v "^(HOME=|USER=|MAIL=|LC_ALL=|LS_COLORS=|LANG=|HOSTNAME=|PWD=|TERM=|SHLVL=|LANGUAGE=|_=)" >> /etc/environment
 # service ssh start
 
-echo "Launching MPS"
-nvidia-cuda-mps-control -d
+# echo "Launching MPS"
+# nvidia-cuda-mps-control -d
 
 echo "Launching Jupyter"
 mkdir -p output/logs
