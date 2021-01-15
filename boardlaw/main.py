@@ -64,7 +64,7 @@ def rel_entropy(logits, valid):
     probs = logits.exp().where(valid, zeros)
     return (-(logits*probs).sum(-1).mean(), torch.log(valid.sum(-1).float()).mean())
 
-def optimize(network, scaler, opt, batch, entropy=0):
+def optimize(network, scaler, opt, batch, entropy_bonus=0.):
     w, d0, t = batch.worlds, batch.decisions, batch.transitions
     # mask = batch.is_prime
 
@@ -77,9 +77,9 @@ def optimize(network, scaler, opt, batch, entropy=0):
         target_value = batch.reward_to_go
         value_loss = (target_value - d.v).square().mean()
 
-        entropy_loss = -d.logits.where(w.valid, zeros).sum(axis=-1).mean()
+        entropy = -(d.logits.exp()*d.logits).where(w.valid, zeros).sum(axis=-1).mean()
         
-        loss = policy_loss + value_loss + entropy*entropy_loss
+        loss = policy_loss + value_loss
 
     old = torch.cat([p.flatten() for p in network.parameters()])
 
@@ -94,6 +94,7 @@ def optimize(network, scaler, opt, batch, entropy=0):
         #TODO: Contract these all based on late-ness
         stats.mean('loss.value', value_loss)
         stats.mean('loss.policy', policy_loss)
+        stats.mean('loss.entropy', entropy_bonus*entropy)
         stats.mean('progress.resid-var', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
         stats.mean('progress.kl-div.prior', (d0.logits - d.logits).mul(d0.logits.exp()).where(w.valid, zeros).float().sum(-1).mean())
         stats.mean('progress.kl-div.target', (d0.prior - d.logits).mul(d0.prior.exp()).where(w.valid, zeros).float().sum(-1).mean())
