@@ -170,12 +170,13 @@ __global__ void descend_kernel(
                 valid = a;
             }
         }
+        action = (action >= 0)? action : valid;
         parent = t;
         t = m.children[b][t][action];
     }
 
     descent.parents[b] = parent;
-    descent.actions[b] = (action >= 0)? action : valid;
+    descent.actions[b] = action;
 }
 
 __host__ Descent descend(MCTS m) {
