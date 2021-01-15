@@ -69,7 +69,7 @@ class MCTS:
         world = self.worlds[:, 0]
         with torch.no_grad():
             decisions = network(world)
-            assert (decisions.logits > -np.inf).any(-1).all(), 'Some row of logits are all neginf'
+            assert (decisions.logits > -np.inf).any(-1).all(), 'Some row of logits are all neginf or nan'
         self.decisions.logits[:, self.sim] = decisions.logits
         self.decisions.v[:, 0] = decisions.v
 
@@ -126,7 +126,7 @@ class MCTS:
 
         with torch.no_grad(), torch.cuda.amp.autocast():
             decisions = network(world)
-            assert (decisions.logits > -np.inf).any(-1).all(), 'Some row of logits are all neginf'
+            assert (decisions.logits > -np.inf).any(-1).all(), 'Some row of logits are all neginf or nan'
         self.decisions.logits[self.envs, leaves] = decisions.logits.half()
         self.decisions.v[self.envs, leaves] = decisions.v.half()
 
