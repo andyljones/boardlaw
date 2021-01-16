@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from ... import tests, runs
 from .factory import timeseries, arrays
@@ -68,10 +69,11 @@ def mean_std(μ, σ, **kwargs):
     σm = 1/(1/σ**2).resample(**kwargs).mean()**.5
     return pd.concat({'μ': μm, 'σ': σm, 'μ-': μm - 2*σm, 'μ+': μm + 2*σm}, 1)
 
-@timeseries()
+@timeseries(formatters.quantiles)
 def quantiles(qs, **kwargs):
     averages = qs.resample(**kwargs).mean()
-    return averages.mean(1)
+    averages.columns = np.linspace(0, 1, averages.shape[1])
+    return averages
 
 @arrays(plotter=plotters.Line)
 def line(xs, ys, **kwargs):

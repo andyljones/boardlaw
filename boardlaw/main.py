@@ -65,7 +65,7 @@ def rel_entropy(logits):
     probs = logits.exp().where(valid, zeros)
     return (-(logits*probs).sum(-1).mean(), torch.log(valid.sum(-1).float()).mean())
 
-def optimize(network, scaler, opt, batch, entropy_bonus=0.01):
+def optimize(network, scaler, opt, batch, entropy_bonus=0.0):
     mask = batch.is_prime
     w, d0, t = batch.worlds[mask], batch.decisions[mask], batch.transitions[mask]
 
@@ -168,7 +168,7 @@ def run(device='cuda'):
 
     parent = warm_start(agent, opt, '')
 
-    desc = 'trying out UCB league'
+    desc = 'back to dirichlet noise for a test'
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
     archive.archive(run)

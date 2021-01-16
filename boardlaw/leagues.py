@@ -127,10 +127,6 @@ class Stable:
                 self.stable.append(clone(network.state_dict()))
                 self.log(f'Network #{self.step} stabled')
 
-            stats.mean('league.stable.latest', self.step - max(self.names))
-            stats.mean('league.stable.oldest', self.step - min(self.names))
-            
-
         self.step += 1
 
     def distribution(self):
@@ -146,8 +142,8 @@ class Stable:
 
         qs = np.linspace(0, 1, 11)
         order = np.argsort(self.names)
-        cums = np.interp(qs, dist[order].cumsum(), np.array(self.names)[order])
-        stats.quantiles('league-density', list(cums))
+        cums = np.interp(qs, dist[order].cumsum(), self.step - np.array(self.names)[order])
+        stats.quantiles('league-quantiles', list(cums))
 
         i = np.random.choice(np.arange(len(dist)), p=dist)
         return self.names[i], self.stable[i]
@@ -179,8 +175,8 @@ class Field:
                 splitter.field[i].load_state_dict(sd)
                 splitter.names[i] = name
 
-                stats.mean('league.field.latest', stable.step - max(splitter.names))
-                stats.mean('league.field.oldest', stable.step - min(splitter.names))
+                stats.mean('league-field.latest', stable.step - max(splitter.names))
+                stats.mean('league-field.oldest', stable.step - min(splitter.names))
 
                 if self.verbose:
                     log.info(f'New opponent is #{name}')
