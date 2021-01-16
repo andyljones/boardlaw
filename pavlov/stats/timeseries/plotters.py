@@ -6,7 +6,7 @@ from bokeh import io as boi
 from bokeh import layouts as bol
 from bokeh import events as boe
 
-from bokeh.palettes import Category10_10
+from bokeh.palettes import Category10_10, Viridis256
 from itertools import cycle
 
 from pandas.core.series import Series
@@ -253,21 +253,16 @@ class Quantiles:
 
         f = bop.figure(
             x_range=bom.DataRange1d(start=0, follow='end', range_padding=0), 
+            y_range=bom.DataRange1d(start=0),
             tooltips=[('', '$data_y')])
 
         p = registry.parse_prefix(self.reader.prefix)
-        label = dict(legend_label=p.label) if p.label else dict()
         n_bands = aligned.shape[1] - 1
         assert n_bands % 2 == 1
-        for i in range(n_bands//2):
+        for i in range(n_bands):
+            color = Viridis256[255 - 256*i//n_bands]
             lower = aligned.columns[i+1]
-            upper = aligned.columns[-i-1]
-            f.varea(
-                x='_time', y1=f'{lower}', y2=f'{upper}', 
-                alpha=.2, source=self.source)
-        f.line(
-            x='_time', y=aligned.columns[n_bands//2+1], 
-            source=self.source)
+            f.line(x='_time', y=f'{lower}', color=color, source=self.source)
         
 
         default_tools(f)

@@ -70,7 +70,7 @@ class MCTS:
         with torch.no_grad():
             decisions = network(world)
             assert (decisions.logits > -np.inf).any(-1).all(), 'Some row of logits are all neginf or nan'
-        self.decisions.logits[:, self.sim] = dirichlet_noise(decisions.logits, world.valid, .05)
+        self.decisions.logits[:, self.sim] = decisions.logits
         self.decisions.v[:, 0] = decisions.v
 
         self.sim += 1
