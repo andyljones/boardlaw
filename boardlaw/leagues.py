@@ -6,6 +6,7 @@ from torch import nn
 import torch.cuda
 from torch.nn import functional as F
 from rebar import dotdict, arrdict, profiling
+from pavlov import stats
 
 log = getLogger(__name__)
 
@@ -128,6 +129,10 @@ class Stable:
                 self.stable.append(clone(network.state_dict()))
                 self.log(f'Network #{self.step} stabled')
 
+            stats.mean('league.stable.latest', self.step - max(self.names))
+            stats.mean('league.stable.oldest', self.step - min(self.names))
+            
+
         self.step += 1
 
     def distribution(self):
@@ -166,6 +171,9 @@ class Field:
                 splitter.field[i].load_state_dict(sd)
                 splitter.names[i] = name
 
+                stats.mean('league.field.latest', stable.step - max(splitter.names))
+                stats.mean('league.field.oldest', stable.step - min(splitter.names))
+
                 if self.verbose:
                     log.info(f'New opponent is #{name}')
 
@@ -174,8 +182,8 @@ class Field:
 class League:
 
     def __init__(self, agent, agentfunc, n_envs, 
-            n_fielded=4, n_stabled=16, prime_frac=3/4, 
-            stable_interval=100, device='cuda', verbose=True):
+            n_fielded=4, n_stabled=128, prime_frac=3/4, 
+            stable_interval=32, device='cuda', verbose=True):
 
         self.n_envs = n_envs
         self.n_opponents = n_fielded

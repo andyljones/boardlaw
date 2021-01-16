@@ -65,9 +65,9 @@ def rel_entropy(logits):
     probs = logits.exp().where(valid, zeros)
     return (-(logits*probs).sum(-1).mean(), torch.log(valid.sum(-1).float()).mean())
 
-def optimize(network, scaler, opt, batch, entropy_bonus=0.05):
-    w, d0, t = batch.worlds, batch.decisions, batch.transitions
-    # mask = batch.is_prime
+def optimize(network, scaler, opt, batch, entropy_bonus=0.01):
+    mask = batch.is_prime
+    w, d0, t = batch.worlds[mask], batch.decisions[mask], batch.transitions[mask]
 
     with torch.cuda.amp.autocast():
         d = network(w)
@@ -78,7 +78,7 @@ def optimize(network, scaler, opt, batch, entropy_bonus=0.05):
 
         policy_loss = -(l0.exp()*l).sum(axis=-1).mean()
 
-        target_value = batch.reward_to_go
+        target_value = batch.reward_to_go[mask]
         value_loss = (target_value - d.v).square().mean()
 
         entropy = -(l.exp()*l).sum(axis=-1).mean()
@@ -160,10 +160,11 @@ def run(device='cuda'):
     worlds = worldfunc(n_envs, device=device)
     worlds = mix(worlds)
     agent = agentfunc(device)
-    opt = torch.optim.Adam(agent.network.parameters(), lr=1e-2, amsgrad=True)
-    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
-    # league = leagues.League(agentfunc, worlds.n_envs, device=worlds.device, n_fielded=0)
+    network = agent.network
+    opt = torch.optim.Adam(network.parameters(), lr=1e-2, amsgrad=True)
     scaler = torch.cuda.amp.GradScaler()
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
+    league = leagues.League(agent, agentfunc, worlds.n_envs, device=worlds.device)
 
     parent = warm_start(agent, opt, '')
 
@@ -183,20 +184,20 @@ def run(device='cuda'):
                     decisions = agent(worlds, value=True)
                 new_worlds, transition = worlds.step(decisions.actions)
 
+                league.update(agent, worlds.seats, transition)
+
                 buffer.append(arrdict.arrdict(
                     worlds=worlds,
                     decisions=decisions.half(),
                     transitions=half(transition),
-                    # is_prime=league.is_prime
-                    ).detach())
-                worlds = new_worlds
+                    is_prime=league.is_prime).detach())
 
-                # league.update(agent, worlds.seats, transition)
+                worlds = new_worlds
 
                 log.info('actor stepped')
 
             chunk, buffer = to_chunk(buffer, buffer_inc)
-            optimize(agent.network, scaler, opt, chunk[next(idxs)])
+            optimize(network, scaler, opt, chunk[next(idxs)])
             sched.step()
             
             log.info('learner stepped')
@@ -204,7 +205,7 @@ def run(device='cuda'):
             sd = storage.state_dicts(agent=agent, opt=opt)
             storage.throttled_latest(run, sd, 60)
             storage.throttled_snapshot(run, sd, 900)
-            storage.throttled_raw(run, 'model', lambda: pickle.dumps(agent.network), 900)
+            storage.throttled_raw(run, 'model', lambda: pickle.dumps(network), 900)
             stats.gpu(worlds.device, 15)
 
 @profiling.profilable

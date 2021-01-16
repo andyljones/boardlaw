@@ -168,6 +168,9 @@ def resuffix(old, new):
     newpath = oldpath.parent / f'{date} {time} {salt} {new}'
     oldpath.rename(newpath)
     
+def describe(run, desc):
+    with update(run) as i:
+        i['description'] = desc
 
 ### Tests
 
