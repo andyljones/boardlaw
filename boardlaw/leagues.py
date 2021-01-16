@@ -114,11 +114,9 @@ class Stable:
                 self.losses[i] += (rewards[s] == -1).sum()
 
     def update_stable(self, network):
-        rates = (self.wins/(self.wins + self.losses))[:len(self.stable)]
-
         if self.step % self.stable_interval == 0:
             if len(self.stable) >= self.n_stabled:
-                old = rates.argmin()
+                old = self.distribution().argmin()
                 self.log(f'Network #{self.step} stabled; #{self.names[old]} removed')
                 self.names[old] = self.step
                 self.stable[old] = clone(network.state_dict())
@@ -136,8 +134,8 @@ class Stable:
         self.step += 1
 
     def distribution(self):
-        rates = (self.wins/(self.wins + self.losses))[:len(self.stable)]
-        return np.exp(rates)/np.exp(rates).sum()
+        qualities = -self.losses[:len(self.stable)]/128
+        return np.exp(qualities)/np.exp(qualities).sum()
 
     def draw(self):
         dist = self.distribution()
