@@ -69,10 +69,10 @@ def mean_std(μ, σ, **kwargs):
     σm = 1/(1/σ**2).resample(**kwargs).mean()**.5
     return pd.concat({'μ': μm, 'σ': σm, 'μ-': μm - 2*σm, 'μ+': μm + 2*σm}, 1)
 
-@timeseries(formatters.quantiles)
+@timeseries(formatters.quantiles, plotters.Quantiles)
 def quantiles(qs, **kwargs):
     averages = qs.resample(**kwargs).mean()
-    averages.columns = np.linspace(0, 1, averages.shape[1])
+    averages.columns = [f'{100*q:.0f}' for q in np.linspace(0, 1, averages.shape[1])]
     return averages
 
 @arrays(plotter=plotters.Line)

@@ -242,6 +242,54 @@ class Confidence:
         new = aligned.iloc[threshold:]
         self.source.stream(new)
 
+class Quantiles:
+
+    def __init__(self, readers, rule):
+        [self.reader] = readers
+        self.rule = rule
+
+        aligned = self.aligned()
+        self.source = bom.ColumnDataSource(aligned)
+
+        f = bop.figure(
+            x_range=bom.DataRange1d(start=0, follow='end', range_padding=0), 
+            tooltips=[('', '$data_y')])
+
+        p = registry.parse_prefix(self.reader.prefix)
+        label = dict(legend_label=p.label) if p.label else dict()
+        n_bands = aligned.shape[1] - 1
+        assert n_bands % 2 == 1
+        for i in range(n_bands//2):
+            lower = aligned.columns[i+1]
+            upper = aligned.columns[-i-1]
+            f.varea(
+                x='_time', y1=f'{lower}', y2=f'{upper}', 
+                alpha=.2, source=self.source)
+        f.line(
+            x='_time', y=aligned.columns[n_bands//2+1], 
+            source=self.source)
+        
+
+        default_tools(f)
+        styling(f)
+        p = registry.parse_prefix(readers[0].prefix)
+        f.title = bom.Title(text=p.group)
+
+        self.figure = f
+
+    def aligned(self):
+        df = self.reader.resample(rule=self.rule)
+        df.index.name = '_time'
+        # Drop the last row since it represents an under-full window.
+        df = df.reset_index().iloc[:-1]
+        return df
+
+    def refresh(self):
+        aligned = self.aligned()
+        threshold = len(self.source.data['_time'])
+        new = aligned.iloc[threshold:]
+        self.source.stream(new)
+
 class Null:
 
     def __init__(self, readers, **kwargs):
