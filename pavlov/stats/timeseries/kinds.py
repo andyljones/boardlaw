@@ -69,7 +69,7 @@ def mean_std(μ, σ, **kwargs):
     return pd.concat({'μ': μm, 'σ': σm, 'μ-': μm - 2*σm, 'μ+': μm + 2*σm}, 1)
 
 @arrays(plotter=plotters.Line)
-def density(xs, ys, **kwargs):
+def line(xs, ys, **kwargs):
     return pd.Series(ys, xs).sort_index()
 
 #TODO:

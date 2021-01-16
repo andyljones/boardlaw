@@ -29,13 +29,12 @@ class Plotter:
     def refresh_groups(self):
         self.readers.refresh()
         reinit = False
-        for prefix, reader in self.readers.items():
+        for prefix in self.readers:
             s = registry.parse_prefix(prefix)
-            key = (type(reader), s.group)
-            if key not in self.groups:
-                self.groups[key] = []
-            if prefix not in self.groups[key]:
-                self.groups[key].append(prefix)
+            if s.group not in self.groups:
+                self.groups[s.group] = []
+            if prefix not in self.groups[s.group]:
+                self.groups[s.group].append(prefix)
                 reinit = True
         return reinit
 
