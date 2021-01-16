@@ -130,10 +130,12 @@ class Stable:
 
         self.step += 1
 
-    def draw(self):
+    def distribution(self):
         rates = (self.wins/(self.wins + self.losses))[:len(self.stable)]
-        dist = np.exp(rates)/np.exp(rates).sum()
+        return np.exp(rates)/np.exp(rates).sum()
 
+    def draw(self):
+        dist = self.distribution()
         i = np.random.choice(np.arange(len(dist)), p=dist)
         return self.names[i], self.stable[i]
 
@@ -259,16 +261,16 @@ class MockNetwork(nn.Module):
 
     def __init__(self, skill):
         super().__init__()
-        self.skill = skill
+        self.register_parameter('skill', nn.Parameter(torch.as_tensor(skill).float()))
 
     def forward(self, worlds):
         return torch.full_like(worlds.seats, self.skill)
 
     def state_dict(self):
-        return self.skill
+        return self.skill.data
 
     def load_state_dict(self, sd):
-        self.skill = sd
+        self.skill[:] = sd
 
 class MockAgent:
 
@@ -307,14 +309,27 @@ def test_world():
 
 def test_stable():
     agent = MockAgent(0)
-    stable = Stable(agent, 2, 1, verbose=False)
+    stable = Stable(agent.network, 2, 1, verbose=False)
+    stable.names = [0, 1]
+    stable.stable = [agent.network.state_dict(), agent.network.state_dict()]
 
-    splitter = Splitter([-1], [slice(0, 1)], [agent])
+    splitter = Splitter([0], [slice(0, 1)], [MockNetwork(sd) for sd in stable.stable[:1]])
 
-    stable.update_stats()
+    league_seat = torch.tensor([0])
+    transition = arrdict.arrdict(terminal=torch.tensor([True]), rewards=torch.tensor([[+1., -1.]]))
+    stable.update_stats(splitter, league_seat, transition)
 
-    pass
+    np.testing.assert_allclose(stable.wins, [2, 1])
 
+    league_seat = torch.tensor([1])
+    transition = arrdict.arrdict(terminal=torch.tensor([True]), rewards=torch.tensor([[-1., +1.]]))
+    stable.update_stats(splitter, league_seat, transition)
+
+    np.testing.assert_allclose(stable.wins, [3, 1])
+    np.testing.assert_allclose(stable.losses, [1, 1])
+
+    draws = np.array([stable.draw()[0] for _ in range(1024)])
+    assert np.mean(draws == 0) > np.mean(draws == 1)
 
 def demo():
     T = 1000
@@ -334,7 +349,7 @@ def demo():
         worlds, transitions = worlds.step(skills)
         league.update(agent, worlds.seats, transitions)
 
-        network.skill = 10. if t < 10 else 1.
+        network.skill[:] = 10. if t < 10 else 1.
 
         for n, s in zip(league.splitter.names, league.splitter.slices):
             fielded[t, n] = s.stop - s.start
