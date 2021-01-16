@@ -83,7 +83,7 @@ def optimize(network, scaler, opt, batch, entropy_bonus=0.02):
 
         entropy = -(l.exp()*l).sum(axis=-1).mean()
 
-    loss = policy_loss + value_loss - entropy_bonus*entropy
+        loss = policy_loss + value_loss
 
     old = torch.cat([p.flatten() for p in network.parameters()])
 
@@ -168,7 +168,7 @@ def run(device='cuda'):
 
     parent = warm_start(agent, opt, '')
 
-    desc = 'back to entropy with the new deep nets'
+    desc = 'oh rats had the is_prime in the wrong place'
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
     archive.archive(run)
@@ -184,13 +184,13 @@ def run(device='cuda'):
                     decisions = agent(worlds, value=True)
                 new_worlds, transition = worlds.step(decisions.actions)
 
-                league.update(agent, worlds.seats, transition)
-
                 buffer.append(arrdict.arrdict(
                     worlds=worlds,
                     decisions=decisions.half(),
                     transitions=half(transition),
                     is_prime=league.is_prime).detach())
+
+                league.update(agent, worlds.seats, transition)
 
                 worlds = new_worlds
 

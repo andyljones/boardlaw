@@ -37,6 +37,8 @@ def compare(rs, *args, fill=False, query='', **kwargs):
 
 def plot(*args, fill=False, skip=None, head=None, **kwargs):
     df = compare(*args, **kwargs)
+    desc = runs.pandas().loc[df.columns, 'description'].fillna('')
+    df.columns = [f'{c}: {desc[c]}' for c in df.columns]
     if fill:
         df = df.ffill().where(df.bfill().notnull())
     ax = df.iloc[skip:head].plot()
