@@ -205,8 +205,7 @@ class Confidence:
         self.readers = readers
         self.rule = rule
 
-        aligned = self.aligned()
-        self.source = bom.ColumnDataSource(aligned)
+        self.source = bom.ColumnDataSource(self.aligned())
 
         f = bop.figure(
             x_range=bom.DataRange1d(start=0, follow='end'), 
@@ -242,3 +241,54 @@ class Confidence:
         threshold = len(self.source.data['_time'])
         new = aligned.iloc[threshold:]
         self.source.stream(new)
+
+class Null:
+
+    def __init__(self, readers, **kwargs):
+        f = bop.figure(
+            tooltips=[('', '$data_y')])
+        p = registry.parse_prefix(readers[0].prefix)
+        f.title = bom.Title(text=p.group)
+        default_tools(f)
+
+        self.figure = f
+
+    def refresh(self):
+        pass
+
+class Line:
+
+    def __init__(self, readers, **kwargs):
+
+        self.readers = readers
+        self.source = bom.ColumnDataSource(self.combined())
+
+        f = bop.figure(
+            tooltips=[('', '$data_y')])
+
+        for reader, color in zip(readers, cycle(Category10_10)):
+            p = registry.parse_prefix(reader.prefix)
+            label = dict(legend_label=p.label) if p.label else dict()
+            f.line(
+                x=f'{reader.prefix}.x', y=f'{reader.prefix}.y', 
+                color=color, source=self.source, **label)
+            f.circle(
+                x=f'{reader.prefix}.x', y=f'{reader.prefix}.y', 
+                color=color, source=self.source, **label)
+
+        f.title = bom.Title(text=p.group)
+        default_tools(f)
+
+        self.figure = f
+
+    def combined(self):
+        combo = []
+        for reader in self.readers:
+            arrs = reader.array()
+            combo.append(pd.DataFrame({
+                f'{reader.prefix}.x': arrs['xs'], 
+                f'{reader.prefix}.y': arrs['ys']}).sort_values(f'{reader.prefix}.x'))
+        return pd.concat(combo, 1)
+
+    def refresh(self):
+        self.source.data = self.combined()

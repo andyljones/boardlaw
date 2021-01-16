@@ -30,7 +30,6 @@ class Writer:
     def __init__(self, run, prefix, **kwargs):
         self._path = files.new_file(run, FILEPATTERN.format(prefix=prefix), **kwargs)
         self._file = None
-        self._next = tests.time()
         
     def _init(self, exemplar):
         self._file = self._path.open('wb', buffering=4096)
@@ -90,7 +89,7 @@ def test_write_read():
     
     run = runs.new_run()
 
-    writer = Writer(run, 'test')
+    writer = Appender(run, 'test')
     writer.write(d)
 
     reader = Reader(run, 'test')

@@ -141,6 +141,9 @@ class Stable:
 
     def draw(self):
         dist = self.distribution()
+
+        stats.density('league.density', np.array(self.names), dist)
+
         i = np.random.choice(np.arange(len(dist)), p=dist)
         return self.names[i], self.stable[i]
 

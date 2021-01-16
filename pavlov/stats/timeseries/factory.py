@@ -4,7 +4,7 @@ import inspect
 import pandas as pd
 from . import plotters, formatters
 from .. import registry
-from ... import numpy, tests, runs
+from ... import numpy, tests, runs, files
 
 KINDS = {}
 
@@ -69,6 +69,54 @@ def timeseries(formatter=formatters.simple, plotter=plotters.Simple):
                 w.write(call)
 
         reader = type(f'{kind}Reader', (TimeseriesReader,), {
+            'resampler': staticmethod(f),
+            'format': staticmethod(formatter), 
+            'plotter': staticmethod(plotter)})
+
+        write.reader = reader
+        KINDS[kind] = write
+
+        return write
+    
+    return factory
+
+class ArrayReader:
+
+    def __init__(self, run, prefix):
+        self.prefix = prefix
+        self._run = run
+        self._path = files.path(run, prefix + '.npz')
+
+    def array(self):
+        #TODO: If this gets slow, do amortized allocation of arrays x2 as big as needed
+        return dict(np.load(self._path))
+
+    def ready(self):
+        return self._path.exists()
+
+def arrays(formatter=formatters.null, plotter=plotters.Null):
+
+    def factory(f):
+        kind = f.__name__
+
+        def write(channel, *args, **kwargs):
+            args = tuple(clean(a) for a in args)
+            kwargs = {k: clean(v) for k, v in kwargs.items()}
+
+            call = inspect.getcallargs(f, *args, **kwargs)
+            del call['kwargs']
+            call = {'_time': tests.datetime64(), **call}
+
+            filename = registry.make_prefix(channel) + '.npz'
+            if registry.run() is not None:
+                path = files.path(registry.run(), filename)
+                if not path.exists():
+                    files.new_file(registry.run(), filename, kind=kind)
+                tmp = path.with_suffix('.tmp.npz')
+                np.savez(tmp, **call)
+                tmp.rename(path)
+
+        reader = type(f'{kind}Reader', (ArrayReader,), {
             'resampler': staticmethod(f),
             'format': staticmethod(formatter), 
             'plotter': staticmethod(plotter)})

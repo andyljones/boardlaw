@@ -41,4 +41,5 @@ def confidence(reader, rule):
         return []
     return [(channel(reader), f'{final.μ:.2f}±{2*final.σ:.2f}')]
 
-
+def null(reader, rule):
+    return []

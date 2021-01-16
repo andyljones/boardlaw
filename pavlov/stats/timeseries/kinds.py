@@ -1,6 +1,6 @@
 import pandas as pd
 from ... import tests, runs
-from .factory import timeseries
+from .factory import timeseries, arrays
 from . import formatters, plotters
 
 @timeseries()
@@ -68,6 +68,9 @@ def mean_std(μ, σ, **kwargs):
     σm = 1/(1/σ**2).resample(**kwargs).mean()**.5
     return pd.concat({'μ': μm, 'σ': σm, 'μ-': μm - 2*σm, 'μ+': μm + 2*σm}, 1)
 
+@arrays(plotter=plotters.Line)
+def density(xs, ys, **kwargs):
+    return pd.Series(ys, xs).sort_index()
 
 #TODO:
 # * log_cumsum

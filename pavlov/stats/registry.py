@@ -18,7 +18,8 @@ T.RUN = None
 # prefix: stats.channel
 # filename: prefix.3.npr
 PREFIX = r'(?P<origin>.*?)\.(?P<channel>.*)'
-FILENAME = r'(?P<prefix>.*)\.(?P<idx>.*)\.(?P<ext>.*)'
+INDEXED_FILENAME = r'(?P<prefix>.*)\.(?P<idx>\d+)\.(?P<ext>.*)'
+FILENAME = r'(?P<prefix>.*)\.(?P<ext>.*)'
 
 @contextmanager
 def to_run(run):
@@ -61,7 +62,10 @@ def parse_prefix(prefix):
     return aljpy.dotdict(**p, **parse_channel(p['channel']))
 
 def parse_filename(filename):
-    p = re.fullmatch(FILENAME, filename).groupdict()
+    p = re.fullmatch(INDEXED_FILENAME, filename)
+    if not p:
+        p = re.fullmatch(FILENAME, filename)
+    p = p.groupdict()
     return aljpy.dotdict(**p, **parse_prefix(p['prefix']))
 
 class StatsReaders:
@@ -93,10 +97,10 @@ class StatsReaders:
 def reader(run, channel):
     #TODO: This won't generalise!
     prefix = make_prefix(channel)
-    exemplar = f'{prefix}.0.npr'
-    if not files.exists(run, exemplar):
+    exemplars = [f for f in runs.info(run)['_files'] if f.startswith(prefix)]
+    if not exemplars:
         raise IOError(f'Run "{run}" has no "{channel}" files')
-    kind = files.info(run, exemplar)['kind']
+    kind = files.info(run, exemplars[0])['kind']
     reader = KINDS[kind].reader(run, prefix)
     return reader
 
