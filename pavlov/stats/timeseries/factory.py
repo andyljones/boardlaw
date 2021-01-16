@@ -9,13 +9,29 @@ from ... import numpy, tests, runs, files
 KINDS = {}
 
 def clean(x):
+    if isinstance(x, dict):
+        return {k: clean(v) for k, v in x.items()}
+    if isinstance(x, (tuple, list)):
+        return type(x)(clean(v) for v in x)
     if isinstance(x, torch.Tensor):
         x = x.detach().cpu().numpy()
     if isinstance(x, np.ndarray) and x.ndim == 0:
         x = x.item()
-    if isinstance(x, dict):
-        return {k: clean(v) for k, v in x.items()}
     return x
+
+def _collapse(x, prefix=''):
+    if isinstance(x, dict):
+        for k, v in x.items():
+            assert '.' not in k, 'Can\'t have periods in the key'
+            assert isinstance(k, str), 'Key must be a string'
+            yield from _collapse(v, f'{prefix}{k}.')
+    elif isinstance(x, (tuple, list)):
+        yield from [(f'{prefix}{i}', v) for i, v in enumerate(x)]
+    else:
+        yield prefix[:-1], x
+
+def collapse(x):
+    return dict(_collapse(x))
 
 class TimeseriesReader:
 
@@ -39,6 +55,8 @@ class TimeseriesReader:
     def pandas(self):
         arr = self.array()
         df = pd.DataFrame.from_records(arr, index='_time')
+        if df.columns.str.contains(r'\.').any():
+            df.columns = pd.MultiIndex.from_tuples([c.split('.') for c in df.columns])
         df.index = df.index.tz_localize('UTC') - self._created
         return df
 
@@ -46,7 +64,15 @@ class TimeseriesReader:
         raw = self.pandas()
         raw = pd.concat([pd.DataFrame(np.nan, [pd.Timedelta(0)], raw.columns), raw])
         raw.index.name = '_time'
-        return self.resampler(**raw, rule=rule, **kwargs)
+        parts = {k: raw[k] for k in set(raw.columns.get_level_values(0))}
+        resampled = self.resampler(**parts, rule=rule, **kwargs)
+        return resampled
+
+def call_dict(f, *args, **kwargs):
+    call = inspect.getcallargs(f, *clean(args), **clean(kwargs))
+    del call['kwargs']
+    call = collapse(call)
+    return {'_time': tests.datetime64(), **call}
 
 def timeseries(formatter=formatters.simple, plotter=plotters.Simple):
 
@@ -56,13 +82,7 @@ def timeseries(formatter=formatters.simple, plotter=plotters.Simple):
         kind = f.__name__
 
         def write(channel, *args, **kwargs):
-            args = tuple(clean(a) for a in args)
-            kwargs = {k: clean(v) for k, v in kwargs.items()}
-
-            call = inspect.getcallargs(f, *args, **kwargs)
-            del call['kwargs']
-            call = {'_time': tests.datetime64(), **call}
-
+            call = call_dict(f, *args, **kwargs)
             prefix = registry.make_prefix(channel)
             if registry.run() is not None:
                 w = registry.writer(prefix, lambda: numpy.Writer(registry.run(), prefix, kind=kind))
@@ -100,13 +120,7 @@ def arrays(formatter=formatters.null, plotter=plotters.Null):
         kind = f.__name__
 
         def write(channel, *args, **kwargs):
-            args = tuple(clean(a) for a in args)
-            kwargs = {k: clean(v) for k, v in kwargs.items()}
-
-            call = inspect.getcallargs(f, *args, **kwargs)
-            del call['kwargs']
-            call = {'_time': tests.datetime64(), **call}
-
+            call = call_dict(f, *args, **kwargs)
             filename = registry.make_prefix(channel) + '.npz'
             if registry.run() is not None:
                 path = files.path(registry.run(), filename)

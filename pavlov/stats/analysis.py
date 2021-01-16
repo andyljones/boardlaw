@@ -13,7 +13,12 @@ def pandas(run, channel, field=None, rule='60s', **kwargs):
     r = registry.reader(run, channel)
     if not r.ready():
         raise ValueError(f'Reader for "{run}" "{channel}" is not ready')
-    df = r.resample(rule, **kwargs)
+
+    if rule is None:
+        df = r.pandas()
+    else:
+        df = r.resample(rule, **kwargs)
+    
     if field is not None:
         df = df[field]
     return df

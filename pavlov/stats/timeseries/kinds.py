@@ -68,6 +68,11 @@ def mean_std(μ, σ, **kwargs):
     σm = 1/(1/σ**2).resample(**kwargs).mean()**.5
     return pd.concat({'μ': μm, 'σ': σm, 'μ-': μm - 2*σm, 'μ+': μm + 2*σm}, 1)
 
+@timeseries()
+def quantiles(qs, **kwargs):
+    averages = qs.resample(**kwargs).mean()
+    return averages.mean(1)
+
 @arrays(plotter=plotters.Line)
 def line(xs, ys, **kwargs):
     return pd.Series(ys, xs).sort_index()

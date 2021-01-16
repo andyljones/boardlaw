@@ -121,7 +121,7 @@ class Stable:
                 self.names[old] = self.step
                 self.stable[old] = clone(network.state_dict())
                 self.losses[old] = 0
-                self.wins[old] = 1
+                self.wins[old] = 0
             else:
                 self.names.append(self.step)
                 self.stable.append(clone(network.state_dict()))
@@ -134,13 +134,20 @@ class Stable:
         self.step += 1
 
     def distribution(self):
-        qualities = -self.losses[:len(self.stable)]/128
-        return np.exp(qualities)/np.exp(qualities).sum()
+        wins = self.wins[:len(self.stable)] + 1
+        games = (self.wins + self.losses)[:len(self.stable)] + 2
+        μ = wins/games
+        σ = (μ*(1 - μ)/games)**.5
+        ucb = μ + 3*σ
+        return ucb/ucb.sum()
 
     def draw(self):
         dist = self.distribution()
 
-        stats.line('league-density', np.array(self.names), dist)
+        qs = np.linspace(0, 1, 11)
+        order = np.argsort(self.names)
+        cums = np.interp(qs, dist[order].cumsum(), np.array(self.names)[order])
+        stats.quantiles('league-density', list(cums))
 
         i = np.random.choice(np.arange(len(dist)), p=dist)
         return self.names[i], self.stable[i]

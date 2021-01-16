@@ -1,3 +1,4 @@
+import fnmatch
 import numpy as np
 import pandas as pd
 import threading
@@ -70,19 +71,21 @@ def parse_filename(filename):
 
 class StatsReaders:
 
-    def __init__(self, run):
+    def __init__(self, run, channel='*'):
         self._run = run
+        self._channel = channel
         self._pool = {}
         self.refresh()
 
     def refresh(self):
         for filename, info in files.files(self._run).items():
             if files.origin(filename) == 'stats':
-                prefix = parse_filename(filename).prefix
+                parts = parse_filename(filename)
                 kind = info['kind']
-                if (kind in KINDS) and (prefix not in self._pool):
-                    reader = KINDS[kind].reader(self._run, prefix)
-                    self._pool[prefix] = reader
+                match = fnmatch.fnmatch(parts.channel, self._channel)
+                if (kind in KINDS) and match and (parts.prefix not in self._pool):
+                    reader = KINDS[kind].reader(self._run, parts.prefix)
+                    self._pool[parts.prefix] = reader
 
     #TODO: Just inherit from dict, c'mon
     def __getitem__(self, prefix):

@@ -15,9 +15,9 @@ from collections import defaultdict
 
 class Plotter:
 
-    def __init__(self, run=-1, prefix='', rule='60s'):
+    def __init__(self, run=-1, rule='60s', **kwargs):
         self.run = run
-        self.readers = registry.StatsReaders(run)
+        self.readers = registry.StatsReaders(run, **kwargs)
         self.groups = {}
         self.plotters = {}
         self.handle = None
