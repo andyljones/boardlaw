@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from . import registry
-from .. import runs
+from .. import runs, files
 from logging import getLogger
 
 log = getLogger(__name__)
@@ -39,20 +39,19 @@ def plot(*args, fill=False, skip=None, head=None, **kwargs):
     return ax
 
 def purge(minlen=900, cutoff=300):
-    raise ValueError('Make sure this doesn\'t delete snapshot-only runs!')
     from tqdm.auto import tqdm
     for r in tqdm(runs.runs()):
         try:
             start = pd.to_datetime(runs.info(r)['_created'])
-            end = np.datetime64(start.tz_localize(None))
-            #TODO: Just load the first and last line of the file
-            for _, reader in registry.StatsReaders(r).items():
-                end = max(end, reader.array()['_time'].max())
-            end = pd.to_datetime(end).tz_localize('UTC')
+            end = start
+            for f in files.files(r):
+                mtime = pd.Timestamp(files.path(r, f).lstat().st_mtime, unit='s', tz='UTC')
+                end = max(end, mtime)
             length = end - start
             cut = pd.Timestamp.now('UTC') - pd.to_timedelta(cutoff, 's')
             if length.total_seconds() < minlen and end < cut:
                 print(f'Deleting {length.total_seconds():.0f}s run "{r}"')
                 runs.delete(r)
         except Exception as e:
+            raise
             print(f'Checking "{r}" failed with error "{e}"')
