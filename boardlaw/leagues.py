@@ -24,10 +24,10 @@ def assemble(agentfunc, state_dict):
 
 class Splitter(nn.Module):
 
-    def __init__(self, names, slices, field):
+    def __init__(self, agent, names, slices, field):
         super().__init__()
 
-        self.network = None
+        self.network = agent.network
 
         self.names = names
         self.slices = slices
@@ -62,7 +62,7 @@ class Splitter(nn.Module):
     def load_state_dict(self, sd):
         self.network.load_state_dict(sd)
 
-def splitter(stable, agentfunc, n_envs, n_fielded, prime_frac):
+def splitter(stable, agent, agentfunc, n_envs, n_fielded, prime_frac):
 
     if n_fielded:
         n_prime_envs = int(prime_frac*n_envs)
@@ -85,7 +85,7 @@ def splitter(stable, agentfunc, n_envs, n_fielded, prime_frac):
         network.load_state_dict(sd)
         field.append(network)
 
-    return Splitter(names, slices, field)
+    return Splitter(agent, names, slices, field)
 
 class Stable:
 
@@ -96,13 +96,13 @@ class Stable:
         self.stable_interval = stable_interval
         self.verbose = verbose
 
-        self.names = [-1]
+        self.names = [0]
         self.stable = [clone(default.state_dict())]
 
         self.losses = np.full((n_stabled,), 1)
         self.wins = np.full((n_stabled,), 1)
 
-        self.step = 0
+        self.step = 1
 
     def update_stats(self, splitter, league_seat, transition):
         rewards = transition.rewards.gather(1, league_seat[:, None].long()).squeeze(-1).cpu().numpy()
@@ -116,7 +116,7 @@ class Stable:
         rates = (self.wins/(self.wins + self.losses))[:len(self.stable)]
 
         if self.step % self.stable_interval == 0:
-            if len(self.stable) == self.n_stabled:
+            if len(self.stable) >= self.n_stabled:
                 old = rates.argmin()
                 self.log(f'Network #{self.step} stabled; #{self.names[old]} removed')
                 self.names[old] = self.step
@@ -173,7 +173,7 @@ class Field:
 
 class League:
 
-    def __init__(self, agentfunc, n_envs, 
+    def __init__(self, agent, agentfunc, n_envs, 
             n_fielded=4, n_stabled=16, prime_frac=3/4, 
             stable_interval=100, device='cuda', verbose=True):
 
@@ -184,8 +184,8 @@ class League:
         self.device = device
 
         self.stable = Stable(agentfunc().network, n_stabled, stable_interval, verbose=verbose)
-        self.field = Field(n_fielded)
-        self.splitter = splitter(self.stable, agentfunc, n_envs, n_fielded, prime_frac, verbose=verbose)
+        self.field = Field(n_fielded, verbose=verbose)
+        self.splitter = splitter(self.stable, agent, agentfunc, n_envs, n_fielded, prime_frac)
 
         self.update_mask(False)
 
@@ -207,7 +207,6 @@ class League:
             agent.network = self.splitter.network
         else:
             league_seat = 1 - seats
-            self.splitter.network = agent.network
             agent.network = self.splitter
 
         self.stable.update_stats(self.splitter, league_seat, transition)
@@ -261,7 +260,7 @@ class MockNetwork(nn.Module):
 
     def __init__(self, skill):
         super().__init__()
-        self.register_parameter('skill', nn.Parameter(torch.as_tensor(skill).float()))
+        self.register_buffer('skill', torch.as_tensor(skill).float())
 
     def forward(self, worlds):
         return torch.full_like(worlds.seats, self.skill)
@@ -270,7 +269,7 @@ class MockNetwork(nn.Module):
         return self.skill.data
 
     def load_state_dict(self, sd):
-        self.skill[:] = sd
+        self.skill[()] = sd
 
 class MockAgent:
 
@@ -313,7 +312,7 @@ def test_stable():
     stable.names = [0, 1]
     stable.stable = [agent.network.state_dict(), agent.network.state_dict()]
 
-    splitter = Splitter([0], [slice(0, 1)], [MockNetwork(sd) for sd in stable.stable[:1]])
+    splitter = Splitter(agent, [0], [slice(0, 1)], [MockNetwork(sd) for sd in stable.stable[:1]])
 
     league_seat = torch.tensor([0])
     transition = arrdict.arrdict(terminal=torch.tensor([True]), rewards=torch.tensor([[+1., -1.]]))
@@ -332,24 +331,24 @@ def test_stable():
     assert np.mean(draws == 0) > np.mean(draws == 1)
 
 def demo():
-    T = 1000
+    T = 256
     n_env = 128
     n_stabled = 8
     worlds = MockWorlds.initial(n_env)
 
-    league = League(MockAgent, worlds.n_envs, n_stabled=n_stabled, stable_interval=8, verbose=False)
-
     agent = MockAgent(0)
     network = agent.network
+    league = League(agent, MockAgent, worlds.n_envs, n_stabled=n_stabled, stable_interval=8, verbose=False)
 
-    fielded = np.zeros((T, T))
-    stabled = np.zeros((T, T))
-    for t in range(15):
+    fielded = np.zeros((T, T+1))
+    stabled = np.zeros((T, T+1))
+    for t in range(T):
         skills = agent(worlds)
-        worlds, transitions = worlds.step(skills)
+        new_worlds, transitions = worlds.step(skills)
         league.update(agent, worlds.seats, transitions)
+        worlds = new_worlds
 
-        network.skill[:] = 10. if t < 10 else 1.
+        network.skill[()] = 10. if t == 6 else 0.
 
         for n, s in zip(league.splitter.names, league.splitter.slices):
             fielded[t, n] = s.stop - s.start
