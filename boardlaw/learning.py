@@ -49,27 +49,26 @@ def assert_same_shape(ref, *arrs):
     for a in arrs:
         assert ref.shape == a.shape
 
-def present_value(deltas, fallback, reset, alpha):
+def present_value(deltas, fallback, terminal, alpha):
     # reward-to-go, reset: fall back to value
     # reward-to-go, terminal: fall back to delta
     # advantages, reset: fall back to delta
     # advantages, terminal: fall back to delta
-    assert_same_shape(deltas, fallback[:-1], reset[:-1])
+    assert_same_shape(deltas, fallback[:-1], terminal[:-1])
 
     result = torch.full_like(fallback, np.nan)
     result[-1] = fallback[-1]
     for t in np.arange(deltas.size(0))[::-1]:
-        result[t] = torch.where(reset[t], fallback[t], deltas[t] + alpha*result[t+1])
+        result[t] = torch.where(terminal[t], fallback[t], deltas[t] + alpha*result[t+1])
     return result
 
-def reward_to_go(reward, value, reset, terminal, gamma):
+def reward_to_go(reward, value, terminal, gamma=1.):
     # regular: final row is values, prev rows are accumulations of reward
     # next is reset: use value for current
     # next is terminal: use reward for current 
-    assert (reset | ~terminal).all(), 'Some sample is marked as terminal but not reset'
     fallback = value
     fallback[terminal] = reward[terminal]
-    return present_value(reward[:-1], fallback, reset, gamma).detach()
+    return present_value(reward[:-1], fallback, terminal, gamma).detach()
 
 #########
 # TESTS #
@@ -80,19 +79,12 @@ def test_reward_to_go():
     value = torch.tensor([4., 5., 6.])
     gamma = 1.
 
-    reset = torch.tensor([False, False, False])
     terminal = torch.tensor([False, False, False])
-    actual = reward_to_go(reward, value, reset, terminal, gamma)
+    actual = reward_to_go(reward, value, terminal, gamma)
     torch.testing.assert_allclose(actual, torch.tensor([9., 8., 6.]))
 
-    reset = torch.tensor([False, True, False])
-    terminal = torch.tensor([False, False, False])
-    actual = reward_to_go(reward, value, reset, terminal, gamma)
-    torch.testing.assert_allclose(actual, torch.tensor([6., 5., 6.]))
-
-    reset = torch.tensor([False, True, False])
     terminal = torch.tensor([False, True, False])
-    actual = reward_to_go(reward, value, reset, terminal, gamma)
+    actual = reward_to_go(reward, value, terminal, gamma)
     torch.testing.assert_allclose(actual, torch.tensor([3., 2., 6.]))
 
 def test_batch_indices():

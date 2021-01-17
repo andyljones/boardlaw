@@ -44,14 +44,13 @@ def chunk_stats(chunk, n_new):
         w = t.rewards[1:][t.terminal[1:]]
         stats.mean('progress.corr.penultimate', ((v - v.mean())*(w - w.mean())).mean()/(v.var()*w.var())**.5)
 
-def to_chunk(buffer, buffer_inc):
+def as_chunk(buffer, buffer_inc):
     chunk = arrdict.stack(buffer)
     terminal = torch.stack([chunk.transitions.terminal for _ in range(chunk.worlds.n_seats)], -1)
     chunk['reward_to_go'] = learning.reward_to_go(
         chunk.transitions.rewards.float(), 
         chunk.decisions.v.float(), 
-        terminal, 
-        terminal, gamma=1).half()
+        terminal).half()
     chunk_stats(chunk, buffer_inc)
             
     buffer = buffer[buffer_inc:]
@@ -69,17 +68,14 @@ def optimize(network, scaler, opt, batch, entropy_bonus=0.01):
     mask = batch.is_prime
     w, d0, t = batch.worlds[mask], batch.decisions[mask], batch.transitions[mask]
 
-    d1 = mcts.MCTSAgent(network, n_nodes=64)(w)
-
     with torch.cuda.amp.autocast():
         d = network(w)
 
         zeros = torch.zeros_like(d.logits)
         l = d.logits.where(d.logits > -np.inf, zeros)
         l0 = d0.logits.float().where(d0.logits > -np.inf, zeros)
-        l1 = d1.logits.float().where(d1.logits > -np.inf, zeros)
 
-        policy_loss = -(l1.exp()*l).sum(axis=-1).mean()
+        policy_loss = -(l0.exp()*l).sum(axis=-1).mean()
 
         target_value = batch.reward_to_go[mask]
         value_loss = (target_value - d.v).square().mean()
@@ -171,7 +167,7 @@ def run(device='cuda'):
 
     parent = warm_start(agent, opt, '')
 
-    desc = 'refreshed targets'
+    desc = '.01 noise'
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
     archive.archive(run)
@@ -199,7 +195,7 @@ def run(device='cuda'):
 
                 log.info('actor stepped')
 
-            chunk, buffer = to_chunk(buffer, buffer_inc)
+            chunk, buffer = as_chunk(buffer, buffer_inc)
             optimize(network, scaler, opt, chunk[next(idxs)])
             sched.step()
             
