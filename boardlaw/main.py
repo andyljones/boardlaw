@@ -44,16 +44,18 @@ def chunk_stats(chunk, n_new):
         w = t.rewards[1:][t.terminal[1:]]
         stats.mean('progress.corr.penultimate', ((v - v.mean())*(w - w.mean())).mean()/(v.var()*w.var())**.5)
 
-def as_chunk(buffer, buffer_inc):
+def as_chunk(buffer, batch_size):
     chunk = arrdict.stack(buffer)
     terminal = torch.stack([chunk.transitions.terminal for _ in range(chunk.worlds.n_seats)], -1)
     chunk['reward_to_go'] = learning.reward_to_go(
         chunk.transitions.rewards.float(), 
         chunk.decisions.v.float(), 
         terminal).half()
-    chunk_stats(chunk, buffer_inc)
+
+    n_new = batch_size//terminal.size(1)
+    chunk_stats(chunk, n_new)
             
-    buffer = buffer[buffer_inc:]
+    buffer = buffer[n_new:]
 
     return chunk, buffer
 
@@ -151,7 +153,6 @@ def run(device='cuda'):
     buffer_length = 16 
     batch_size = 16*1024
     n_envs = 16*1024
-    buffer_inc = batch_size//n_envs
 
     worlds = mix(worldfunc(n_envs, device=device))
     agent = agentfunc(device)
@@ -195,7 +196,7 @@ def run(device='cuda'):
                 log.info('actor stepped')
 
             # Optimize
-            chunk, buffer = as_chunk(buffer, buffer_inc)
+            chunk, buffer = as_chunk(buffer, batch_size)
             optimize(network, scaler, opt, chunk[next(idxs)])
             sched.step()
             
