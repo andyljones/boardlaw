@@ -1,3 +1,4 @@
+import pickle
 import pandas as pd
 import torch
 import numpy as np
@@ -125,3 +126,10 @@ def throttled_raw(run, name, f, throttle):
 
     if tests.timestamp() > last + pd.Timedelta(throttle, 's'):
         _save_raw(path, f())
+
+def load_raw(run, name):
+    name = NAMED.format(name=name)
+    path = files.path(run, name)
+    if path.exists():
+        return pickle.loads(path.read_bytes())
+    raise IOError(f'Couldn\'t find a file for "{run}" "{name}"')
