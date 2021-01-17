@@ -64,7 +64,7 @@ def rel_entropy(logits):
     probs = logits.exp().where(valid, zeros)
     return (-(logits*probs).sum(-1).mean(), torch.log(valid.sum(-1).float()).mean())
 
-def optimize(network, scaler, opt, batch, entropy_bonus=0.01):
+def optimize(network, scaler, opt, batch):
     mask = batch.is_prime
     w, d0, t = batch.worlds[mask], batch.decisions[mask], batch.transitions[mask]
 
@@ -80,9 +80,7 @@ def optimize(network, scaler, opt, batch, entropy_bonus=0.01):
         target_value = batch.reward_to_go[mask]
         value_loss = (target_value - d.v).square().mean()
 
-        entropy = -(l.exp()*l).sum(axis=-1).mean()
-
-        loss = policy_loss + value_loss - entropy_bonus*entropy
+        loss = policy_loss + value_loss
 
     old = torch.cat([p.flatten() for p in network.parameters()])
 
@@ -97,7 +95,6 @@ def optimize(network, scaler, opt, batch, entropy_bonus=0.01):
         #TODO: Contract these all based on late-ness
         stats.mean('loss.value', value_loss)
         stats.mean('loss.policy', policy_loss)
-        stats.mean('loss.entropy', entropy_bonus*entropy)
         stats.mean('progress.resid-var', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
 
         p0 = d0.prior.float().where(d0.prior > -np.inf, zeros)
@@ -156,18 +153,19 @@ def run(device='cuda'):
     n_envs = 16*1024
     buffer_inc = batch_size//n_envs
 
-    worlds = worldfunc(n_envs, device=device)
-    worlds = mix(worlds)
+    worlds = mix(worldfunc(n_envs, device=device))
     agent = agentfunc(device)
     network = agent.network
+
     opt = torch.optim.Adam(network.parameters(), lr=1e-2, amsgrad=True)
     scaler = torch.cuda.amp.GradScaler()
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
+
     league = leagues.League(agent, agentfunc, worlds.n_envs, device=worlds.device)
 
     parent = warm_start(agent, opt, '')
 
-    desc = '.01 noise'
+    desc = 'back to Dirichlet'
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
     archive.archive(run)
@@ -178,6 +176,7 @@ def run(device='cuda'):
             arena.monitor(run, worldfunc, agentfunc, device=worlds.device):
         while True:
 
+            # Collect experience
             while len(buffer) < buffer_length:
                 with torch.no_grad():
                     decisions = agent(worlds, value=True)
@@ -195,6 +194,7 @@ def run(device='cuda'):
 
                 log.info('actor stepped')
 
+            # Optimize
             chunk, buffer = as_chunk(buffer, buffer_inc)
             optimize(network, scaler, opt, chunk[next(idxs)])
             sched.step()
