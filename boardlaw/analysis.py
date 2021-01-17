@@ -2,6 +2,7 @@ import time
 import numpy as np
 import torch
 from rebar import arrdict, recording
+from pavlov import runs, storage
 from logging import getLogger
 from . import arena
 
@@ -20,7 +21,7 @@ def expand(exemplar, n_envs):
         default = -1
     else:
         raise ValueError('Don\'t have a default for "{exemplar.dtype}"')
-    shape = (n_envs, *exemplar.shape)
+    shape = (n_envs, *exemplar.shape[1:])
     return torch.full(shape, default, dtype=exemplar.dtype, device=exemplar.device)
     
 def combine_decisions(dtrace, mtrace):
@@ -113,6 +114,15 @@ def record_worlds(worlds, N=0):
 def record(world, agents, N=0, **kwargs):
     trace = rollout(world, agents, **kwargs)
     return record_worlds(trace.worlds, N=N)
+
+def rollout_model(run=-1):
+    from boardlaw import mcts, mohex
+    boardsize = runs.info(run)['boardsize']
+    worlds = hex.Hex.initial(n_envs=1, boardsize=boardsize)
+    network = storage.load_raw(run, 'model')
+    agent = mcts.MCTSAgent(network, n_nodes=64)
+    mhx = mohex.MoHexAgent()
+    return rollout(worlds, [agent, mhx], n_reps=1)
 
 def demo(run_name=-1):
     from boardlaw import mohex
