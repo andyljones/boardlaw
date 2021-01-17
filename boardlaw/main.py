@@ -65,9 +65,11 @@ def rel_entropy(logits):
     probs = logits.exp().where(valid, zeros)
     return (-(logits*probs).sum(-1).mean(), torch.log(valid.sum(-1).float()).mean())
 
-def optimize(network, scaler, opt, batch, entropy_bonus=0.05):
+def optimize(network, scaler, opt, batch, entropy_bonus=0.01):
     mask = batch.is_prime
     w, d0, t = batch.worlds[mask], batch.decisions[mask], batch.transitions[mask]
+
+    d1 = mcts.MCTSAgent(network, n_nodes=64)(w)
 
     with torch.cuda.amp.autocast():
         d = network(w)
@@ -75,8 +77,9 @@ def optimize(network, scaler, opt, batch, entropy_bonus=0.05):
         zeros = torch.zeros_like(d.logits)
         l = d.logits.where(d.logits > -np.inf, zeros)
         l0 = d0.logits.float().where(d0.logits > -np.inf, zeros)
+        l1 = d1.logits.float().where(d1.logits > -np.inf, zeros)
 
-        policy_loss = -(l0.exp()*l).sum(axis=-1).mean()
+        policy_loss = -(l1.exp()*l).sum(axis=-1).mean()
 
         target_value = batch.reward_to_go[mask]
         value_loss = (target_value - d.v).square().mean()
@@ -168,7 +171,7 @@ def run(device='cuda'):
 
     parent = warm_start(agent, opt, '')
 
-    desc = '.05 noise'
+    desc = 'refreshed targets'
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
     archive.archive(run)
