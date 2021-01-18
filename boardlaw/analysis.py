@@ -45,7 +45,7 @@ def combine_decisions(dtrace, mtrace):
     return results
 
 @torch.no_grad()
-def rollout(worlds, agents, n_steps=None, n_trajs=None, n_reps=None):
+def rollout(worlds, agents, n_steps=None, n_trajs=None, n_reps=None, **kwargs):
     assert sum(x is not None for x in (n_steps, n_trajs, n_reps)) == 1, 'Must specify exactly one of n_steps or n_trajs or n_reps'
 
     trace, dtrace, mtrace = [], [], []
@@ -56,7 +56,7 @@ def rollout(worlds, agents, n_steps=None, n_trajs=None, n_reps=None):
         for i, agent in enumerate(agents):
             mask = worlds.seats == i
             if mask.any():
-                decisions[i] = agent(worlds[mask])
+                decisions[i] = agent(worlds[mask], **kwargs)
                 masks[i] = mask
 
         actions = combine_actions(decisions, masks)
@@ -115,14 +115,18 @@ def record(world, agents, N=0, **kwargs):
     trace = rollout(world, agents, **kwargs)
     return record_worlds(trace.worlds, N=N)
 
-def rollout_model(run=-1):
-    from boardlaw import mcts, mohex
+def rollout_model(run=-1, mohex=True, eval=True):
+    from boardlaw import mcts, hex
     boardsize = runs.info(run)['boardsize']
     worlds = hex.Hex.initial(n_envs=1, boardsize=boardsize)
     network = storage.load_raw(run, 'model')
     agent = mcts.MCTSAgent(network, n_nodes=64)
-    mhx = mohex.MoHexAgent()
-    return rollout(worlds, [agent, mhx], n_reps=1)
+    if mohex:
+        from boardlaw import mohex
+        agents = [agent, mohex.MoHexAgent()]
+    else:
+        agents = [agent, agent]
+    return rollout(worlds, agents, n_reps=1, eval=eval)
 
 def demo(run_name=-1):
     from boardlaw import mohex

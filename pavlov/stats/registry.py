@@ -40,7 +40,7 @@ def to_run(run):
         del T.RUN
 
 def run():
-    return T.RUN
+    return T.RUN if hasattr(T, 'RUN') else None
 
 def writer(prefix, factory=None):
     if factory is not None:

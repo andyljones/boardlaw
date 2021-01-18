@@ -37,7 +37,7 @@ def update():
         with runs.update(run) as i:
             del i['tag']
 
-def view(run=-1, path=''):
+def show(run=-1, path=''):
     from pygments import highlight
     from pygments.lexers import PythonLexer
     from pygments.formatters import HtmlFormatter

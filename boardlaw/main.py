@@ -150,8 +150,8 @@ def half(x):
         return x
 
 def run(device='cuda'):
-    buffer_length = 16 
-    batch_size = 16*1024
+    buffer_length = 64 
+    batch_size = 64*1024
     n_envs = 16*1024
 
     worlds = mix(worldfunc(n_envs, device=device))
@@ -164,9 +164,9 @@ def run(device='cuda'):
 
     league = leagues.League(agent, agentfunc, worlds.n_envs, device=worlds.device)
 
-    parent = warm_start(agent, opt, '')
+    parent = warm_start(agent, opt, '*great-fits')
 
-    desc = 'back to Dirichlet'
+    desc = 'fine tune with a longer buffer and a bigger batch'
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
     archive.archive(run)
