@@ -132,7 +132,7 @@ def optimize(network, scaler, opt, batch):
         stats.max('opt.step-max', (new - old).abs().max())
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=9, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=11, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
@@ -177,7 +177,7 @@ def run(device='cuda'):
 
     parent = warm_start(agent, opt, '')
 
-    desc = 'higher noise with new cpuct'
+    desc = 'first 11 run with a low cpuct'
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
     archive.archive(run)
