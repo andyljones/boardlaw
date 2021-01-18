@@ -38,11 +38,11 @@ def chunk_stats(chunk, n_new):
         d, t = chunk.decisions, chunk.transitions
         v = d.v[t.terminal]
         w = t.rewards[t.terminal]
-        stats.mean('progress.corr.terminal', ((v - v.mean())*(w - w.mean())).mean()/(v.var()*w.var())**.5)
+        stats.mean('corr.terminal', ((v - v.mean())*(w - w.mean())).mean()/(v.var()*w.var())**.5)
 
         v = d.v[:-1][t.terminal[1:]]
         w = t.rewards[1:][t.terminal[1:]]
-        stats.mean('progress.corr.penultimate', ((v - v.mean())*(w - w.mean())).mean()/(v.var()*w.var())**.5)
+        stats.mean('corr.penultimate', ((v - v.mean())*(w - w.mean())).mean()/(v.var()*w.var())**.5)
 
 def as_chunk(buffer, batch_size):
     chunk = arrdict.stack(buffer)
@@ -97,11 +97,11 @@ def optimize(network, scaler, opt, batch):
         #TODO: Contract these all based on late-ness
         stats.mean('loss.value', value_loss)
         stats.mean('loss.policy', policy_loss)
-        stats.mean('progress.resid-var', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
+        stats.mean('corr.resid-var', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
 
         p0 = d0.prior.float().where(d0.prior > -np.inf, zeros)
-        stats.mean('progress.kl-div.prior', (l0 - l).mul(l0.exp()).sum(-1).mean())
-        stats.mean('progress.kl-div.target', (p0 - l).mul(p0.exp()).sum(-1).mean())
+        stats.mean('kl-div.prior', (l0 - l).mul(l0.exp()).sum(-1).mean())
+        stats.mean('kl-div.target', (p0 - l).mul(p0.exp()).sum(-1).mean())
 
         stats.mean('rel-entropy.policy', *rel_entropy(d.logits)) 
         stats.mean('rel-entropy.targets', *rel_entropy(d0.logits))
