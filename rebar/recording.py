@@ -116,7 +116,7 @@ def html_tag(video, height=None, **kwargs):
     Your browser does not support the video tag.
 </video>"""
 
-def notebook(video, height=None):
+def notebook(video, height=512):
     from IPython.display import display, HTML
     return display(HTML(html_tag(video, height)))
 

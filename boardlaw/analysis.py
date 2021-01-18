@@ -201,27 +201,29 @@ def grad_noise_scale(B):
 
     return noise_scale
 
-def grad_student_descent():
+def board_runs(boardsize=9):
     import pandas as pd
     from pavlov import stats, runs
     import matplotlib.pyplot as plt
 
     # date of the first 9x9 run
-    valid = runs.pandas().query('_created > "2020-12-23 09:52Z" & boardsize == 9 & parent == ""')
+    valid = runs.pandas().query(f'_created > "2020-12-23 09:52Z" & boardsize == {boardsize} & parent == ""')
 
     results = {}
     for name in valid.index:
         if stats.exists(name, 'elo-mohex'):
             s = stats.pandas(name, 'elo-mohex')
-            if len(s) > 60:
+            if len(s) > 60 and (s.notnull().sum() > 15).any():
                 results[name] = s.μ
     df = pd.concat(results, 1)
-    smoothed = df.rolling(60, 15).mean()
+    smoothed = df.ffill(limit=3).where(df.bfill().notnull()).iloc[3:].head(900)
 
     with plt.style.context('seaborn-poster'):
-        ax = smoothed.plot(cmap='viridis', legend=False)
+        ax = smoothed.plot(cmap='viridis_r', legend=False, linewidth=2)
         ax.set_facecolor('whitesmoke')
         ax.grid(axis='y')
-        ax.set_ylim(-13, -2)
+        ax.set_ylim(None, 0)
         ax.set_ylabel('eElo')
-        ax.set_title('grad student descent')
+        ax.set_title(f'all substantial runs on {boardsize}x{boardsize} boards')
+
+    return smoothed
