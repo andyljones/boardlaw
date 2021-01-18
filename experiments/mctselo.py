@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import torch
 from pavlov import storage, runs
@@ -9,6 +10,13 @@ def count_wins(transitions):
                 .flatten(0, 1)
                 .eq(1)
                 .sum(0))
+
+def kl_div(decisions):
+    mask = decisions.mask[..., None] & (decisions.logits > -np.inf) & (decisions.prior > -np.inf)
+    zeros = torch.zeros_like(decisions.logits)
+    logits = decisions.logits.where(mask, zeros).float()
+    prior = decisions.prior.where(mask, zeros).float()
+    return (logits - prior).mul(logits.exp()).sum(-1).mean()
 
 def test(run, snapshot=-1, **kwargs):
     boardsize = runs.info(run)['boardsize']
@@ -31,7 +39,9 @@ def test(run, snapshot=-1, **kwargs):
 
     rate = wins[0]/wins.sum()
     elo = torch.log(rate) - torch.log(1 - rate)
-    return elo.item()
+
+    kl =  (kl_div(fst.decisions['0']) + kl_div(snd.decisions['0']))/2
+    return {'elo': elo.item(), 'kl': kl.item()}
 
 def run():
     run = '*great-fits'
@@ -41,7 +51,7 @@ def run():
             results.append({
                 'c_puct': c,
                 'n_nodes': n,
-                'elo': test(run, -1, c_puct=c, n_nodes=n)})
+                **test(run, -1, c_puct=c, n_nodes=n)})
             print(results[-1])
     df = pd.DataFrame(results).pivot('c_puct', 'n_nodes', 'elo')
     return df

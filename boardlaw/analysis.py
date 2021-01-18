@@ -39,7 +39,7 @@ def combine_decisions(dtrace, mtrace):
                 expanded[m[a]] = d[a]
                 expanded['mask'] = m[a]
             else:
-                expanded['mask'] = torch.zeros((n_envs,), device=device)
+                expanded['mask'] = torch.zeros((n_envs,), dtype=bool, device=device)
             a_results.append(expanded)
         results[str(a)] = arrdict.stack(a_results)
     return results
