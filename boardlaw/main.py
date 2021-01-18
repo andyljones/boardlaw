@@ -161,8 +161,8 @@ def half(x):
         return x
 
 def run(device='cuda'):
-    buffer_length = 128 
-    batch_size = 64*1024
+    buffer_length = 16 
+    batch_size = 32*1024
     n_envs = 16*1024
 
     worlds = mix(worldfunc(n_envs, device=device))
@@ -177,7 +177,7 @@ def run(device='cuda'):
 
     parent = warm_start(agent, opt, '')
 
-    desc = 'longer buffer and a bigger batch'
+    desc = 'much lower cpuct'
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
     archive.archive(run)
