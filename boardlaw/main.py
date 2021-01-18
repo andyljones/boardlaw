@@ -150,7 +150,7 @@ def half(x):
         return x
 
 def run(device='cuda'):
-    buffer_length = 64 
+    buffer_length = 128 
     batch_size = 64*1024
     n_envs = 16*1024
 
@@ -164,9 +164,9 @@ def run(device='cuda'):
 
     league = leagues.League(agent, agentfunc, worlds.n_envs, device=worlds.device)
 
-    parent = warm_start(agent, opt, '*great-fits')
+    parent = warm_start(agent, opt, '')
 
-    desc = 'fine tune with a longer buffer and a bigger batch'
+    desc = 'longer buffer and a bigger batch'
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
     archive.archive(run)
@@ -193,7 +193,7 @@ def run(device='cuda'):
 
                 worlds = new_worlds
 
-                log.info('actor stepped')
+                log.info(f'({len(buffer)}/{buffer_length}) actor stepped')
 
             # Optimize
             chunk, buffer = as_chunk(buffer, batch_size)
