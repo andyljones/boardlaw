@@ -108,8 +108,19 @@ def optimize(network, scaler, opt, batch):
 
         stats.mean('v.target.mean', target_value.mean())
         stats.mean('v.target.std', target_value.std())
+        stats.mean('v.target.max', target_value.abs().max())
         stats.mean('v.outputs.mean', d.v.mean())
         stats.mean('v.outputs.std', d.v.std())
+        stats.mean('v.outputs.max', d.v.abs().max())
+
+        stats.mean('p.target.mean', l0.mean())
+        stats.mean('p.target.std', l0.std())
+        stats.mean('p.target.max', l0.abs().max())
+        stats.mean('p.outputs.mean', l.mean())
+        stats.mean('p.outputs.std', l.std())
+        stats.mean('p.outputs.max', l.abs().max())
+
+        stats.mean('policy-conc', l0.exp().max(-1).values.mean())
 
         stats.rate('sample-rate.learner', t.terminal.nelement())
         stats.rate('step-rate.learner', 1)
