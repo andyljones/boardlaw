@@ -234,3 +234,18 @@ class MCTSAgent:
         kwargs = {f'kwargs.{k}': v for k, v in self.kwargs.items()}
         return {**network, **kwargs}
 
+class DummyAgent:
+
+    def __init__(self, network):
+        self.network = network
+
+    def __call__(self, world, eval=False):
+        r = self.network(world)
+        actions = r.logits.argmax(-1) if eval else torch.distributions.Categorical(logits=r.logits.float()).sample()
+        return arrdict.arrdict(
+            logits=r.logits,
+            prior=r.logits,
+            n_sims=torch.full((world.n_envs,), 0, device=world.device),
+            n_leaves=torch.full((world.n_envs,), 1, device=world.device),
+            v=r.v,
+            actions=actions).clone()
