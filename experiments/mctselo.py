@@ -44,14 +44,14 @@ def test(run, snapshot=-1, **kwargs):
     return {'elo': elo.item(), 'kl': kl.item()}
 
 def run():
-    run = '*great-fits'
+    source_run = '*great-fits'
     results = []
-    for c in [1/32, 1/16, 1/8, 1/4, 1/2, 1, 2]:
-        for n in [2, 4, 8, 16, 32, 64, 128, 256]:
+    for c in [1/64, 1/32, 1/16, 1/8, 1/4, 1/2, 1, 2]:
+        for n in [2, 4, 8, 16, 32, 64, 128]:
             results.append({
                 'c_puct': c,
                 'n_nodes': n,
-                **test(run, -1, c_puct=c, n_nodes=n)})
+                **test(source_run, 1, c_puct=c, n_nodes=n)})
             print(results[-1])
-    df = pd.DataFrame(results).pivot('c_puct', 'n_nodes', 'elo')
+    df = pd.DataFrame(results).pivot('c_puct', 'n_nodes', ['elo', 'kl'])
     return df
