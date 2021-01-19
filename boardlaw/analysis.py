@@ -219,11 +219,11 @@ def board_runs(boardsize=9):
     smoothed = df.ffill(limit=3).where(df.bfill().notnull()).iloc[3:].head(900)
 
     with plt.style.context('seaborn-poster'):
-        ax = smoothed.plot(cmap='viridis_r', legend=False, linewidth=2)
+        ax = smoothed.plot(cmap='viridis_r', legend=False, linewidth=1.5)
         ax.set_facecolor('whitesmoke')
         ax.grid(axis='y')
         ax.set_ylim(None, 0)
         ax.set_ylabel('eElo')
-        ax.set_title(f'all substantial runs on {boardsize}x{boardsize} boards')
+        ax.set_title(f'all runs on {boardsize}x{boardsize} boards')
 
     return smoothed

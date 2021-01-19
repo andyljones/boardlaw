@@ -136,7 +136,7 @@ def worldfunc(n_envs, device='cuda'):
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
-    network = networks.FCModel(worlds.obs_space, worlds.action_space).to(worlds.device)
+    network = networks.ConvContextModel(worlds.obs_space, worlds.action_space).to(worlds.device)
     return mcts.MCTSAgent(network, n_nodes=64)
 
 def warm_start(agent, opt, parent):
@@ -162,8 +162,8 @@ def half(x):
 
 def run(device='cuda'):
     buffer_length = 16 
-    batch_size = 32*1024
-    n_envs = 16*1024
+    batch_size = 8*1024
+    n_envs = 4*1024
 
     worlds = mix(worldfunc(n_envs, device=device))
     agent = agentfunc(device)
@@ -177,7 +177,7 @@ def run(device='cuda'):
 
     parent = warm_start(agent, opt, '')
 
-    desc = 'first 11 run with a low cpuct'
+    desc = 'low cpuct with conv'
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
     archive.archive(run)

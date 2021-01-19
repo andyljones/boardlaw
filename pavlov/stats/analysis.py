@@ -35,11 +35,11 @@ def compare(rs, *args, fill=False, query='', **kwargs):
 
     return pd.concat(df, 1)
 
-def plot(*args, fill=False, skip=None, head=None, **kwargs):
+def plot(*args, ffill=False, skip=None, head=None, **kwargs):
     df = compare(*args, **kwargs)
     desc = runs.pandas().loc[df.columns, 'description'].fillna('')
     df.columns = [f'{c}: {desc[c]}' for c in df.columns]
-    if fill:
+    if ffill:
         df = df.ffill().where(df.bfill().notnull())
     ax = df.iloc[skip:head].plot()
     ax.grid(True)
