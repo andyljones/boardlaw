@@ -169,7 +169,7 @@ def run(device='cuda'):
     agent = agentfunc(device)
     network = agent.network
 
-    opt = torch.optim.Adam(network.parameters(), lr=1e-2, amsgrad=True)
+    opt = torch.optim.Adam(network.parameters(), lr=3e-4, amsgrad=True)
     scaler = torch.cuda.amp.GradScaler()
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
 
