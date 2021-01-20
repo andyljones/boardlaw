@@ -6,7 +6,8 @@ boardlaw
 as supported by the `Survival and Flourishing Fund <http://survivalandflourishing.org/>`_. 
 
 AlphaZero Implementation
-------------------------
+************************
+
 Part of this project is a fast, low-resource AlphaZero implementation for small board games. Right now it can
 solve 9x9 Hex to perfect play in ~4 hours on a single RTX 2080 Ti.
 
@@ -16,7 +17,7 @@ solve 9x9 Hex to perfect play in ~4 hours on a single RTX 2080 Ti.
 
 (FWIW this stalls out at 11x11, and figuring out why is on my to-do list)
 
-'Perfect play' is judged by 'being on-par with `MoHex <https://github.com/cgao3/benzene-vanilla-cmake>`_, which claims 
+'Perfect play' is judged by 'being on-par with `MoHex <https://github.com/cgao3/benzene-vanilla-cmake>`_', which claims 
 perfect play on boards up to size 9x9.
 
 Because of the low-resource constraint, this implementation does a few things unusually:
@@ -44,42 +45,18 @@ machine learning systems.
 
 A lot of this is un-ablated as of mid-Jan, so take it with a pinch of salt when deciding where to attribute performance to. 
 
-Running it
-----------
-Anyway, to run whatever I've got it set to right this second::
-
-.. code::
-
-    from boardlaw.main import *
-    run()
-
-Once it's declared the run started, you can watch its progress from a second Jupyter instance with
-
-.. code::
-
-    from pavlov import *
-    monitor(-1)
-
-for logging and the latest stats and  
-
-.. code::
-
-    from pavlov import *
-    stats.review(-1)
-
-for charts.
-
-There's a :github:`Docker image <docker>` if you're having trouble with dependencies.
+.. _activelo:
 
 ActiveElo
----------
+*********
 One frustration in writing this was in figuring out what pairs of agents should play against eachother to most rapidly 
 nail down the Elo of a new agent. I eventually cracked and wrote :github:`activelo <activelo>` which uses a variational Bayes 
 approach to suggest, based on the games played so far, which pair should be played next. It's built using the superb 
 `geotorch <https://github.com/Lezcano/geotorch>`_ constrained optimization toolkit.
 
+
 Citations
----------
+*********
 .. code:: bib
 
     @software{boardlaw,
@@ -89,3 +66,10 @@ Citations
         version = {0.0},
         date = {2021-01-20},
     }
+
+Index
+*****
+.. toctree::
+    :maxdepth: 2
+
+    developers
