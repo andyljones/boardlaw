@@ -46,7 +46,7 @@ class Plotter:
         self.plotters = plotters
 
         children = [p.figure for p in self.plotters.values()]
-        grid = bol.gridplot(children, ncols=4, plot_width=350, plot_height=300, merge_tools=False)
+        grid = bol.gridplot(children, ncols=5, plot_width=350, plot_height=300, merge_tools=False)
 
         from IPython.display import clear_output
         clear_output(wait=True)

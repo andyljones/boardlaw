@@ -4,20 +4,24 @@ Developer Guide
 
 So far boardlaw's a `one-man project <https://andyljones.com>`_, but I'm keen to change that. If you think it's an
 interesting research direction and you'd like to help out, drop by the `RL <https://discord.gg/xhfNqQv>`_ or `EAI
-<https://discord.gg/K8xcydxcka>`_ Discords and give me a ping! I'm usually active London daytime. Slightly more formally,
-you can post an issue on the tracker, or `give me an email <me@andyljones.com>`_.
+<https://discord.gg/K8xcydxcka>`_ Discords and give **@andyljones** ping! I'm usually active London daytime. Slightly 
+more formally, you can post an issue on the tracker, or `give me an email <me@andyljones.com>`_.
 
-One thing I'd advise against is putting together a PR: this is a research repo and large chunks of it can change 
-dramatically and unexpectedly. As open-source software though, you are of course welcome to fork the repo and do 
-something entirely different with it! 
+One thing I'd advise against is putting together a PR without chatting to me first: this is a research repo and large 
+chunks of it can change dramatically and unexpectedly. I don't want to disappoint anyone who's put a bunch of work in
+to extend recently-obsolete code.
+
+All that said, below is a step-by-step walkthrough on how to replicate my workflow. Since I'm very keen on my workflow 
+working, copying it exactly is the best way to get a workflow that works yourself. If you want to adapt your *own* 
+workflow to boardlaw, these same steps should contain all the miscellaneous information you need.
  
 Prelude
 *******
-My workflow involves a Jupyter instance running inside a Docker container that sits on a GPU-equipped server. To 
-replicate my workflow, you'll need 
+My workflow uses vscode for editing, Jupyter for interaction, and Docker for reproducibility, and it all sits on a remote
+GPU-equipped server. To replicate my that, you'll need 
 
 * a server with a GPU that `has compute capability 7.5 or above <https://en.wikipedia.org/wiki/CUDA#GPUs_supported>`_ 
-  and at least 6GB of memory
+  and at least ~6GB of memory
 * NVIDIA drivers 460.32.03 or above
 * both Docker and the `NVIDIA container toolkit <https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html#docker>`_
 
@@ -37,19 +41,20 @@ First, clone the repo into a local dir.
 
     git clone git@github.com:andyljones/boardlaw.git
 
-Then pull and run the boardlaw image. Run this command, substituting the dir you just cloned the repo into as $CODE_DIR 
+Then pull and run the :github:`boardlaw image <docker>`. Run this command, substituting the dir you just cloned the 
+repo into as $CODE_DIR. In my case, that's ``/home/ajones/code/boardlaw``.
 
 .. code::
 
     docker pull andyljones/boardlaw
     docker run --name boardlaw --shm-size="16g" -v CODE_DIR:/code andyljones/boardlaw:latest
 
-For completeness, the 
+For completeness, the switches are
 
 * ``--name boardlaw``, so you can refer to the container as ``boardlaw`` in docker commands rather than whatever random
   phrase docker comes up with.
-* ``--shm-size`` ups the shared memory size, as the default 64MB can upset PyTorch's IPC
-* ``-v`` mounts the dir you cloned the repo into as ``/code`` inside the Docker container.
+* ``--shm-size``, to up the shared memory size. The default 64MB can upset PyTorch's IPC.
+* ``-v``, to mount the dir you cloned the repo into as ``/code`` inside the Docker container.
 
 The above is the short version of the command, which will keep the container in the foreground of your terminal 
 session so you can easily see if anything goes wrong. Typically I run the container with the much longer command
@@ -84,6 +89,14 @@ To check everything's working, use
 
     docker exec -it boardlaw python -c "import torch; print(torch.tensor(1).cuda())" 
 
+to test PyTorch generally, and 
+
+.. code::
+
+    docker exec -it boardlaw python -c "from boardlaw import *" 
+
+to test that boardlaw can be imported.
+
 Editor
 ******
 At this point you've got a copy of the boardlaw container up and running, all we've gotta do now is hook the dev tools up!
@@ -116,31 +129,68 @@ in your browser and you should get a shiny Jupyter notebook!
 You can also do this step by manually setting up a tunnel with ``ssh -L``, but believe you me when I say it's easier 
 with vscode.
 
+While you're doing this, another useful port to forward is 8083, for `snakeviz 
+<https://jiffyclub.github.io/snakeviz/#interpreting-results>`_ support.
 
-Run
-***
-Anyway, to run whatever I've got it set to right this second
+Some things worth noting about boardlaw's instance of Jupyter:
+
+* `autoreload <https://ipython.org/ipython-doc/3/config/extensions/autoreload.html>`_ is automatically enabled. 
+  Autoreload means that if you run ``from boardlaw.main import *`` in Jupyter, then go and change the code in the 
+  ``boardlaw/main.py`` file, those changes will be instantly reflected in Jupyter. 
+
+  * One thing to be aware of is that it won't re-run code that was run on module import/object creation/etc. So if, 
+    f'example, you change a decorated function then that won't be updated without an explicit ``importlib.reload`` 
+    or (more easily) a re-start of the kernel.
+
+* `stripcommon <https://github.com/andyljones/stripcommon>`_ is automatically enabled. This strips leading whitespace
+  from blocks of code you copy-paste into Jupyter, which is supremely useful when copy-paste code from vscode over.
+
+* `noterminal <https://github.com/andyljones/noterminal>`_ is automatically enabled. This lets you launch new, 
+  'temporary' notebooks with ``tt``, and then destroy those notebooks with ``tq``. This is useful for creating a new
+  notebook to watch your runs from.
+
+* You can interrupt the kernel with ``ii``. You can restart the kernel by hitting ``00``. You'll do this a lot. 
+
+Running Code
+************
+With all that set up, you should be able to run
 
 .. code::
 
     from boardlaw.main import *
     run()
 
-Once it's declared the run started, you can watch its progress from a second Jupyter instance with
+in a notebook to launch a run. After a few seconds (maybe a little longer the first time as it compiles kernels) it'll
+respond with 
+
+.. code::
+
+    2021-01-20 11:26:54 INFO pavlov.runs: Created run 2021-01-20 11-26-54 neat-funds
+
+The bit after ``run`` is the name of the run. Once you've seen this message, you can watch its progress from a 
+second Jupyter instance (``tt``) with
 
 .. code::
 
     from pavlov import *
     monitor(-1)
 
-for logging and the latest stats and  
+.. image:: monitor.png
+    :alt: A plot of the monitoring of a live run
+    :width: 640
+
+The ``-1`` is interpreted as 'the latest run'. You could equally sub in a full run name, or a glob - the run launched 
+above could also be retrieved with ``monitor('*neat-funds')`` .
+
+To get plots, use
 
 .. code::
 
     from pavlov import *
     stats.review(-1)
 
-for charts.
+.. image:: review.png
+    :alt: A plot of the plots of a live run
+    :width: 640
 
-There's a :github:`Docker image <docker>` if you're having trouble with dependencies.
-
+or ``stats.view(-1)`` for live plots.

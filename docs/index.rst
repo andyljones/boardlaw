@@ -2,14 +2,14 @@
 boardlaw
 ########
 
-**boardlaw** is an ongoing research project into `scaling laws in multiplayer games <https://docs.google.com/document/d/1OwniAl1ocnqKHc4jtPVJzemm46q6ZgPVhXhmL2ZDIJw/edit>`_, 
+**boardlaw** is an ongoing research project into `scaling laws in multiagent systems <https://docs.google.com/document/d/1OwniAl1ocnqKHc4jtPVJzemm46q6ZgPVhXhmL2ZDIJw/edit>`_, 
 as supported by the `Survival and Flourishing Fund <http://survivalandflourishing.org/>`_. 
 
 AlphaZero Implementation
 ************************
 
 Part of this project is a fast, low-resource AlphaZero implementation for small board games. Right now it can
-solve 9x9 Hex to perfect play in ~4 hours on a single RTX 2080 Ti.
+solve 9x9 `Hex <http://www.mseymour.ca/hex_book/hexstrat0.html>`_ to perfect play in ~4 hours on a single RTX 2080 Ti.
 
 .. image:: boardlaw-scaling.png
     :alt: A plot of time-till-perfect-play against board size
