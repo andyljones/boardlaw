@@ -1,4 +1,4 @@
-This is the repo for my ongoing research into [scaling laws in multiplayer games](https://docs.google.com/document/d/1OwniAl1ocnqKHc4jtPVJzemm46q6ZgPVhXhmL2ZDIJw/edit). It's open because there are some components that might be independently 
+This is the repo for my ongoing research into [scaling laws in multiplayer games](https://docs.google.com/document/d/1OwniAl1ocnqKHc4jtPVJzemm46q6ZgPVhXhmL2ZDIJw/edit), as supported by the [Survival and Flourishing Fund](http://survivalandflourishing.org/). It's open because there are some components that might be independently 
 interesting to others.
 
 Do *not* try to build directly upon this repo; it's under massive ongoing change. Nothing is stable. On a similar note, I'm happy to answer specific questions or chat about implementation choices - you can find me on the [RL Discord](https://discord.gg/xhfNqQv) most of the time - but you cant expect robustness or support. 
