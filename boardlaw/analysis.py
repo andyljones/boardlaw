@@ -115,15 +115,15 @@ def record(world, agents, N=0, **kwargs):
     trace = rollout(world, agents, **kwargs)
     return record_worlds(trace.worlds, N=N)
 
-def rollout_model(run=-1, mohex=True, eval=True):
+def rollout_model(run=-1, mohex=True, eval=True, n_envs=1):
     from boardlaw import mcts, hex
     boardsize = runs.info(run)['boardsize']
-    worlds = hex.Hex.initial(n_envs=1, boardsize=boardsize)
+    worlds = hex.Hex.initial(n_envs=n_envs, boardsize=boardsize)
     network = storage.load_raw(run, 'model')
     agent = mcts.MCTSAgent(network, n_nodes=64)
     if mohex:
         from boardlaw import mohex
-        agents = [agent, mohex.MoHexAgent()]
+        agents = [agent, mohex.MoHexAgent(solver=True)]
     else:
         agents = [agent, agent]
     return rollout(worlds, agents, n_reps=1, eval=eval)
@@ -135,7 +135,7 @@ def demo(run_name=-1):
     n_envs = 9
     world = worldfunc(n_envs, device='cuda:1')
     agent = agentfunc(device='cuda:1')
-    agent.load_state_dict(storing.select(storing.load_latest(run_name), 'agent'))
+    agent.load_state_dict(storage.select(storage.load_latest(run_name), 'agent'))
     mhx = mohex.MoHexAgent(presearch=False, max_games=1)
     record(world, [agent, mhx], n_reps=1, N=0).notebook()
 
