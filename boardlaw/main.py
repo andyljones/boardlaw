@@ -132,7 +132,7 @@ def optimize(network, scaler, opt, batch):
         stats.max('opt.step-max', (new - old).abs().max())
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=11, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=5, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
@@ -169,7 +169,7 @@ def run(device='cuda'):
     agent = agentfunc(device)
     network = agent.network
 
-    opt = torch.optim.Adam(network.parameters(), lr=3e-4, amsgrad=True)
+    opt = torch.optim.Adam(network.parameters(), lr=1e-2, amsgrad=True)
     scaler = torch.cuda.amp.GradScaler()
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
 
@@ -177,7 +177,7 @@ def run(device='cuda'):
 
     parent = warm_start(agent, opt, '')
 
-    desc = 'low cpuct with conv'
+    desc = 'new 5x5 baseline'
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
     archive.archive(run)
