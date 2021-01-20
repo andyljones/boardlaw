@@ -43,8 +43,7 @@ def test(run, snapshot=-1, **kwargs):
     kl =  (kl_div(fst.decisions['0']) + kl_div(snd.decisions['0']))/2
     return {'elo': elo.item(), 'kl': kl.item()}
 
-def run():
-    source_run = '*great-fits'
+def run(source_run):
     results = []
     for c in [1/64, 1/32, 1/16, 1/8, 1/4, 1/2, 1, 2]:
         for n in [2, 4, 8, 16, 32, 64, 128]:

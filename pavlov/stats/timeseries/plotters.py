@@ -274,6 +274,7 @@ class Quantiles:
 
     def aligned(self):
         df = self.reader.resample(rule=self.rule)
+        df = df.ffill().where(df.bfill().notnull())
         df.index.name = '_time'
         # Drop the last row since it represents an under-full window.
         df = df.reset_index().iloc[:-1]

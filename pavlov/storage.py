@@ -57,7 +57,7 @@ def _save(path, objs):
     torch.save(objs, bs)
     _save_raw(path, bs.getvalue())
 
-def _load(path, device='cpu'):
+def load_path(path, device='cpu'):
     return torch.load(path, map_location=device)
 
 def save_latest(run, objs):
@@ -68,7 +68,7 @@ def save_latest(run, objs):
 
 def load_latest(run=-1, device='cpu'):
     path = files.path(run, LATEST)
-    return _load(path, device)
+    return load_path(path, device)
 
 def timestamp_latest(run=-1):
     return pd.Timestamp(files.path(run, LATEST).stat().st_mtime, unit='s')
@@ -92,7 +92,7 @@ def snapshots(run=-1):
 def load_snapshot(run=-1, n=-1, device='cpu'):
     n = list(snapshots(run))[n]
     path = files.path(run, SNAPSHOT.format(n=n))
-    return _load(path, device)
+    return load_path(path, device)
 
 def throttled_snapshot(run, objs, throttle):
     files = snapshots(run)

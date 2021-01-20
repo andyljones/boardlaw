@@ -17,6 +17,10 @@ def new(run, prefix):
     with lock(run, prefix):
         files.new_file(run, f'{prefix}.json')
 
+def delete(run, prefix):
+    with lock(run, prefix):
+        files.remove(run, f'{prefix}.json')
+
 @contextmanager
 def update(run, prefix):
     with lock(run, prefix):

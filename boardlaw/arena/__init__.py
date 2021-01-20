@@ -23,11 +23,11 @@ def assemble_agent(agentfunc, sd, device='cpu'):
     agent.load_state_dict(sd['agent'])
     return agent
 
-def snapshot_agents(run_name, agentfunc, device='cpu', **kwargs):
+def snapshot_agents(run_name, agentfunc, period=1, device='cpu', **kwargs):
     if not isinstance(run_name, (int, str)):
         agents = {}
         for r in run_name:
-            agents.update(snapshot_agents(r, agentfunc, device=device, **kwargs))
+            agents.update(snapshot_agents(r, agentfunc, device=device, period=period, **kwargs))
         return agents
 
     try:
@@ -37,9 +37,10 @@ def snapshot_agents(run_name, agentfunc, device='cpu', **kwargs):
     else:
         agents = {} 
         for idx, info in stored.items():
-            name = pd.Timestamp(info['_created']).strftime(r'%y%m%d-%H%M%S-snapshot')
-            sd = storage.load(info['path'], device)
-            agents[name] = assemble_agent(agentfunc, sd, device=device, **kwargs)
+            if idx % period == 0:
+                name = pd.Timestamp(info['_created']).strftime(r'%y%m%d-%H%M%S-snapshot')
+                sd = storage.load_path(info['path'], device)
+                agents[name] = assemble_agent(agentfunc, sd, device=device, **kwargs)
         return agents
 
 def latest_agent(run_name, agentfunc, device='cpu', **kwargs):
@@ -115,16 +116,16 @@ def monitor(*args, **kwargs):
             log.info('Abruptly terminating arena monitor; it should have shut down naturally!')
             p.terminate()
 
-def fill_matchups(run=-1, device='cuda', count=1):
+def fill_matchups(run=-1, device='cuda', count=1, period=1):
     from boardlaw.main import worldfunc, agentfunc
     from boardlaw.arena import evaluator, snapshot_agents, database, log
 
     run = runs.resolve(run)
-    agents = snapshot_agents(run, agentfunc, device=device)
+    agents = snapshot_agents(run, agentfunc, period=period, device=device)
     worlds = worldfunc(device=device, n_envs=256)
 
     while True:
-        agents = snapshot_agents(run, agentfunc, device=device)
+        agents = snapshot_agents(run, agentfunc, period=period, device=device)
 
         n, w = database.symmetric(run, agents)
         zeros = (n

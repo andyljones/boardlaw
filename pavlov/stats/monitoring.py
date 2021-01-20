@@ -131,7 +131,7 @@ def from_run(run, rule='60s'):
             yield
         finally:
             canceller.set()
-            thread.join(1)
+            thread.join(2)
             if thread.is_alive():
                 log.error('Stat display thread won\'t die')
             else:
