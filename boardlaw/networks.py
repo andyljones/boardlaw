@@ -57,10 +57,10 @@ class SplitLayer(nn.Module):
         
         αpp, αpv, αvv, αvp = self.α
 
-        p = p + F.relu(self.P(torch.cat([αpp*p, αvp*v.detach()], -1)))
-        v = v + F.relu(self.V(torch.cat([αpv*p.detach(), αvv*v], -1)))
+        p1 = p + F.relu(self.P(torch.cat([αpp*p, αvp*v.detach()], -1)))
+        v1 = v + F.relu(self.V(torch.cat([αpv*p.detach(), αvv*v], -1)))
 
-        return torch.cat([p, v], -1)
+        return torch.cat([p1, v1], -1)
 
 class SplitModel(nn.Module):
 
