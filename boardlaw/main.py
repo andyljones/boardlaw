@@ -72,8 +72,12 @@ def optimize(network, scaler, opt, vbatch, pbatch):
 
     opt.zero_grad()
     with torch.cuda.amp.autocast():
+        batch = arrdict.cat([vbatch, pbatch], 0)
+        d = network(batch.worlds)
+        d1v = d[:vbatch.transitions.terminal.size(0)]
+        d1p = d[vbatch.transitions.terminal.size(0):]
+
         d0p = pbatch.decisions
-        d1p = network(pbatch.worlds)
 
         zeros = torch.zeros_like(d1p.logits)
         l = d1p.logits.where(d1p.logits > -np.inf, zeros)
