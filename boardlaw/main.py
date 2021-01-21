@@ -99,8 +99,8 @@ def optimize(network, scaler, opt, batch):
         stats.mean('corr.resid-var', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
 
         p0 = d0.prior.float().where(d0.prior > -np.inf, zeros)
-        stats.mean('kl-div.prior', (l0 - l).mul(l0.exp()).sum(-1).mean())
-        stats.mean('kl-div.target', (p0 - l).mul(p0.exp()).sum(-1).mean())
+        stats.mean('kl-div.behaviour', (p0 - l0).mul(p0.exp()).sum(-1).mean())
+        stats.mean('kl-div.prior', (p0 - l).mul(p0.exp()).sum(-1).mean())
 
         stats.mean('rel-entropy.policy', *rel_entropy(d.logits)) 
         stats.mean('rel-entropy.targets', *rel_entropy(d0.logits))
@@ -131,7 +131,7 @@ def optimize(network, scaler, opt, batch):
         stats.max('opt.step-max', (new - old).abs().max())
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=5, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=3, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
@@ -174,7 +174,7 @@ def run(device='cuda'):
 
     parent = warm_start(agent, opt, '')
 
-    desc = '5x5 baseline without the league or warmup'
+    desc = '3x3 baseline without the league or warmup'
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
     archive.archive(run)
