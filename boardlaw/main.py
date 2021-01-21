@@ -70,13 +70,13 @@ def optimize(network, scaler, opt, pbatch, vbatch):
     batch = arrdict.cat([pbatch, vbatch], 0)
     d0p = pbatch.decisions
 
-    N = pbatch.transitions.size(0)
+    N = pbatch.transitions.terminal.size(0)
     with torch.cuda.amp.autocast():
         d = network(batch.worlds)
         dp, dv = d[:N], d[-N:]
 
-        zeros = torch.zeros_like(d.logits)
-        l = dp.logits.where(d.logits > -np.inf, zeros)
+        zeros = torch.zeros_like(dp.logits)
+        l = dp.logits.where(dp.logits > -np.inf, zeros)
         l0 = d0p.logits.float().where(d0p.logits > -np.inf, zeros)
 
         policy_loss = -(l0.exp()*l).sum(axis=-1).mean()
@@ -162,9 +162,8 @@ def half(x):
     else:
         return x
 
-def run(policy_idx, value_idx, batch_size=8*1024, n_envs=8*1024, device='cuda'):
-    buffer_length = max(policy_idx, value_idx) + 1
-    desc = f'experiment/batch-len/pol-{policy_idx}/val-{value_idx}'
+def run(buffer_len=16, n_envs=8*1024, device='cuda'):
+    desc = 'fixed random batch indices'
 
     #TODO: Restore league and sched when you go back to large boards
     worlds = mix(worldfunc(n_envs, device=device))
@@ -183,10 +182,14 @@ def run(policy_idx, value_idx, batch_size=8*1024, n_envs=8*1024, device='cuda'):
     buffer = []
     with logs.to_run(run), stats.to_run(run), \
             arena.monitor(run, worldfunc, agentfunc, device=worlds.device):
+        #TODO: Upgrade this to handle batches that are some multiple of the env count
+        idxs = (
+            torch.randint(buffer_len, (n_envs,), device=device),
+            torch.arange(n_envs, device=device))
         while True:
 
             # Collect experience
-            while len(buffer) < buffer_length:
+            while len(buffer) < buffer_len:
                 with torch.no_grad():
                     decisions = agent(worlds, value=True)
                 new_worlds, transition = worlds.step(decisions.actions)
@@ -198,11 +201,11 @@ def run(policy_idx, value_idx, batch_size=8*1024, n_envs=8*1024, device='cuda'):
 
                 worlds = new_worlds
 
-                log.info(f'({len(buffer)}/{buffer_length}) actor stepped')
+                log.info(f'({len(buffer)}/{buffer_len}) actor stepped')
 
             # Optimize
-            chunk, buffer = as_chunk(buffer, batch_size)
-            optimize(network, scaler, opt, chunk[policy_idx], chunk[value_idx])
+            chunk, buffer = as_chunk(buffer, n_envs)
+            optimize(network, scaler, opt, chunk[idxs], chunk[idxs])
             
             log.info('learner stepped')
 
