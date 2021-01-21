@@ -66,20 +66,23 @@ def rel_entropy(logits):
     probs = logits.exp().where(valid, zeros)
     return (-(logits*probs).sum(-1).mean(), torch.log(valid.sum(-1).float()).mean())
 
-def optimize(network, scaler, opt, batch):
-    w, d0, t = batch.worlds, batch.decisions, batch.transitions
+def optimize(network, scaler, opt, pbatch, vbatch):
+    batch = arrdict.cat([pbatch, vbatch], 0)
+    d0p = pbatch.decisions
 
+    N = pbatch.transitions.size(0)
     with torch.cuda.amp.autocast():
-        d = network(w)
+        d = network(batch.worlds)
+        dp, dv = d[:N], d[-N:]
 
         zeros = torch.zeros_like(d.logits)
-        l = d.logits.where(d.logits > -np.inf, zeros)
-        l0 = d0.logits.float().where(d0.logits > -np.inf, zeros)
+        l = dp.logits.where(d.logits > -np.inf, zeros)
+        l0 = d0p.logits.float().where(d0p.logits > -np.inf, zeros)
 
         policy_loss = -(l0.exp()*l).sum(axis=-1).mean()
 
-        target_value = batch.reward_to_go
-        value_loss = (target_value - d.v).square().mean()
+        target_value = vbatch.reward_to_go
+        value_loss = (target_value - dv.v).square().mean()
 
         loss = policy_loss + value_loss
 
@@ -96,21 +99,21 @@ def optimize(network, scaler, opt, batch):
         #TODO: Contract these all based on late-ness
         stats.mean('loss.value', value_loss)
         stats.mean('loss.policy', policy_loss)
-        stats.mean('corr.resid-var', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
+        stats.mean('corr.resid-var', (target_value - dv.v).pow(2).mean(), target_value.pow(2).mean())
 
-        p0 = d0.prior.float().where(d0.prior > -np.inf, zeros)
+        p0 = d0p.prior.float().where(d0p.prior > -np.inf, zeros)
         stats.mean('kl-div.behaviour', (p0 - l0).mul(p0.exp()).sum(-1).mean())
         stats.mean('kl-div.prior', (p0 - l).mul(p0.exp()).sum(-1).mean())
 
-        stats.mean('rel-entropy.policy', *rel_entropy(d.logits)) 
-        stats.mean('rel-entropy.targets', *rel_entropy(d0.logits))
+        stats.mean('rel-entropy.policy', *rel_entropy(dp.logits)) 
+        stats.mean('rel-entropy.targets', *rel_entropy(d0p.logits))
 
         stats.mean('v.target.mean', target_value.mean())
         stats.mean('v.target.std', target_value.std())
         stats.mean('v.target.max', target_value.abs().max())
-        stats.mean('v.outputs.mean', d.v.mean())
-        stats.mean('v.outputs.std', d.v.std())
-        stats.mean('v.outputs.max', d.v.abs().max())
+        stats.mean('v.outputs.mean', dv.v.mean())
+        stats.mean('v.outputs.std', dv.v.std())
+        stats.mean('v.outputs.max', dv.v.abs().max())
 
         stats.mean('p.target.mean', l0.mean())
         stats.mean('p.target.std', l0.std())
@@ -121,7 +124,7 @@ def optimize(network, scaler, opt, batch):
 
         stats.mean('policy-conc', l0.exp().max(-1).values.mean())
 
-        stats.rate('sample-rate.learner', t.terminal.nelement())
+        stats.rate('sample-rate.learner', pbatch.transitions.terminal.nelement())
         stats.rate('step-rate.learner', 1)
         stats.cumsum('count.learner-steps', 1)
         # stats.rel_gradient_norm('rel-norm-grad', agent)
@@ -131,7 +134,7 @@ def optimize(network, scaler, opt, batch):
         stats.max('opt.step-max', (new - old).abs().max())
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=3, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=7, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
@@ -159,12 +162,11 @@ def half(x):
     else:
         return x
 
-def run(device='cuda'):
-    #TODO: Restore league and sched when you go back to large boards
-    buffer_length = 16 
-    batch_size = 8*1024
-    n_envs = 8*1024
+def run(policy_idx, value_idx, batch_size=8*1024, n_envs=8*1024, device='cuda'):
+    buffer_length = max(policy_idx, value_idx) + 1
+    desc = f'experiment/batch-len/pol-{policy_idx}/val-{value_idx}'
 
+    #TODO: Restore league and sched when you go back to large boards
     worlds = mix(worldfunc(n_envs, device=device))
     agent = agentfunc(device)
     network = agent.network
@@ -174,13 +176,11 @@ def run(device='cuda'):
 
     parent = warm_start(agent, opt, '')
 
-    desc = '3x3 baseline without the league or warmup'
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
     archive.archive(run)
 
     buffer = []
-    idxs = learning.batch_indices(buffer_length, n_envs, batch_size, worlds.device)
     with logs.to_run(run), stats.to_run(run), \
             arena.monitor(run, worldfunc, agentfunc, device=worlds.device):
         while True:
@@ -202,7 +202,7 @@ def run(device='cuda'):
 
             # Optimize
             chunk, buffer = as_chunk(buffer, batch_size)
-            optimize(network, scaler, opt, chunk[next(idxs)])
+            optimize(network, scaler, opt, chunk[policy_idx], chunk[value_idx])
             
             log.info('learner stepped')
 
