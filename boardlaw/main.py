@@ -44,7 +44,7 @@ def chunk_stats(chunk, n_new):
         w = t.rewards[1:][t.terminal[1:]]
         stats.mean('corr.penultimate', ((v - v.mean())*(w - w.mean())).mean()/(v.var()*w.var())**.5)
 
-def as_chunk(buffer, n_new):
+def as_chunk(buffer, batch_size):
     chunk = arrdict.stack(buffer)
     terminal = torch.stack([chunk.transitions.terminal for _ in range(chunk.worlds.n_seats)], -1)
     chunk['reward_to_go'] = learning.reward_to_go(
@@ -52,6 +52,7 @@ def as_chunk(buffer, n_new):
         chunk.decisions.v.float(), 
         terminal).half()
 
+    n_new = batch_size//terminal.size(1)
     chunk_stats(chunk, n_new)
             
     buffer = buffer[n_new:]
@@ -65,7 +66,7 @@ def rel_entropy(logits):
     probs = logits.exp().where(valid, zeros)
     return (-(logits*probs).sum(-1).mean(), torch.log(valid.sum(-1).float()).mean())
 
-def optimize_policy(network, scaler, opt, batch):
+def optimize(network, scaler, opt, batch):
     w, d0, t = batch.worlds, batch.decisions, batch.transitions
 
     with torch.cuda.amp.autocast():
@@ -75,7 +76,12 @@ def optimize_policy(network, scaler, opt, batch):
         l = d.logits.where(d.logits > -np.inf, zeros)
         l0 = d0.logits.float().where(d0.logits > -np.inf, zeros)
 
-        loss = -(l0.exp()*l).sum(axis=-1).mean()
+        policy_loss = -(l0.exp()*l).sum(axis=-1).mean()
+
+        target_value = batch.reward_to_go
+        value_loss = (target_value - d.v).square().mean()
+
+        loss = policy_loss + value_loss
 
     old = torch.cat([p.flatten() for p in network.parameters()])
 
@@ -86,10 +92,11 @@ def optimize_policy(network, scaler, opt, batch):
 
     new = torch.cat([p.flatten() for p in network.parameters()])
 
-    log.info('Policy stepped')
-
     with stats.defer():
-        stats.mean('loss.policy', loss)
+        #TODO: Contract these all based on late-ness
+        stats.mean('loss.value', value_loss)
+        stats.mean('loss.policy', policy_loss)
+        stats.mean('corr.resid-var', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
 
         p0 = d0.prior.float().where(d0.prior > -np.inf, zeros)
         stats.mean('kl-div.behaviour', (p0 - l0).mul(p0.exp()).sum(-1).mean())
@@ -97,6 +104,13 @@ def optimize_policy(network, scaler, opt, batch):
 
         stats.mean('rel-entropy.policy', *rel_entropy(d.logits)) 
         stats.mean('rel-entropy.targets', *rel_entropy(d0.logits))
+
+        stats.mean('v.target.mean', target_value.mean())
+        stats.mean('v.target.std', target_value.std())
+        stats.mean('v.target.max', target_value.abs().max())
+        stats.mean('v.outputs.mean', d.v.mean())
+        stats.mean('v.outputs.std', d.v.std())
+        stats.mean('v.outputs.max', d.v.abs().max())
 
         stats.mean('p.target.mean', l0.mean())
         stats.mean('p.target.std', l0.std())
@@ -107,55 +121,17 @@ def optimize_policy(network, scaler, opt, batch):
 
         stats.mean('policy-conc', l0.exp().max(-1).values.mean())
 
-        stats.rate('sample-rate.policy', t.terminal.nelement())
-        stats.rate('step-rate.policy', 1)
-        stats.cumsum('count.policy-steps', 1)
-
-        stats.mean('opt.pol-step-std', (new - old).pow(2).mean().pow(.5))
-        stats.max('opt.pol-step-max', (new - old).abs().max())
-
-def optimize_value(network, scaler, opt, batch):
-    w, t = batch.worlds, batch.transitions
-
-    with torch.cuda.amp.autocast():
-        d = network(w)
-
-        target_value = batch.reward_to_go
-        loss = (target_value - d.v).square().mean()
-
-    old = torch.cat([p.flatten() for p in network.parameters()])
-
-    opt.zero_grad()
-    scaler.scale(loss).backward()
-    scaler.step(opt)
-    scaler.update()
-
-    new = torch.cat([p.flatten() for p in network.parameters()])
-            
-    log.info('Value stepped')
-
-    with stats.defer():
-        #TODO: Contract these all based on late-ness
-        stats.mean('loss.value', loss)
-        stats.mean('corr.resid-var', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
-
-        stats.mean('v.target.mean', target_value.mean())
-        stats.mean('v.target.std', target_value.std())
-        stats.mean('v.target.max', target_value.abs().max())
-        stats.mean('v.outputs.mean', d.v.mean())
-        stats.mean('v.outputs.std', d.v.std())
-        stats.mean('v.outputs.max', d.v.abs().max())
-
-        stats.rate('sample-rate.value', t.terminal.nelement())
-        stats.rate('step-rate.value', 1)
-        stats.cumsum('count.value-steps', 1)
+        stats.rate('sample-rate.learner', t.terminal.nelement())
+        stats.rate('step-rate.learner', 1)
+        stats.cumsum('count.learner-steps', 1)
         # stats.rel_gradient_norm('rel-norm-grad', agent)
 
-        stats.mean('opt.val-step-std', (new - old).pow(2).mean().pow(.5))
-        stats.max('opt.val-step-max', (new - old).abs().max())
+        stats.mean('opt.lr', np.mean([p['lr'] for p in opt.param_groups]))
+        stats.mean('opt.step-std', (new - old).pow(2).mean().pow(.5))
+        stats.max('opt.step-max', (new - old).abs().max())
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=7, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=3, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
@@ -188,54 +164,43 @@ def run(device='cuda'):
     buffer_length = 16 
     batch_size = 8*1024
     n_envs = 8*1024
-    n_new = batch_size//n_envs
 
     worlds = mix(worldfunc(n_envs, device=device))
     agent = agentfunc(device)
     network = agent.network
 
-    policy_opt = torch.optim.Adam(network.parameters(), lr=1e-2, amsgrad=True)
-    value_opt = torch.optim.Adam(network.parameters(), lr=1e-3, amsgrad=True)
-    policy_scaler = torch.cuda.amp.GradScaler()
-    value_scaler = torch.cuda.amp.GradScaler()
+    opt = torch.optim.Adam(network.parameters(), lr=1e-2, amsgrad=True)
+    scaler = torch.cuda.amp.GradScaler()
 
-    # parent = warm_start(agent, opt, '')
+    parent = warm_start(agent, opt, '')
 
-    desc = 'AZ-PPG mashup trial'
-    run = runs.new_run(boardsize=worlds.boardsize, parent='', description=desc)
+    desc = 'on-policy trial'
+    run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
     archive.archive(run)
 
-    buffer = []
     with logs.to_run(run), stats.to_run(run), \
             arena.monitor(run, worldfunc, agentfunc, device=worlds.device):
         while True:
 
-            # Collect experience
-            while len(buffer) < buffer_length:
-                with torch.no_grad():
-                    decisions = agent(worlds, value=True)
-                new_worlds, transition = worlds.step(decisions.actions)
+            with torch.no_grad():
+                decisions = agent(worlds, value=True)
+            new_worlds, transition = worlds.step(decisions.actions)
 
-                buffer.append(arrdict.arrdict(
-                    worlds=worlds,
-                    decisions=decisions.half(),
-                    transitions=half(transition)).detach())
+            buffer = [arrdict.arrdict(
+                worlds=worlds,
+                decisions=decisions.half(),
+                transitions=half(transition)).detach()]
 
-                worlds = new_worlds
-
-                log.info(f'({len(buffer)}/{buffer_length}) actor stepped')
+            worlds = new_worlds
 
             # Optimize
-            chunk, buffer = as_chunk(buffer, n_new)
-            optimize_policy(network, policy_scaler, policy_opt, chunk[-1])
-            for _ in range(8):
-                row_idxs = torch.randint(buffer_length, (batch_size,), device=device)
-                col_idxs = torch.randint(n_envs, (batch_size,), device=device)
-                optimize_value(network, value_scaler, value_opt, chunk[row_idxs, col_idxs])
+            chunk, _ = as_chunk(buffer, batch_size)
+            optimize(network, scaler, opt, chunk)
+            
+            log.info('learner stepped')
 
-
-            sd = storage.state_dicts(agent=agent)
+            sd = storage.state_dicts(agent=agent, opt=opt)
             storage.throttled_latest(run, sd, 60)
             storage.throttled_snapshot(run, sd, 900)
             storage.throttled_raw(run, 'model', lambda: pickle.dumps(network), 900)
