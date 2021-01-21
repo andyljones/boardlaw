@@ -131,11 +131,11 @@ def optimize(network, scaler, opt, batch):
         stats.max('opt.step-max', (new - old).abs().max())
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=3, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=7, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
-    network = networks.FCModel(worlds.obs_space, worlds.action_space).to(worlds.device)
+    network = networks.SplitModel(worlds.obs_space, worlds.action_space).to(worlds.device)
     return mcts.MCTSAgent(network, n_nodes=64)
 
 def warm_start(agent, opt, parent):
@@ -174,7 +174,7 @@ def run(device='cuda'):
 
     parent = warm_start(agent, opt, '')
 
-    desc = '3x3 baseline without the league or warmup'
+    desc = 'first trial with the splitmodel'
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
     archive.archive(run)
