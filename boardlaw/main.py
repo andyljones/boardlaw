@@ -134,7 +134,7 @@ def optimize(network, scaler, opt, pbatch, vbatch):
         stats.max('opt.step-max', (new - old).abs().max())
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=7, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=9, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
@@ -162,8 +162,8 @@ def half(x):
     else:
         return x
 
-def run(buffer_len=16, n_envs=8*1024, device='cuda'):
-    desc = 'fixed random batch indices'
+def run(pol_len=16, val_len=16, n_envs=8*1024, device='cuda', desc='default'):
+    buffer_len = max(pol_len, val_len)
 
     #TODO: Restore league and sched when you go back to large boards
     worlds = mix(worldfunc(n_envs, device=device))
@@ -183,9 +183,8 @@ def run(buffer_len=16, n_envs=8*1024, device='cuda'):
     with logs.to_run(run), stats.to_run(run), \
             arena.monitor(run, worldfunc, agentfunc, device=worlds.device):
         #TODO: Upgrade this to handle batches that are some multiple of the env count
-        idxs = (
-            torch.randint(buffer_len, (n_envs,), device=device),
-            torch.arange(n_envs, device=device))
+        pol_idxs = (torch.randint(buffer_len - pol_len, buffer_len, (n_envs,), device=device), torch.arange(n_envs, device=device))
+        val_idxs = (torch.randint(buffer_len - val_len, buffer_len, (n_envs,), device=device), torch.arange(n_envs, device=device))
         while True:
 
             # Collect experience
@@ -205,7 +204,7 @@ def run(buffer_len=16, n_envs=8*1024, device='cuda'):
 
             # Optimize
             chunk, buffer = as_chunk(buffer, n_envs)
-            optimize(network, scaler, opt, chunk[idxs], chunk[idxs])
+            optimize(network, scaler, opt, chunk[pol_idxs], chunk[val_idxs])
             
             log.info('learner stepped')
 
@@ -214,6 +213,38 @@ def run(buffer_len=16, n_envs=8*1024, device='cuda'):
             storage.throttled_snapshot(run, sd, 900)
             storage.throttled_raw(run, 'model', lambda: pickle.dumps(network), 900)
             stats.gpu(worlds.device, 15)
+
+def run_many():
+    import os
+    from subprocess import Popen
+    lens = [2, 8, 32, 128, 256]
+    queue = []
+    for pol_len in lens:
+        for val_len in lens:
+            queue.append({'pol_len': pol_len, 'val_len': val_len})
+    
+    starts = {i: (0, None) for i in (0, 1)}
+    while True:
+        for i, (start, old) in starts.items():
+            if time.time() > start + 120:
+                if old is not None:
+                    log.info(f'Killed {i}')
+                    old.terminate()
+                    time.sleep(10)
+
+                params = queue.pop()
+                log.info(f'Launching {params} on {i}')
+                env = os.environ.copy()
+                env['CUDA_VISIBLE_DEVICES'] = str(i)
+                new = Popen(
+                    f'python -c "from boardlaw.main import *; run(pol_len={params["pol_len"]}, val_len={params["val_len"]})"',
+                    env=env,
+                    shell=True)
+                starts[i] = (time.time(), new)
+            
+            time.sleep(5)
+
+            
 
 @profiling.profilable
 def benchmark_experience_collection(n_envs=8192, T=4):
