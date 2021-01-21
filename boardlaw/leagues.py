@@ -169,8 +169,9 @@ class Field:
         threshold = np.linspace(1.5, 2.5, self.n_fielded)
         for i, (n, s) in enumerate(zip(splitter.names, splitter.slices)):
             replace = self.games[i] >= threshold[i]*(s.stop - s.start)
-        # Swap out any over the limit
-            if replace:
+            # Swap out any over the limit
+            # Don't bother if there actually aren't any envs
+            if replace and (s.stop > s.start):
                 name, sd = stable.draw()
                 splitter.field[i].load_state_dict(sd)
                 splitter.names[i] = name

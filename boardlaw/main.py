@@ -67,8 +67,7 @@ def rel_entropy(logits):
     return (-(logits*probs).sum(-1).mean(), torch.log(valid.sum(-1).float()).mean())
 
 def optimize(network, scaler, opt, batch):
-    mask = batch.is_prime
-    w, d0, t = batch.worlds[mask], batch.decisions[mask], batch.transitions[mask]
+    w, d0, t = batch.worlds, batch.decisions, batch.transitions
 
     with torch.cuda.amp.autocast():
         d = network(w)
@@ -79,7 +78,7 @@ def optimize(network, scaler, opt, batch):
 
         policy_loss = -(l0.exp()*l).sum(axis=-1).mean()
 
-        target_value = batch.reward_to_go[mask]
+        target_value = batch.reward_to_go
         value_loss = (target_value - d.v).square().mean()
 
         loss = policy_loss + value_loss
@@ -132,7 +131,7 @@ def optimize(network, scaler, opt, batch):
         stats.max('opt.step-max', (new - old).abs().max())
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=3, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=5, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
@@ -161,6 +160,7 @@ def half(x):
         return x
 
 def run(device='cuda'):
+    #TODO: Restore league and sched when you go back to large boards
     buffer_length = 16 
     batch_size = 8*1024
     n_envs = 8*1024
@@ -171,13 +171,10 @@ def run(device='cuda'):
 
     opt = torch.optim.Adam(network.parameters(), lr=1e-2, amsgrad=True)
     scaler = torch.cuda.amp.GradScaler()
-    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
-
-    league = leagues.League(agent, agentfunc, worlds.n_envs, device=worlds.device)
 
     parent = warm_start(agent, opt, '')
 
-    desc = 'new 3x3 baseline'
+    desc = '5x5 baseline without the league or warmup'
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
     archive.archive(run)
@@ -197,10 +194,7 @@ def run(device='cuda'):
                 buffer.append(arrdict.arrdict(
                     worlds=worlds,
                     decisions=decisions.half(),
-                    transitions=half(transition),
-                    is_prime=league.is_prime).detach())
-
-                league.update(agent, worlds.seats, transition)
+                    transitions=half(transition)).detach())
 
                 worlds = new_worlds
 
@@ -209,7 +203,6 @@ def run(device='cuda'):
             # Optimize
             chunk, buffer = as_chunk(buffer, batch_size)
             optimize(network, scaler, opt, chunk[next(idxs)])
-            sched.step()
             
             log.info('learner stepped')
 
