@@ -66,7 +66,7 @@ class SplitModel(nn.Module):
 
     def __init__(self, obs_space, action_space, width=256, depth=20):
         super().__init__()
-        self.policy = heads.output(action_space, width)
+        self.policy = heads.output(action_space, width//2)
         self.sampler = self.policy.sample
 
         blocks = [heads.intake(obs_space, width)]
@@ -74,10 +74,11 @@ class SplitModel(nn.Module):
             blocks.append(SplitLayer(width))
         self.body = nn.Sequential(*blocks) 
 
-        self.value = heads.ValueOutput(width)
+        self.value = heads.ValueOutput(width//2)
 
     def forward(self, worlds):
         neck = self.body(worlds.obs)
+        p, v = neck.chunk(2, -1)
         return arrdict.arrdict(
-            logits=self.policy(neck, worlds.valid), 
-            v=self.value(neck, worlds.valid, worlds.seats))
+            logits=self.policy(p, worlds.valid), 
+            v=self.value(v, worlds.valid, worlds.seats))

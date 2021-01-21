@@ -174,7 +174,7 @@ def run(device='cuda'):
 
     parent = warm_start(agent, opt, '')
 
-    desc = 'first trial with the splitmodel'
+    desc = 'first trial with the splitmodel + split heads'
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
     archive.archive(run)
