@@ -7,11 +7,19 @@ interesting research direction and you'd like to help out, drop by the `RL <http
 <https://discord.gg/K8xcydxcka>`_ Discords and give **@andyljones** ping! I'm usually active London daytime. Slightly 
 more formally, you can post an issue on the tracker, or `give me an email <me@andyljones.com>`_.
 
-One thing I'd advise against is putting together a PR without chatting to me first: this is a research repo and large 
-chunks of it can change dramatically and unexpectedly. I don't want to disappoint anyone who's put a bunch of work in
-to extend recently-obsolete code.
+Open Issues
+-----------
+There's a list of issues `on the tracker <https://github.com/andyljones/boardlaw/issues>`_. These are all pretty 
+high-level, but they're not exhaustive - if there's a new direction you'd like to take things in, I'm very much 
+open to suggestions.
 
-All that said, below is a step-by-step walkthrough on how to replicate my workflow. Since I'm very keen on my workflow 
+One thing I'd advise against though is putting together a PR without chatting to me first: this is a research repo and 
+large chunks of it can change dramatically and unexpectedly. I don't want to have to tell anyone that their work depends
+recently-obsolete code.
+
+Workflow
+--------
+Below is a step-by-step guide to replicating my workflow. Since I'm very keen on my workflow 
 working, copying it exactly is the best way to get a workflow that works yourself. If you want to adapt your *own* 
 workflow to boardlaw, these same steps should contain all the miscellaneous information you need.
  

@@ -13,7 +13,6 @@ from boardlaw.hex import Hex
 from boardlaw.hex import plot_board
 import matplotlib.pyplot as plt
 from rebar.recording import Encoder
-from ptflops import get_model_complexity_info
 
 
 def gamegen(worlds):
