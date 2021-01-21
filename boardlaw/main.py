@@ -215,9 +215,12 @@ def run(pol_len=16, val_len=16, n_envs=8*1024, device='cuda', desc='default'):
             stats.gpu(worlds.device, 15)
 
 def run_many():
+    #TODO: This is a garbage fire.
     import os
-    from subprocess import Popen
-    lens = [2, 8, 32, 128, 256]
+    import shlex
+    from subprocess import Popen, PIPE
+    from signal import SIGINT
+    lens = [1, 4, 16, 64, 256][::-1]
     queue = []
     for pol_len in lens:
         for val_len in lens:
@@ -226,21 +229,29 @@ def run_many():
     starts = {i: (0, None) for i in (0, 1)}
     while True:
         for i, (start, old) in starts.items():
-            if time.time() > start + 120:
+            if time.time() > start + 3600:
                 if old is not None:
-                    log.info(f'Killed {i}')
-                    old.terminate()
-                    time.sleep(10)
+                    log.info(f'Interrupting {i}')
+                    old.send_signal(SIGINT)
+                    old.wait(15)
 
                 params = queue.pop()
                 log.info(f'Launching {params} on {i}')
                 env = os.environ.copy()
                 env['CUDA_VISIBLE_DEVICES'] = str(i)
+                desc = f'experiments/buffer-len/pol-{params["pol_len"]}/val-{params["val_len"]}'
+                cmd = f'''python -c "from boardlaw.main import *; run(pol_len={params["pol_len"]}, val_len={params["val_len"]}, desc='{desc}')"'''
                 new = Popen(
-                    f'python -c "from boardlaw.main import *; run(pol_len={params["pol_len"]}, val_len={params["val_len"]})"',
+                    shlex.split(cmd), 
                     env=env,
-                    shell=True)
+                    stdout=PIPE,
+                    stderr=PIPE)
                 starts[i] = (time.time(), new)
+            else:
+                if old is not None:
+                    if old.poll():
+                        print(f'Crashed {i}, retcode {old.returncode}')
+                        import aljpy; aljpy.extract()
             
             time.sleep(5)
 
