@@ -115,7 +115,7 @@ def optimize_policy(network, scaler, opt, batch):
         stats.max('opt.pol-step-max', (new - old).abs().max())
 
 def optimize_value(network, scaler, opt, batch):
-    w, d0, t = batch.worlds, batch.decisions, batch.transitions
+    w, t = batch.worlds, batch.transitions
 
     with torch.cuda.amp.autocast():
         d = network(w)
@@ -201,7 +201,7 @@ def run(device='cuda'):
 
     # parent = warm_start(agent, opt, '')
 
-    desc = 'first trial split opts'
+    desc = 'first trial split opts, bug fixed'
     run = runs.new_run(boardsize=worlds.boardsize, parent='', description=desc)
 
     archive.archive(run)
