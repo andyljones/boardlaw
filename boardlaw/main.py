@@ -81,7 +81,8 @@ def optimize(network, scaler, opt, vbatch, pbatch):
 
         policy_loss = -(l0.exp()*l).sum(axis=-1).mean()
 
-        d1v = network(vbatch.worlds)
+        # d1v = network(vbatch.worlds)
+        d1v = d1p
         target_value = vbatch.reward_to_go
         value_loss = (target_value - d1v.v).square().mean()
 
@@ -203,7 +204,7 @@ def run(device='cuda'):
 
             # Optimize
             chunk, buffer = as_chunk(buffer, batch_size)
-            optimize(network, scaler, opt, chunk[next(idxs)], chunk[-1])
+            optimize(network, scaler, opt, chunk[next(idxs)], chunk[next(idxs)])
             
             log.info('learner stepped')
 
