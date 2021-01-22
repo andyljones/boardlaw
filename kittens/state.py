@@ -1,19 +1,17 @@
-from datetime import datetime
 import json
 from portalocker import RLock
 from pathlib import Path
 from contextlib import contextmanager
-from aljpy import humanhash
 import shutil
 
-ROOT = 'output/kittens'
+ROOT = Path('output/kittens')
 
 DEFAULT_STATE = {
     'submissions': []
 }
 
 def path():
-    return Path(ROOT) / 'state.json'
+    return ROOT / 'state.json'
 
 _lock = None
 @contextmanager
@@ -27,9 +25,9 @@ def lock():
     # keep the object itself about. Ffff.
     global _lock
     if _lock is None:
-        _lock = RLock(Path(ROOT) / '_lock')
+        _lock = RLock(ROOT / '_lock')
 
-    Path(ROOT).mkdir(exist_ok=True, parents=True)
+    ROOT.mkdir(exist_ok=True, parents=True)
     with _lock:
         yield
 
@@ -47,37 +45,15 @@ def update():
         yield s
         path().write_text(json.dumps(s))
 
-def submit(command, archive=None, reqs={}):
-    now = datetime.utcnow()
-    spec = {
-        'name': f'{now.strftime(r"%Y-%m-%d %H-%M-%S")} {humanhash(n=2)}',
-        'submitted': str(now),
-        'command': command,
-        'archive': archive,
-        'reqs': reqs,
-        'attempts': []}
-    with update() as s:
-        s['submissions'].append(spec)
-
-def submissions():
-    return state()['submissions']
-
-### TESTS
-
 def mock_dir(f):
     def g(*args, **kwargs):
         global ROOT
         try:
             OLD = ROOT
-            ROOT = 'output/kittens-test'
-            if Path(ROOT).exists():
+            ROOT = Path('output/kittens-test')
+            if ROOT.exists():
                 shutil.rmtree(ROOT)
             return f(*args, **kwargs)
         finally:
             ROOT = OLD
     return g
-
-@mock_dir
-def test():
-    submit('test')
-    assert len(submissions()) == 1
