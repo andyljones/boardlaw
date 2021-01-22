@@ -66,23 +66,20 @@ def rel_entropy(logits):
     probs = logits.exp().where(valid, zeros)
     return (-(logits*probs).sum(-1).mean(), torch.log(valid.sum(-1).float()).mean())
 
-def optimize(network, scaler, opt, pbatch, vbatch):
-    batch = arrdict.cat([pbatch, vbatch], 0)
-    d0p = pbatch.decisions
+def optimize(network, scaler, opt, batch):
 
-    N = pbatch.transitions.terminal.size(0)
     with torch.cuda.amp.autocast():
+        d0 = batch.decisions
         d = network(batch.worlds)
-        dp, dv = d[:N], d[-N:]
 
-        zeros = torch.zeros_like(dp.logits)
-        l = dp.logits.where(dp.logits > -np.inf, zeros)
-        l0 = d0p.logits.float().where(d0p.logits > -np.inf, zeros)
+        zeros = torch.zeros_like(d.logits)
+        l = d.logits.where(d.logits > -np.inf, zeros)
+        l0 = d0.logits.float().where(d0.logits > -np.inf, zeros)
 
         policy_loss = -(l0.exp()*l).sum(axis=-1).mean()
 
-        target_value = vbatch.reward_to_go
-        value_loss = (target_value - dv.v).square().mean()
+        target_value = batch.reward_to_go
+        value_loss = (target_value - d.v).square().mean()
 
         loss = policy_loss + value_loss
 
@@ -99,21 +96,21 @@ def optimize(network, scaler, opt, pbatch, vbatch):
         #TODO: Contract these all based on late-ness
         stats.mean('loss.value', value_loss)
         stats.mean('loss.policy', policy_loss)
-        stats.mean('corr.resid-var', (target_value - dv.v).pow(2).mean(), target_value.pow(2).mean())
+        stats.mean('corr.resid-var', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
 
-        p0 = d0p.prior.float().where(d0p.prior > -np.inf, zeros)
+        p0 = d0.prior.float().where(d0.prior > -np.inf, zeros)
         stats.mean('kl-div.behaviour', (p0 - l0).mul(p0.exp()).sum(-1).mean())
         stats.mean('kl-div.prior', (p0 - l).mul(p0.exp()).sum(-1).mean())
 
-        stats.mean('rel-entropy.policy', *rel_entropy(dp.logits)) 
-        stats.mean('rel-entropy.targets', *rel_entropy(d0p.logits))
+        stats.mean('rel-entropy.policy', *rel_entropy(d.logits)) 
+        stats.mean('rel-entropy.targets', *rel_entropy(d0.logits))
 
         stats.mean('v.target.mean', target_value.mean())
         stats.mean('v.target.std', target_value.std())
         stats.mean('v.target.max', target_value.abs().max())
-        stats.mean('v.outputs.mean', dv.v.mean())
-        stats.mean('v.outputs.std', dv.v.std())
-        stats.mean('v.outputs.max', dv.v.abs().max())
+        stats.mean('v.outputs.mean', d.v.mean())
+        stats.mean('v.outputs.std', d.v.std())
+        stats.mean('v.outputs.max', d.v.abs().max())
 
         stats.mean('p.target.mean', l0.mean())
         stats.mean('p.target.std', l0.std())
@@ -124,7 +121,7 @@ def optimize(network, scaler, opt, pbatch, vbatch):
 
         stats.mean('policy-conc', l0.exp().max(-1).values.mean())
 
-        stats.rate('sample-rate.learner', pbatch.transitions.terminal.nelement())
+        stats.rate('sample-rate.learner', batch.transitions.terminal.nelement())
         stats.rate('step-rate.learner', 1)
         stats.cumsum('count.learner-steps', 1)
         # stats.rel_gradient_norm('rel-norm-grad', agent)
@@ -162,8 +159,7 @@ def half(x):
     else:
         return x
 
-def run(pol_len=16, val_len=16, n_envs=8*1024, device='cuda', desc='default'):
-    buffer_len = max(pol_len, val_len)
+def run(buffer_len=64, n_envs=8*1024, device='cuda', desc='repeats samples 4x'):
 
     #TODO: Restore league and sched when you go back to large boards
     worlds = mix(worldfunc(n_envs, device=device))
@@ -183,8 +179,7 @@ def run(pol_len=16, val_len=16, n_envs=8*1024, device='cuda', desc='default'):
     with logs.to_run(run), stats.to_run(run), \
             arena.monitor(run, worldfunc, agentfunc, device=worlds.device):
         #TODO: Upgrade this to handle batches that are some multiple of the env count
-        pol_idxs = (torch.randint(buffer_len - pol_len, buffer_len, (n_envs,), device=device), torch.arange(n_envs, device=device))
-        val_idxs = (torch.randint(buffer_len - val_len, buffer_len, (n_envs,), device=device), torch.arange(n_envs, device=device))
+        idxs = [(torch.randint(buffer_len, (n_envs,), device=device), torch.arange(n_envs, device=device)) for _ in range(4)]
         while True:
 
             # Collect experience
@@ -204,100 +199,12 @@ def run(pol_len=16, val_len=16, n_envs=8*1024, device='cuda', desc='default'):
 
             # Optimize
             chunk, buffer = as_chunk(buffer, n_envs)
-            optimize(network, scaler, opt, chunk[pol_idxs], chunk[val_idxs])
-            
-            log.info('learner stepped')
+            for idx in idxs:
+                optimize(network, scaler, opt, chunk[idx])
+                log.info('learner stepped')
 
             sd = storage.state_dicts(agent=agent, opt=opt)
             storage.throttled_latest(run, sd, 60)
             storage.throttled_snapshot(run, sd, 900)
             storage.throttled_raw(run, 'model', lambda: pickle.dumps(network), 900)
             stats.gpu(worlds.device, 15)
-
-def run_experiment():
-    #TODO: This is a garbage fire.
-    import os
-    import shlex
-    from subprocess import Popen, PIPE
-    from signal import SIGINT
-    lens = [1, 4, 16, 64, 256][::-1]
-    queue = []
-    for pol_len in [256]:
-        for val_len in [4, 16, 64, 256]:
-            queue.append({'pol_len': pol_len, 'val_len': val_len})
-    
-    starts = {i: (0, None) for i in (0, 1)}
-    while True:
-        for i, (start, old) in starts.items():
-            if time.time() > start + 3600:
-                if old is not None:
-                    log.info(f'Interrupting {i}')
-                    old.send_signal(SIGINT)
-                    old.wait(15)
-
-                params = queue.pop()
-                log.info(f'Launching {params} on {i}')
-                env = os.environ.copy()
-                env['CUDA_VISIBLE_DEVICES'] = str(i)
-                desc = f'experiments/buffer-len/pol-{params["pol_len"]}/val-{params["val_len"]}'
-                cmd = f'''python -c "from boardlaw.main import *; run(pol_len={params["pol_len"]}, val_len={params["val_len"]}, desc='{desc}')"'''
-                new = Popen(
-                    shlex.split(cmd), 
-                    env=env,
-                    stdout=PIPE,
-                    stderr=PIPE)
-                starts[i] = (time.time(), new)
-            else:
-                if old is not None:
-                    if old.poll():
-                        print(f'Crashed {i}, retcode {old.returncode}')
-                        import aljpy; aljpy.extract()
-            
-            time.sleep(5)
-
-def show_experiment():
-    import pandas as pd
-    import re
-    rs = runs.pandas().loc[lambda df: df.description.fillna('').str.startswith('experiments/buffer-len')]
-    df = {}
-    for r, row in rs.iterrows():
-        m = re.match(r'.*/.*/pol-(\d+)/val-(\d+)', row.description)
-        df[int(m.group(1)), int(m.group(2))] = stats.pandas(r, 'elo-mohex')['μ']
-    df = pd.concat(df, 1).ffill().iloc[-1].unstack()
-    df.index.name = 'policy buffer'
-    df.columns.name = 'value buffer'
-
-    ax = df.T.plot(logx=True, marker='o', linestyle='--', grid=True)
-    ax.set_title('experiment/buffer-len')
-            
-
-@profiling.profilable
-def benchmark_experience_collection(n_envs=8192, T=4):
-    import pandas as pd
-
-    if n_envs is None:
-        ns = np.logspace(0, 15, 16, base=2, dtype=int)
-        return pd.Series({n: benchmark_experience_collection(n) for n in ns})
-
-    torch.manual_seed(0)
-    worlds = worldfunc(n_envs)
-    agent = agentfunc()
-
-    agent(worlds) # warmup
-
-    torch.cuda.synchronize()
-    start = time.time()
-    for _ in range(T):
-        decisions = agent(worlds)
-        new_worlds, transition = worlds.step(decisions.actions)
-        worlds = new_worlds
-        print('actor stepped')
-    torch.cuda.synchronize()
-    rate = (T*n_envs)/(time.time() - start)
-    print(f'{n_envs}: {rate}/sample')
-
-    return rate
-
-if __name__ == '__main__':
-    with torch.autograd.profiler.emit_nvtx():
-        benchmark_experience_collection()
