@@ -7,7 +7,7 @@ import shutil
 ROOT = Path('output/kittens')
 
 DEFAULT_STATE = {
-    'jobs': []
+    'jobs': {}
 }
 
 def path():
@@ -40,8 +40,8 @@ def state():
 
 def jobs(status=None):
     if status:
-        return [sub for sub in jobs() if sub['status'] == status]
-    return state.state()['jobs']
+        return {name: sub for name, sub in jobs().items() if sub['status'] == status}
+    return state()['jobs']
 
 @contextmanager
 def update():
