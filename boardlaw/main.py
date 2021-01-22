@@ -131,7 +131,7 @@ def optimize(network, scaler, opt, batch):
         stats.max('opt.step-max', (new - old).abs().max())
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=9, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=11, device=device)
 
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
@@ -159,7 +159,7 @@ def half(x):
     else:
         return x
 
-def run(buffer_len=64, n_envs=8*1024, device='cuda', desc='repeats samples 4x'):
+def run(buffer_len=64, n_envs=8*1024, device='cuda', desc='an 11 run just because'):
 
     #TODO: Restore league and sched when you go back to large boards
     worlds = mix(worldfunc(n_envs, device=device))
@@ -179,7 +179,7 @@ def run(buffer_len=64, n_envs=8*1024, device='cuda', desc='repeats samples 4x'):
     with logs.to_run(run), stats.to_run(run), \
             arena.monitor(run, worldfunc, agentfunc, device=worlds.device):
         #TODO: Upgrade this to handle batches that are some multiple of the env count
-        idxs = [(torch.randint(buffer_len, (n_envs,), device=device), torch.arange(n_envs, device=device)) for _ in range(4)]
+        idxs = (torch.randint(buffer_len, (n_envs,), device=device), torch.arange(n_envs, device=device))
         while True:
 
             # Collect experience
@@ -199,9 +199,8 @@ def run(buffer_len=64, n_envs=8*1024, device='cuda', desc='repeats samples 4x'):
 
             # Optimize
             chunk, buffer = as_chunk(buffer, n_envs)
-            for idx in idxs:
-                optimize(network, scaler, opt, chunk[idx])
-                log.info('learner stepped')
+            optimize(network, scaler, opt, chunk[idxs])
+            log.info('learner stepped')
 
             sd = storage.state_dicts(agent=agent, opt=opt)
             storage.throttled_latest(run, sd, 60)
