@@ -3,7 +3,7 @@ boardlaw
 ########
 
 **boardlaw** is an ongoing research project into `scaling laws in multiagent systems <https://docs.google.com/document/d/1OwniAl1ocnqKHc4jtPVJzemm46q6ZgPVhXhmL2ZDIJw/edit>`_, 
-as supported by the `Survival and Flourishing Fund <http://survivalandflourishing.org/>`_. 
+as supported by `Survival and Flourishing <http://survivalandflourishing.org/>`_. 
 
 AlphaZero Implementation
 ************************
