@@ -214,7 +214,7 @@ def run(pol_len=16, val_len=16, n_envs=8*1024, device='cuda', desc='default'):
             storage.throttled_raw(run, 'model', lambda: pickle.dumps(network), 900)
             stats.gpu(worlds.device, 15)
 
-def run_many():
+def run_experiment():
     #TODO: This is a garbage fire.
     import os
     import shlex
@@ -222,8 +222,8 @@ def run_many():
     from signal import SIGINT
     lens = [1, 4, 16, 64, 256][::-1]
     queue = []
-    for pol_len in lens:
-        for val_len in lens:
+    for pol_len in [256]:
+        for val_len in [4, 16, 64, 256]:
             queue.append({'pol_len': pol_len, 'val_len': val_len})
     
     starts = {i: (0, None) for i in (0, 1)}
@@ -255,6 +255,20 @@ def run_many():
             
             time.sleep(5)
 
+def show_experiment():
+    import pandas as pd
+    import re
+    rs = runs.pandas().loc[lambda df: df.description.fillna('').str.startswith('experiments/buffer-len')]
+    df = {}
+    for r, row in rs.iterrows():
+        m = re.match(r'.*/.*/pol-(\d+)/val-(\d+)', row.description)
+        df[int(m.group(1)), int(m.group(2))] = stats.pandas(r, 'elo-mohex')['μ']
+    df = pd.concat(df, 1).ffill().iloc[-1].unstack()
+    df.index.name = 'policy buffer'
+    df.columns.name = 'value buffer'
+
+    ax = df.T.plot(logx=True, marker='o', linestyle='--', grid=True)
+    ax.set_title('experiment/buffer-len')
             
 
 @profiling.profilable
