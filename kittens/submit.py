@@ -20,7 +20,7 @@ def compress(source, target):
         log.error(f'Archival failed with output "{e.stdout.decode()}"')
         raise 
 
-def submit(command, dir=None, reqs={}):
+def submit(command, dir=None, resources={}):
     now = datetime.utcnow()
     name = f'{now.strftime(r"%Y-%m-%d %H-%M-%S")} {humanhash(n=2)}'
 
@@ -34,20 +34,17 @@ def submit(command, dir=None, reqs={}):
         'submitted': str(now),
         'command': command,
         'archive': archive,
-        'reqs': reqs,
-        'attempts': []}
+        'resources': resources,
+        'status': 'fresh'}
     with state.update() as s:
-        s['submissions'].append(spec)
-
-def submissions():
-    return state.state()['submissions']
+        s['jobs'][name] = spec
 
 ### TESTS
 
 @state.mock_dir
 def test_submission():
     submit('test')
-    assert len(submissions()) == 1
+    assert len(state.jobs()) == 1
 
 @state.mock_dir
 def test_compress():
@@ -59,6 +56,6 @@ def test_compress():
 
     submit('test', dir=p)
 
-    [sub] = submissions()
-    with tarfile.open(sub['archive']) as f:
+    [job] = state.jobs()
+    with tarfile.open(job['archive']) as f:
         assert f.getnames() == ['test.txt']

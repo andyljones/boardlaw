@@ -7,7 +7,7 @@ import shutil
 ROOT = Path('output/kittens')
 
 DEFAULT_STATE = {
-    'submissions': []
+    'jobs': []
 }
 
 def path():
@@ -37,6 +37,11 @@ def state():
             path().parent.mkdir(exist_ok=True, parents=True)
             path().write_text(json.dumps(DEFAULT_STATE))
         return json.loads(path().read_text())
+
+def jobs(status=None):
+    if status:
+        return [sub for sub in jobs() if sub['status'] == status]
+    return state.state()['jobs']
 
 @contextmanager
 def update():
