@@ -9,9 +9,9 @@ def decrement(j, m):
 
 def available():
     ms = machines.machines()
-    for sub in state.jobs('active').values():
-        if sub['machine'] in ms:
-            decrement(ms[sub['machine']], sub)
+    for j in state.jobs('active').values():
+        if j['machine'] in ms:
+            decrement(j, ms[j['machine']])
     return ms
 
 def viable(asked, offered):
@@ -52,7 +52,8 @@ def manage():
     for j in state.jobs('fresh').values():
         ms = available()
         m = select(j, ms)
-        launch(j, m)
+        if m:
+            launch(j, m)
 
     for j in state.jobs('active').values():
         if dead(j):
