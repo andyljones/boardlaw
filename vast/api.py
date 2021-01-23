@@ -73,10 +73,7 @@ def offers(query, cols=OFFER_COLS):
     return pd.DataFrame.from_dict(js).sort_values('dph_total')
 
 def status(label=None, cols=STATUS_COLS):
-    if cols is not None:
-        return status(label, None).reindex(columns=cols)
-
-    if label:
+    if label is not None:
         s = status()
         if s is None: 
             raise ValueError('No instances')
@@ -84,6 +81,9 @@ def status(label=None, cols=STATUS_COLS):
             return s.iloc[label]
         else:
             return s.loc[label]
+
+    if cols is not None:
+        return status(label, None).reindex(columns=cols)
 
     for _ in range(3):
         try:

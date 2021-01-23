@@ -6,7 +6,7 @@ import yaml
 
 log = getLogger(__name__)
 
-def config():
+def configurations():
     configs = []
     for path in state.ROOT.joinpath('machines').iterdir():
         if path.suffix in ('.json',):
@@ -28,24 +28,24 @@ def write(name, configs):
     path = state.ROOT / f'machines/{name}.json'
     path.write_text(json.dumps(configs))
 
-def module(t):
-    return importlib.import_module(f'{__package__}.{t}')
+def module(config):
+    return importlib.import_module(f'{__package__}.{config["type"]}')
 
 def machines():
     ms = {}
-    for c in config():
-        m = module(c['type']).machine(c)
+    for config in configurations():
+        m = module(config).machine(config)
         ms[m['name']] = m
     return ms
 
-def launch(j, m):
-    return module(m['type']).launch(j, m)
+def launch(job, machine):
+    return module(machine).launch(job, machine)
 
-def cleanup(j):
+def cleanup(job):
     ms = machines()
-    if j['machine'] not in ms:
-        log.info(f'No cleanup for job {j["name"]} as machine "{j["machine"]}" no longer exists')
+    if job['machine'] not in ms:
+        log.info(f'No cleanup for job {job["name"]} as machine "{job["machine"]}" no longer exists')
         return 
 
-    m = ms[j['machine']]
-    module(m['type']).cleanup(j, m)
+    machine = ms[job['machine']]
+    module(machine).cleanup(job, machine)

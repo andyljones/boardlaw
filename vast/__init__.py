@@ -14,6 +14,7 @@ def write_kittens():
                 'resources': {
                     'gpu': row.num_gpus,
                     'memory': row.cpu_ram*row.gpu_frac},
+                'root': '/code',
                 'connection': {
                     'host': row.ssh_host, 
                     'user': 'root', 
@@ -26,3 +27,7 @@ def write_kittens():
             log.info(f'Skipping "{name}" as its status is "{row.actual_status}"')
     
     kittens.machines.write('vast', configs)
+    
+def ssh_command(label=-1):
+    s = status(label)
+    print(f'SSH_AUTH_SOCK="" ssh root@{s.ssh_host} -p {s.ssh_port} -o StrictHostKeyChecking=no -i /root/.ssh/vast_rsa')
