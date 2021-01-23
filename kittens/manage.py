@@ -4,15 +4,15 @@ from pathlib import Path
 
 log = getLogger(__name__)
 
-def decrement(j, m):
-    for k in set(j['resources']) & set(m['resources']):
-        m['resources'][k] -= j['resources'][k]
+def decrement(job, machine):
+    for k in set(job['resources']) & set(machine['resources']):
+        machine['resources'][k] -= job['resources'][k]
 
 def available():
     ms = machines.machines()
-    for j in state.jobs('active').values():
-        if j['machine'] in ms:
-            decrement(j, ms[j['machine']])
+    for jobs in state.jobs('active').values():
+        if jobs['machine'] in ms:
+            decrement(jobs, ms[jobs['machine']])
     return ms
 
 def viable(asked, offered):
@@ -30,7 +30,7 @@ def select(j, ms):
 
 def launch(j, m):
     log.info(f'Launching job "{j["name"]}" on machine "{m["name"]}"')
-    pid = machines.TYPES[m['type']].launch(j, m)
+    pid = machines.launch(j, m)
     log.info(f'Launched with PID #{pid}')
     with state.update() as s:
         job = s['jobs'][j['name']]
@@ -38,36 +38,36 @@ def launch(j, m):
         job['machine'] = m['name']
         job['process'] = pid
 
-def dead(j):
+def dead(job):
     ms = machines.machines()
-    if j['machine'] not in ms:
-        log.info(f'Job "{j["name"]}" has died as the machine "{j["machine"]}" no longer exists')
+    if job['machine'] not in ms:
+        log.info(f'Job "{job["name"]}" has died as the machine "{job["machine"]}" no longer exists')
         return True
-    if j['process'] not in ms[j['machine']]['processes']:
-        log.info(f'Job "{j["name"]}" has died as its PID #{j["process"]} is not visible on "{j["machine"]}"')
+    if job['process'] not in ms[job['machine']]['processes']:
+        log.info(f'Job "{job["name"]}" has died as its PID #{job["process"]} is not visible on "{job["machine"]}"')
         return True
     return False
 
 def manage():
     # Get the jobs
-    for j in state.jobs('fresh').values():
+    for job in state.jobs('fresh').values():
         ms = available()
-        m = select(j, ms)
-        if m:
-            launch(j, m)
+        machine = select(job, ms)
+        if machine:
+            launch(job, machine)
 
-    for j in state.jobs('active').values():
-        if dead(j):
+    for job in state.jobs('active').values():
+        if dead(job):
             with state.update() as s:
-                job = s['jobs'][j['name']]
+                job = s['jobs'][job['name']]
                 job['status'] = 'dead'
 
 def cleanup():
-    for j in state.jobs('dead').values():
-        machines.cleanup(j)
-        Path(j['archive']).unlink()
+    for job in state.jobs('dead').values():
+        machines.cleanup(job)
+        Path(job['archive']).unlink()
         with state.update() as s:
-            del s['jobs'][j['name']]
+            del s['jobs'][job['name']]
 
 @state.mock_dir
 def demo():

@@ -1,15 +1,10 @@
+import importlib
 from logging import getLogger
 from . import state
 import json
 import yaml
 
 log = getLogger(__name__)
-
-TYPES = {}
-
-def register(cls):
-    TYPES[cls.__name__.lower()] = cls
-    return cls
 
 def config():
     configs = []
@@ -29,15 +24,18 @@ def config():
 
     return configs
 
+def module(t):
+    return importlib.import_module(t, __package__)
+
 def machines():
     ms = {}
     for c in config():
-        m = TYPES[c['type']].machine(c)
+        m = module(c['type']).machine(c)
         ms[m['name']] = m
     return ms
 
 def launch(j, m):
-    return TYPES[m['type']].launch(j, m)
+    return module(m['type']).launch(j, m)
 
 def cleanup(j):
     ms = machines()
@@ -46,4 +44,4 @@ def cleanup(j):
         return 
 
     m = ms[j['machine']]
-    TYPES[m['type']].cleanup(j, m)
+    module(m['type']).cleanup(j, m)
