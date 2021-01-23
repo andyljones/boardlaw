@@ -1,7 +1,11 @@
 import os
+import shutil
 import psutil
 from subprocess import Popen
 from logging import getLogger
+import tempfile
+from pathlib import Path
+from . import state
 
 log = getLogger(__name__)
 
@@ -22,6 +26,9 @@ def resource_env(j, m):
         env[f'KITTENS_{k.upper()}'] = f'{start}:{end}'
     return env
 
+def job_path(j):
+    return state.ROOT / 'working-dirs' / j['name']
+
 @register
 class Local:
 
@@ -34,15 +41,20 @@ class Local:
 
     @staticmethod
     def launch(j, m):
-        p = Popen(j['command'], 
+        path = job_path(j)
+        path.mkdir(parents=True)
+        proc = Popen(j['command'], 
+            cwd=path,
             start_new_session=True, 
             shell=True,
             env=resource_env(j, m))
-        return {'pid': p.pid}
+        return proc.pid
 
     @staticmethod
     def cleanup(j, m):
-        pass
+        path = job_path(j)
+        if path.exists():
+            shutil.rmtree(path)
 
 def machines():
     ms = {}

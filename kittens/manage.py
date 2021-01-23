@@ -57,14 +57,25 @@ def manage():
 
     for j in state.jobs('active').values():
         if dead(j):
-            machines.cleanup(j)
             with state.update() as s:
                 job = s['jobs'][j['name']]
                 job['status'] = 'dead'
 
+def cleanup():
+    for j in state.jobs('dead').values():
+        machines.cleanup(j)
+        with state.update() as s:
+            del s['jobs'][j['name']]
+
 @state.mock_dir
 def demo():
     from kittens import submit
-    cmd = f'echo $KITTENS_GPU >"{state.ROOT / "logs.txt"}" 2>&1'
+    cmd = 'echo $KITTENS_GPU >"logs.txt" 2>&1'
     submit.submit(cmd, resources={'gpu': 1})
     manage()
+
+    assert list(state.ROOT.glob('working-dirs/*/logs.txt'))
+
+    cleanup()
+
+    assert not list(state.ROOT.glob('working-dirs/*/logs.txt'))
