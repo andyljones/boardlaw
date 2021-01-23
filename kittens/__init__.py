@@ -8,7 +8,3 @@
 
 """ 
 from . import state 
-
-
-def enqueue(cmd, dir=None, reqs={}):
-    pass

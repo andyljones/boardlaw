@@ -61,7 +61,9 @@ def manage():
                 job = s['jobs'][j['name']]
                 job['status'] = 'dead'
 
+@state.mock_dir
 def demo():
     from kittens import submit
-    submit.submit(['sleep', '20'], resources={'gpu': 1})
+    cmd = f'echo $KITTENS_GPU >"{state.ROOT / "logs.txt"}" 2>&1'
+    submit.submit(cmd, resources={'gpu': 1})
     manage()
