@@ -31,7 +31,7 @@ def snapshot_agents(run, agentfunc, device='cpu', **kwargs):
         return agents
 
     period = kwargs.get('period', 1)
-    tail = kwargs.get('tail', -int(1e6))
+    tail = kwargs.get('tail', int(1e6))
     try:
         stored = pd.DataFrame.from_dict(storage.snapshots(run), orient='index').tail(tail).iloc[::period]
     except ValueError:

@@ -227,3 +227,19 @@ def board_runs(boardsize=9):
         ax.set_title(f'all runs on {boardsize}x{boardsize} boards')
 
     return smoothed
+
+def noise_scales(run, B=8*1024):
+    import pandas as pd
+    scales = {}
+    for n, s in storage.snapshots(run).items():
+        state = storage.load_path(s['path'])['opt']['state']
+        v0 = torch.cat([s['exp_avg_sq'].reshape(-1) for _, s in state.items()]).norm()
+        m0 = torch.cat([s['exp_avg'].reshape(-1) for _, s in state.items()]).norm()
+        scales[s['_created']] = B*(v0 - m0**2).item()
+
+    scales = pd.Series(scales)
+    scales.index = pd.to_datetime(scales.index)
+    scales.index = scales.index - scales.index[0]
+    scales = scales.resample('15min').mean().interpolate()
+
+    return scales
