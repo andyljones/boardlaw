@@ -1,9 +1,20 @@
+from fabric import Connection
+
+_connections = {}
+def connection(config):
+    if config['name'] not in _connections:
+        _connections[config['name']] = Connection(**config['connection']) 
+    return _connections[config['name']]
 
 def machine(config):
+    assert 'processes' not in config
+    #TODO: Is there a better way than parsing ps?
+    r = connection(config).run('ps -A -o pid=', pty=False)
+    pids = [int(pid) for pid in r.stdout.splitlines()]
+    return {**config, 'processes': pids}
+
+def launch(job, machine):
     pass
 
-def launch(j, m):
-    pass
-
-def cleanup(j, m):
+def cleanup(job, machine):
     pass

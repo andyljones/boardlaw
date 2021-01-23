@@ -24,6 +24,10 @@ def config():
 
     return configs
 
+def write(name, configs):
+    path = state.ROOT / f'machines/{name}.json'
+    path.write_text(json.dumps(configs))
+
 def module(t):
     return importlib.import_module(t, __package__)
 
