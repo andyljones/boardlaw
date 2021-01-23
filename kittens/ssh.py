@@ -1,4 +1,7 @@
 from fabric import Connection
+from logging import getLogger
+
+getLogger('paramiko').setLevel('WARN')
 
 _connections = {}
 def connection(config):
@@ -9,7 +12,7 @@ def connection(config):
 def machine(config):
     assert 'processes' not in config
     #TODO: Is there a better way than parsing ps?
-    r = connection(config).run('ps -A -o pid=', pty=False)
+    r = connection(config).run('ps -A -o pid=', pty=False, hide='both')
     pids = [int(pid) for pid in r.stdout.splitlines()]
     return {**config, 'processes': pids}
 

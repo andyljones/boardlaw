@@ -12,7 +12,7 @@ def config():
         if path.suffix in ('.json',):
             content = json.loads(path.read_text())
         elif path.suffix in ('.yaml', '.yml'):
-            content = yaml.load(path.read_text())
+            content = yaml.safe_load(path.read_text())
         else:
             content = []
             log.warn(f'Can\'t handle type of config file "{path}"')
@@ -29,7 +29,7 @@ def write(name, configs):
     path.write_text(json.dumps(configs))
 
 def module(t):
-    return importlib.import_module(t, __package__)
+    return importlib.import_module(f'{__package__}.{t}')
 
 def machines():
     ms = {}

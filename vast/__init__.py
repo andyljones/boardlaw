@@ -18,7 +18,10 @@ def write_kittens():
                     'host': row.ssh_host, 
                     'user': 'root', 
                     'port': int(row.ssh_port), 
-                    'connect_kwargs': {'key_filename': ['/root/.ssh/vast_rsa']}}})
+                    'connect_kwargs': {
+                        'allow_agent': False,
+                        'look_for_keys': False,
+                        'key_filename': ['/root/.ssh/vast_rsa']}}})
         else:
             log.info(f'Skipping "{name}" as its status is "{row.actual_status}"')
     

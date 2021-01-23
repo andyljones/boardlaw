@@ -25,7 +25,9 @@ OFFER_COLS = [
     'id',
     'num_gpus',
     'machine_id',
-    'gpu_name']
+    'gpu_name',
+    'inet_down',
+    'inet_down_cost']
 
 STATUS_COLS = [
     'actual_status',
@@ -42,7 +44,9 @@ STATUS_COLS = [
     'id',
     'num_gpus',
     'machine_id',
-    'gpu_name']
+    'gpu_name',
+    'inet_down',
+    'inet_down_cost'] 
 
 def set_key():
     target = Path('~/.vast_api_key').expanduser()
@@ -60,6 +64,7 @@ def run(command):
         log.info('Hit multiple 502 errors, trying again')
 
 def offers(query, cols=OFFER_COLS):
+    "inet_down >= 200"
     if cols is not None:
         return offers(query, None)[cols]
     if query:
@@ -69,7 +74,7 @@ def offers(query, cols=OFFER_COLS):
 
 def status(label=None, cols=STATUS_COLS):
     if cols is not None:
-        return status(label, None)[cols]
+        return status(label, None).reindex(columns=cols)
 
     if label:
         s = status()
