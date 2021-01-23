@@ -57,6 +57,7 @@ def manage():
 
     for j in state.jobs('active').values():
         if dead(j):
+            machines.cleanup(j)
             with state.update() as s:
                 job = s['jobs'][j['name']]
                 job['status'] = 'dead'

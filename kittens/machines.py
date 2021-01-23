@@ -1,6 +1,10 @@
 import os
 import psutil
 from subprocess import Popen
+from logging import getLogger
+
+log = getLogger(__name__)
+
 TYPES = {}
 
 #TODO: Is there a way to not create zombies in the first place?
@@ -34,7 +38,11 @@ class Local:
             start_new_session=True, 
             shell=True,
             env=resource_env(j, m))
-        return p.pid
+        return {'pid': p.pid}
+
+    @staticmethod
+    def cleanup(j, m):
+        pass
 
 def machines():
     ms = {}
@@ -43,3 +51,15 @@ def machines():
             m['type'] = t
             ms[m['name']] = m
     return ms
+
+def launch(j, m):
+    return TYPES[m['type']].launch(j, m)
+
+def cleanup(j):
+    ms = machines()
+    if j['machine'] not in ms:
+        log.info(f'No cleanup for job {j["name"]} as machine "{j["machine"]}" no longer exists')
+        return 
+
+    m = ms[j['machine']]
+    TYPES[m['type']].cleanup(j, m)
