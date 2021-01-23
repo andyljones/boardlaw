@@ -1,3 +1,4 @@
+from json.decoder import JSONDecodeError
 import time
 from subprocess import check_output
 import pandas as pd
@@ -58,10 +59,10 @@ def run(command):
                 return s
         log.info('Hit multiple 502 errors, trying again')
 
-def offers(query=None, cols=OFFER_COLS):
+def offers(query, cols=OFFER_COLS):
     if cols is not None:
         return offers(query, None)[cols]
-    if query is not None:
+    if query:
         return offers(None, cols).query(query)
     js = json.loads(run(f'search offers --raw --storage {DISK}'))
     return pd.DataFrame.from_dict(js).sort_values('dph_total')
@@ -79,13 +80,22 @@ def status(label=None, cols=STATUS_COLS):
         else:
             return s.loc[label]
 
-    js = json.loads(run('show instances --raw'))
-    if js:
-        return pd.DataFrame.from_dict(js).set_index('label')
-    else:
-        return pd.DataFrame(index=pd.Index([], name='label'), columns=[])
+    for _ in range(3):
+        try:
+            resp = run('show instances --raw')
+            js = json.loads(resp)
+            if js:
+                return pd.DataFrame.from_dict(js).set_index('label')
+            else:
+                return pd.DataFrame(index=pd.Index([], name='label'), columns=[])
+        except JSONDecodeError:
+            # Usually due to a 429 error; wait a bit then try again
+            log.info('JSON decoding failed. Trying again.')
+            time.sleep(5)
 
-def launch(query=None):
+    raise IOError('Couldn\'t get the status after several tries')
+
+def launch(query):
     s = offers(query).iloc[0]
     assert s.dph_total < MAX_DPH
     assert status() is None or len(status()) < MAX_INSTANCES
@@ -107,13 +117,13 @@ def wait():
     while True:
         s = status(cols=None)
         display.clear_output(wait=True)
+        for label, row in s.iterrows():
+            duration = time.time() - row['start_date']
+            print(f'({duration:4.0f}s) {label:15s} {row["actual_status"]}: {row["status_msg"]}')
         if (s['actual_status'] == 'running').all():
-            print('Ready')
             break
         else:
-            for label, row in s.iterrows():
-                duration = time.time() - row['start_date']
-                print(f'({duration:.0f}s) {label:15s} {row["actual_status"]}: {row["status_msg"]}')
+            time.sleep(1)
 
 def destroy(label):
     id = status(label).id

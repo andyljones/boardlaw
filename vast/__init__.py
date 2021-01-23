@@ -1,6 +1,6 @@
 from logging import getLogger
 import kittens
-from .api import launch, status, offers, wait
+from .api import launch, status, offers, wait, destroy
 
 log = getLogger(__name__)
 
