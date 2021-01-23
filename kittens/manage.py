@@ -1,5 +1,6 @@
 from . import state, machines
 from logging import getLogger
+from pathlib import Path
 
 log = getLogger(__name__)
 
@@ -64,6 +65,7 @@ def manage():
 def cleanup():
     for j in state.jobs('dead').values():
         machines.cleanup(j)
+        Path(j['archive']).unlink()
         with state.update() as s:
             del s['jobs'][j['name']]
 
@@ -71,11 +73,13 @@ def cleanup():
 def demo():
     from kittens import submit
     cmd = 'echo $KITTENS_GPU >"logs.txt" 2>&1'
-    submit.submit(cmd, resources={'gpu': 1})
+    submit.submit(cmd, dir='.', resources={'gpu': 1})
     manage()
 
     assert list(state.ROOT.glob('working-dirs/*/logs.txt'))
+    assert list(state.ROOT.glob('working-dirs/*/readme.md'))
 
     cleanup()
 
     assert not list(state.ROOT.glob('working-dirs/*/logs.txt'))
+    assert not list(state.ROOT.glob('*.tar.gz'))

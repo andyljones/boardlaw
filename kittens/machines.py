@@ -6,6 +6,7 @@ from logging import getLogger
 import tempfile
 from pathlib import Path
 from . import state
+import tarfile
 
 log = getLogger(__name__)
 
@@ -43,6 +44,10 @@ class Local:
     def launch(j, m):
         path = job_path(j)
         path.mkdir(parents=True)
+
+        if j['archive'] is not None:
+            tarfile.open(j['archive']).extractall(path)
+
         proc = Popen(j['command'], 
             cwd=path,
             start_new_session=True, 
