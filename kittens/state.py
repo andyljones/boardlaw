@@ -4,7 +4,7 @@ from pathlib import Path
 from contextlib import contextmanager
 import shutil
 
-ROOT = Path('output/kittens')
+ROOT = Path('.kittens')
 
 DEFAULT_STATE = {
     'jobs': {}
@@ -55,7 +55,7 @@ def mock_dir(f):
         global ROOT
         try:
             OLD = ROOT
-            ROOT = Path('output/kittens-test')
+            ROOT = Path('.kittens-test')
             if ROOT.exists():
                 shutil.rmtree(ROOT)
             return f(*args, **kwargs)

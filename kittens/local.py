@@ -5,7 +5,10 @@ import psutil
 import tarfile
 from subprocess import Popen
 
-#TODO: Is there a way to not create zombies in the first place?
+#TODO: Is there a way to just not create zombies in the first place? Double fork?
+# I'm actually a bit confused here, because it seems that the *most recent* dead process forms a zombie,
+# but older ones don't. Maybe it's something to do with file handles? Total guess that, but half the 
+# misery I've had in the past with subprocesses has been related to filehandles.
 DEAD = ('zombie',)
 
 def resource_env(j, m):
@@ -23,11 +26,14 @@ def job_path(j):
 class Local:
 
     @staticmethod
-    def machines():
-        return [{
+    def machine(config):
+        assert 'name' not in config
+        assert 'processes' not in config
+        pids = [p.info['pid'] for p in psutil.process_iter(['pid', 'status']) if p.info['status'] not in DEAD]
+        return {
+            **config,
             'name': 'local',
-            'resources': {'gpu': 2, 'memory': 64},
-            'processes': [p.info['pid'] for p in psutil.process_iter(['pid', 'status']) if p.info['status'] not in DEAD]}]
+            'processes': pids}
 
     @staticmethod
     def launch(j, m):
@@ -42,6 +48,7 @@ class Local:
             start_new_session=True, 
             shell=True,
             env=resource_env(j, m))
+
         return proc.pid
 
     @staticmethod
@@ -49,3 +56,11 @@ class Local:
         path = job_path(j)
         if path.exists():
             shutil.rmtree(path)
+
+def mock_config():
+    import json
+    path = state.ROOT / 'machines' / 'local.json'
+    path.parent.mkdir(exist_ok=True, parents=True)
+
+    content = json.dumps({'type': 'local', 'resources': {'gpu': 2, 'memory': 64}})
+    path.write_text(content)

@@ -1,0 +1,4 @@
+type: local
+resources:
+  gpu: 2
+  memory: 64

@@ -71,7 +71,10 @@ def cleanup():
 
 @state.mock_dir
 def demo():
-    from kittens import submit
+    from kittens import submit, local
+
+    local.mock_config()
+
     cmd = 'echo $KITTENS_GPU >"logs.txt" 2>&1'
     submit.submit(cmd, dir='.', resources={'gpu': 1})
     manage()
