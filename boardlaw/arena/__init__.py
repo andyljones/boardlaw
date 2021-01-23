@@ -10,7 +10,7 @@ from functools import wraps
 from multiprocessing import Process, set_start_method
 
 # Re-export
-from .plot import heatmap, periodic, nontransitivities
+from .plot import heatmap, snapshots, nontransitivities
 from .analysis import elos
 
 log = getLogger(__name__)

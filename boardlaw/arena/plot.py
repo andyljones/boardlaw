@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from pavlov import runs
 import copy
 
-def periodic(run=-1, target=None, filter=''):
+def snapshots(run=-1, target=None, filter=''):
     run = runs.resolve(run)
     elos = analysis.elos(run, target, filter=filter)
     if target:
