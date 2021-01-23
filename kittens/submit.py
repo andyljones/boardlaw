@@ -29,15 +29,14 @@ def submit(command, dir=None, resources={}):
     else:
         archive = compress(dir, state.ROOT.joinpath(name).with_suffix('.tar.gz'))
     
-    spec = {
-        'name': name,
-        'submitted': str(now),
-        'command': command,
-        'archive': archive,
-        'resources': resources,
-        'status': 'fresh'}
     with state.update() as s:
-        s['jobs'][name] = spec
+        s['jobs'][name] = {
+            'name': name,
+            'submitted': str(now),
+            'command': command,
+            'archive': archive,
+            'resources': resources,
+            'status': 'fresh'}
 
 ### TESTS
 
