@@ -49,9 +49,8 @@ def launch(job, machine):
     if job.archive:
         tarfile.open(job.archive).extractall(path)
 
-    command = f'{job.command} >{quote(job.stdout)} 2>{quote(job.stderr)}'
     proc = Popen(
-        command,
+        job.command,
         cwd=path,
         start_new_session=True, 
         shell=True,

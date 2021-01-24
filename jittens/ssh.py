@@ -59,14 +59,12 @@ def launch(job: jobs.Job, machine: SSHMachine):
     else:
         unarchive = ''
 
-    captive = f'{job.command} >{quote(job.stdout)} 2>{quote(job.stderr)}' 
-
     setup = (
         f'mkdir -p {quote(dir)} && '
         f'cd {quote(dir)} && '
         f'{unarchive}'
         f'export {env} && '
-        f'{captive}')
+        f'{job.command}')
 
     wrapper = (
         f'/bin/bash -c {quote(setup)} '

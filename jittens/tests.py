@@ -53,9 +53,7 @@ def test_local():
         script = Path(d) / 'test.py'
         script.write_text('import os; print(os.environ["JITTENS_GPU"])')
 
-        name = jobs.submit(
-            'python test.py', dir=d, 
-            resources={'gpu': 1}, stdout='logs.txt', stderr='logs.txt')
+        name = jobs.submit('python test.py >logs.txt', dir=d, resources={'gpu': 1})
 
     archive = jobs.ROOT / 'archives' / f'{name}.tar.gz'
     assert archive.exists()
@@ -99,11 +97,9 @@ def test_ssh():
         script.write_text('import os; print(os.environ["JITTENS_GPU"])')
 
         name = jobs.submit(
-            cmd='python test.py', 
+            cmd='python test.py >logs.txt', 
             dir=d, 
-            resources={'gpu': 1}, 
-            stdout='logs.txt', 
-            stderr='logs.txt')
+            resources={'gpu': 1})
 
     archive = jobs.ROOT / 'archives' / f'{name}.tar.gz'
     assert archive.exists()
@@ -133,11 +129,9 @@ def demo():
             (Path(d) / 'demo.py').write_text(DEMO.format(i=i))
 
             jobs.submit(
-                'python demo.py', 
+                'python demo.py >logs.txt', 
                 dir=d, 
-                resources={'gpu': 1}, 
-                stdout='logs.txt', 
-                stderr='logs.txt')
+                resources={'gpu': 1})
 
     while not manage.finished():
         manage.manage()
