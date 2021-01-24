@@ -28,6 +28,8 @@ def resource_env(job, machine):
     return env
 
 def machine(config):
+    config = config.copy()
+    del config['type']
     assert 'name' not in config
     assert 'processes' not in config
     pids = [p.info['pid'] for p in psutil.process_iter(['pid', 'status']) if p.info['status'] not in DEAD]
@@ -63,6 +65,6 @@ def mock_config():
 
     content = json.dumps({
         'type': 'local', 
-        'root': '.kittens/local',
+        'root': str(state.ROOT / 'local'),
         'resources': {'gpu': 2, 'memory': 64}})
     path.write_text(content)

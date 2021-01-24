@@ -3,7 +3,7 @@ from logging import getLogger
 from . import state
 import json
 import yaml
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import List, Dict
 
 @dataclass
@@ -38,14 +38,20 @@ def write(name, configs):
     path = state.ROOT / f'machines/{name}.json'
     path.write_text(json.dumps(configs))
 
-def module(config):
-    return importlib.import_module(f'{__package__}.{config["type"]}')
+def module(x):
+    if isinstance(x, dict):
+        module = f'{__package__}.{x["type"]}'
+    elif isinstance(x, Machine):
+        module = x.__module__
+    else:
+        raise ValueError()
+    return importlib.import_module(module)
 
 def machines() -> Dict[str, Machine]:
     ms = {}
     for config in configurations():
         m = module(config).machine(config)
-        ms[m['name']] = m
+        ms[m.name] = m
     return ms
 
 def launch(job, machine) -> int:
@@ -53,9 +59,9 @@ def launch(job, machine) -> int:
 
 def cleanup(job):
     ms = machines()
-    if job['machine'] not in ms:
-        log.info(f'No cleanup for job {job["name"]} as machine "{job["machine"]}" no longer exists')
+    if job.machine not in ms:
+        log.info(f'No cleanup for job {job.name} as machine "{job.machine}" no longer exists')
         return 
 
-    machine = ms[job['machine']]
+    machine = ms[job.machine]
     module(machine).cleanup(job, machine)

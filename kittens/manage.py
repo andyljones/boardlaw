@@ -43,7 +43,7 @@ def dead(job):
     if job.machine not in ms:
         log.info(f'Job "{job.name}" has died as the machine "{job.machine}" no longer exists')
         return True
-    if job['process'] not in ms[job.machine].processes:
+    if job.process not in ms[job.machine].processes:
         log.info(f'Job "{job.name}" has died as its PID #{job.process} is not visible on "{job.machine}"')
         return True
     return False
@@ -80,10 +80,10 @@ def demo():
     submit.submit(cmd, dir='.', resources={'gpu': 1})
     manage()
 
-    assert list(state.ROOT.glob('working-dirs/*/logs.txt'))
-    assert list(state.ROOT.glob('working-dirs/*/readme.md'))
+    assert list(state.ROOT.glob('local/*/logs.txt'))
+    assert list(state.ROOT.glob('local/*/readme.md'))
 
     cleanup()
 
-    assert not list(state.ROOT.glob('working-dirs/*/logs.txt'))
+    assert not list(state.ROOT.glob('local/*/logs.txt'))
     assert not list(state.ROOT.glob('*.tar.gz'))

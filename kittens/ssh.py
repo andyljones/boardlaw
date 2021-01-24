@@ -25,6 +25,8 @@ def connection(machine):
     return _connections[name]
 
 def machine(config):
+    config = config.copy()
+    del config['type']
     assert 'processes' not in config
     #TODO: Is there a better way than parsing ps?
     r = connection(config).run('ps -A -o pid=', pty=False, hide='both')

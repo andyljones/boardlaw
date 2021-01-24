@@ -17,9 +17,9 @@ class Job:
     name: str
     submitted: str
     command: str
-    archive: Optional[str]
     resources: Dict[str, int]
     status: str
+    archive: Optional[str] = None
 
     machine: Optional[str] = None
     process: Optional[str] = None
@@ -53,10 +53,10 @@ def state():
             path().write_text(json.dumps(DEFAULT_STATE))
         return json.loads(path().read_text())
 
-def jobs(status=None):
+def jobs(status=None) -> Dict[str, Job]:
     if status:
         return {name: job for name, job in jobs().items() if job.status == status}
-    return {j['name']: Job(**j) for j in state()['jobs']}
+    return {name: Job(**job) for name, job in state()['jobs'].items()}
 
 @contextmanager
 def update():
