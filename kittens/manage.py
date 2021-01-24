@@ -73,33 +73,3 @@ def cleanup():
         with state.update() as s:
             del s['jobs'][job.name]
 
-@state.mock_dir
-def demo():
-    from kittens import submit, local
-    from tempfile import TemporaryDirectory
-
-    local.mock_config()
-
-    with TemporaryDirectory() as d:
-        script = Path(d) / 'test.py'
-        script.write_text('import os; print(os.environ["KITTENS_GPU"])')
-
-        cmd = 'python test.py'
-        name = submit.submit(cmd, dir=d, 
-            resources={'gpu': 1}, stdout='logs.txt', stderr='logs.txt')
-
-    while not finished():
-        manage()
-
-    archive = state.ROOT / 'archives' / f'{name}.tar.gz'
-    assert archive.exists()
-
-    dir = state.ROOT / 'local' / name
-    assert (dir / 'test.py').exists()
-    assert (dir / 'logs.txt').exists()
-    assert (dir / 'logs.txt').read_text() == '1:2\n'
-
-    cleanup()
-
-    assert not dir.exists()
-    assert not archive.exists()

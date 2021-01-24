@@ -66,15 +66,3 @@ def update():
         yield s
         path().write_text(json.dumps(s))
 
-def mock_dir(f):
-    def g(*args, **kwargs):
-        global ROOT
-        try:
-            OLD = ROOT
-            ROOT = Path('.kittens-test')
-            if ROOT.exists():
-                shutil.rmtree(ROOT)
-            return f(*args, **kwargs)
-        finally:
-            ROOT = OLD
-    return g

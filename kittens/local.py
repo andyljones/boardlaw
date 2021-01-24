@@ -60,13 +60,3 @@ def cleanup(job, machine):
     if path.exists():
         shutil.rmtree(path)
 
-def mock_config():
-    import json
-    path = state.ROOT / 'machines' / 'local.json'
-    path.parent.mkdir(exist_ok=True, parents=True)
-
-    content = json.dumps({
-        'type': 'local', 
-        'root': str(state.ROOT / 'local'),
-        'resources': {'gpu': 2, 'memory': 64}})
-    path.write_text(content)
