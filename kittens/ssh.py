@@ -36,9 +36,28 @@ def resource_string(job, machine):
 def launch(job, machine):
     env = resource_string(job, machine)
     dir = Path(machine['root']) / job['name']
-    subcommand = quote(f'mkdir -p {quote(dir)} && cd {quote(dir)} && export {env} && {quote(job["command"])}')
-    cmd = f'/bin/bash -c {subcommand} >{quote(machine["stdout"])} 2>{quote(machine["stderr"])} & echo $!'
-    r = connection(machine).run(cmd, hide='both')
+
+    if job['archive']:
+        remote_path = f'/tmp/{job["archive"]}'
+        connection(machine).put(job['archive'], remote_path)
+        unarchive = f'tar -xzf {quote(remote_path)} && rm {quote(remote_path)}'
+    else:
+        unarchive = ''
+
+    subcommand = (
+        f'mkdir -p {quote(dir)} &&'
+        f'cd {quote(dir)} &&'
+        f'{unarchive}'
+        f'export {env} &&'
+        f'{quote(job["command"])}')
+
+    command = (
+        f'/bin/bash -c {quote(subcommand)}'
+        f'>{quote(machine["stdout"])}'
+        f'2>{quote(machine["stderr"])}'
+        f'& echo $!')
+
+    r = connection(machine).run(command, hide='both')
     return int(r.stdout)
 
 def cleanup(job, machine):
