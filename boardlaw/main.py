@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import torch
 from rebar import arrdict, profiling, pickle
@@ -164,8 +165,9 @@ def set_devices():
         start, end = re.match(r'.*(\d+):(\d+).*', os.environ['JITTENS_GPU']).group(1, 2)
         os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(str(i) for i in range(int(start), int(end)))
 
-def run(buffer_len=64, n_envs=32*1024, device='cuda', desc='an 11 run just because'):
+def run(buffer_len=64, n_envs=32*1024, device='cuda', desc='an 11 run just because', timelimit=np.inf):
     set_devices()
+    start = time.time()
 
     #TODO: Restore league and sched when you go back to large boards
     worlds = mix(worldfunc(n_envs, device=device))
@@ -186,7 +188,7 @@ def run(buffer_len=64, n_envs=32*1024, device='cuda', desc='an 11 run just becau
             arena.monitor(run, worldfunc, agentfunc, device=worlds.device):
         #TODO: Upgrade this to handle batches that are some multiple of the env count
         idxs = (torch.randint(buffer_len, (n_envs,), device=device), torch.arange(n_envs, device=device))
-        while True:
+        while time.time() < start + timelimit:
 
             # Collect experience
             while len(buffer) < buffer_len:
@@ -213,3 +215,5 @@ def run(buffer_len=64, n_envs=32*1024, device='cuda', desc='an 11 run just becau
             storage.throttled_snapshot(run, sd, 900)
             storage.throttled_raw(run, 'model', lambda: pickle.dumps(network), 900)
             stats.gpu(worlds.device, 15)
+
+    log.info('Timelimit expired')
