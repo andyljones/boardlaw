@@ -25,9 +25,9 @@ def machine(config):
     assert 'processes' not in config
     pids = [p.info['pid'] for p in psutil.process_iter(['pid', 'status']) if p.info['status'] not in DEAD]
     return {
-        **config,
         'name': 'local',
-        'processes': pids}
+        'processes': pids,
+        **config}
 
 def launch(job, machine):
     path = Path(machine['root']) / job['name']
