@@ -74,6 +74,12 @@ def paths(run=-1, proc=None):
         df = df.loc[lambda df: df._process_name == proc]
     return df._path.tolist()
 
+def tail(run=-1, proc=None, count=50):
+    lines = paths(run, proc)[0].read_text().splitlines()
+    print('\n'.join(lines[-count:]))
+
+def _tail(iterable, n):
+    return iter(deque(iterable, maxlen=n))
 
 class Reader:
 
@@ -90,7 +96,7 @@ class Reader:
         for name, (info, f) in self._files.items():
             mtime = pd.Timestamp(Path(f.name).stat().st_mtime, unit='s').tz_localize('UTC')
             info['mtime'] = mtime
-            for line in tail(f.readlines(), 1000):
+            for line in _tail(f.readlines(), 1000):
                 yield info, line.rstrip('\n')
 
 def in_ipython():
@@ -140,9 +146,6 @@ class IPythonRenderer:
 
         content = '\n\n'.join([self._format_block(n) for n in self._buffers])
         self._out.refresh(content)
-
-def tail(iterable, n):
-    return iter(deque(iterable, maxlen=n))
 
 def from_run_sync(run, in_ipython=True, canceller=None):
     reader = Reader(run)

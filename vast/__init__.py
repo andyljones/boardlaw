@@ -32,7 +32,7 @@ def _fetch(name, machine):
     ssh = f"ssh -o StrictHostKeyChecking=no -i '{keyfile}' -p {conn['port']}"
 
     # https://unix.stackexchange.com/questions/104618/how-to-rsync-over-ssh-when-directory-names-have-spaces
-    command = f"""rsync -r -e "{ssh}" {conn['user']}@{conn['host']}:"'{source}/'" test/"""
+    command = f"""rsync -r -e "{ssh}" {conn['user']}@{conn['host']}:"'{source}/'" output/"""
     return Popen(command, shell=True, stdout=PIPE, stderr=PIPE)
 
 def fetch():
@@ -61,7 +61,6 @@ def fetch():
 
         sleep(1)
          
-    
 def ssh_command(label=-1):
     s = status(label)
     print(f'SSH_AUTH_SOCK="" ssh root@{s.ssh_host} -p {s.ssh_port} -o StrictHostKeyChecking=no -i /root/.ssh/vast_rsa')
