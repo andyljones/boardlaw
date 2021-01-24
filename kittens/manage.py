@@ -5,14 +5,14 @@ from pathlib import Path
 log = getLogger(__name__)
 
 def decrement(job, machine):
-    for k in set(job['resources']) & set(machine['resources']):
-        machine['resources'][k] -= job['resources'][k]
+    for k in set(job.resources) & set(machine.resources):
+        machine.resources[k] -= job.resources[k]
 
 def available():
     ms = machines.machines()
-    for jobs in state.jobs('active').values():
-        if jobs['machine'] in ms:
-            decrement(jobs, ms[jobs['machine']])
+    for job in state.jobs('active').values():
+        if job.machine in ms:
+            decrement(job, ms[job.machine])
     return ms
 
 def viable(asked, offered):
@@ -25,26 +25,26 @@ def viable(asked, offered):
 
 def select(j, ms):
     for m in ms.values():
-        if viable(j['resources'], m['resources']):
+        if viable(j.resources, m.resources):
             return m
 
 def launch(j, m):
-    log.info(f'Launching job "{j["name"]}" on machine "{m["name"]}"')
+    log.info(f'Launching job "{j.name}" on machine "{m.name}"')
     pid = machines.launch(j, m)
     log.info(f'Launched with PID #{pid}')
     with state.update() as s:
-        job = s['jobs'][j['name']]
+        job = s['jobs'][j.name]
         job['status'] = 'active'
-        job['machine'] = m['name']
+        job['machine'] = m.name
         job['process'] = pid
 
 def dead(job):
     ms = machines.machines()
-    if job['machine'] not in ms:
-        log.info(f'Job "{job["name"]}" has died as the machine "{job["machine"]}" no longer exists')
+    if job.machine not in ms:
+        log.info(f'Job "{job.name}" has died as the machine "{job.machine}" no longer exists')
         return True
-    if job['process'] not in ms[job['machine']]['processes']:
-        log.info(f'Job "{job["name"]}" has died as its PID #{job["process"]} is not visible on "{job["machine"]}"')
+    if job['process'] not in ms[job.machine].processes:
+        log.info(f'Job "{job.name}" has died as its PID #{job.process} is not visible on "{job.machine}"')
         return True
     return False
 
@@ -59,15 +59,16 @@ def manage():
     for job in state.jobs('active').values():
         if dead(job):
             with state.update() as s:
-                job = s['jobs'][job['name']]
+                job = s['jobs'][job.name]
                 job['status'] = 'dead'
 
 def cleanup():
     for job in state.jobs('dead').values():
         machines.cleanup(job)
-        Path(job['archive']).unlink()
+        if job.archive:
+            Path(job.archive).unlink()
         with state.update() as s:
-            del s['jobs'][job['name']]
+            del s['jobs'][job.name]
 
 @state.mock_dir
 def demo():

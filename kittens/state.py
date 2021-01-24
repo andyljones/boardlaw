@@ -3,12 +3,27 @@ from portalocker import RLock
 from pathlib import Path
 from contextlib import contextmanager
 import shutil
+from typing import Optional, Dict
+from dataclasses import dataclass
 
 ROOT = Path('.kittens')
 
 DEFAULT_STATE = {
     'jobs': {}
 }
+
+@dataclass
+class Job:
+    name: str
+    submitted: str
+    command: str
+    archive: Optional[str]
+    resources: Dict[str, int]
+    status: str
+
+    machine: Optional[str] = None
+    process: Optional[str] = None
+    archive: Optional[str] = None
 
 def path():
     return ROOT / 'state.json'
@@ -40,8 +55,8 @@ def state():
 
 def jobs(status=None):
     if status:
-        return {name: sub for name, sub in jobs().items() if sub['status'] == status}
-    return state()['jobs']
+        return {name: job for name, job in jobs().items() if job.status == status}
+    return {j['name']: Job(**j) for j in state()['jobs']}
 
 @contextmanager
 def update():

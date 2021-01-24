@@ -3,6 +3,16 @@ from logging import getLogger
 from . import state
 import json
 import yaml
+from dataclasses import dataclass
+from typing import List, Dict
+
+@dataclass
+class Machine:
+    name: str
+    resources: Dict[str, int]
+    root: str
+    processes: List[int]
+
 
 log = getLogger(__name__)
 
@@ -31,14 +41,14 @@ def write(name, configs):
 def module(config):
     return importlib.import_module(f'{__package__}.{config["type"]}')
 
-def machines():
+def machines() -> Dict[str, Machine]:
     ms = {}
     for config in configurations():
         m = module(config).machine(config)
         ms[m['name']] = m
     return ms
 
-def launch(job, machine):
+def launch(job, machine) -> int:
     return module(machine).launch(job, machine)
 
 def cleanup(job):

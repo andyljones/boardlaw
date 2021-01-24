@@ -4,6 +4,7 @@ from . import state
 from subprocess import STDOUT, check_output, CalledProcessError
 from logging import getLogger
 from pathlib import Path
+from dataclasses import asdict
 
 log = getLogger(__name__)
 
@@ -30,13 +31,14 @@ def submit(command, dir=None, resources={}):
         archive = compress(dir, state.ROOT.joinpath(name).with_suffix('.tar.gz'))
     
     with state.update() as s:
-        s['jobs'][name] = {
-            'name': name,
-            'submitted': str(now),
-            'command': command,
-            'archive': archive,
-            'resources': resources,
-            'status': 'fresh'}
+        job = state.Job(
+            name=name,
+            submitted=str(now),
+            command=command,
+            archive=archive,
+            resources=resources,
+            status='fresh')
+        s['jobs'][name] = asdict(job)
 
 ### TESTS
 
