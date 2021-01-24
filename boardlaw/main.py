@@ -1,5 +1,3 @@
-import gc
-import time
 import numpy as np
 import torch
 from rebar import arrdict, profiling, pickle
@@ -159,7 +157,15 @@ def half(x):
     else:
         return x
 
-def run(buffer_len=64, n_envs=8*1024, device='cuda', desc='an 11 run just because'):
+def set_devices():
+    import os
+    import re
+    if 'JITTENS_GPU' in os.environ:
+        start, end = re.match(r'.*(\d+):(\d+).*', os.environ['JITTENS_GPU']).group(1, 2)
+        os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(str(i) for i in range(int(start), int(end)))
+
+def run(buffer_len=64, n_envs=32*1024, device='cuda', desc='an 11 run just because'):
+    set_devices()
 
     #TODO: Restore league and sched when you go back to large boards
     worlds = mix(worldfunc(n_envs, device=device))
