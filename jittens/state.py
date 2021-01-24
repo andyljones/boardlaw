@@ -12,6 +12,7 @@ DEFAULT_STATE = {
     'jobs': {}
 }
 
+#TODO: Subclass this for 'Job awaiting submission' and 'Job submitted'
 @dataclass
 class Job:
     name: str
@@ -21,7 +22,7 @@ class Job:
     status: str
     stdout: str = '/dev/null'
     stderr: str = '/dev/null'
-    archive: Optional[str] = None
+    archive: str = ''
 
     machine: Optional[str] = None
     process: Optional[str] = None

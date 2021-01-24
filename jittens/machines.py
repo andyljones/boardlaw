@@ -6,13 +6,13 @@ import yaml
 from dataclasses import dataclass, asdict
 from typing import List, Dict
 
+#TODO: Config should be a superclass of Machine
 @dataclass
 class Machine:
     name: str
     resources: Dict[str, int]
     root: str
     processes: List[int]
-
 
 log = getLogger(__name__)
 

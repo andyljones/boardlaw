@@ -42,7 +42,7 @@ def launch(job, machine):
     path = Path(machine.root) / job.name
     path.mkdir(parents=True)
 
-    if job.archive is not None:
+    if job.archive:
         tarfile.open(job.archive).extractall(path)
 
     command = f'{job.command} >{quote(job.stdout)} 2>{quote(job.stderr)}'

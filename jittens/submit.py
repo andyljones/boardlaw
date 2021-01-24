@@ -26,7 +26,7 @@ def submit(cmd, dir=None, **kwargs):
     name = f'{now.strftime(r"%Y-%m-%d %H-%M-%S")} {humanhash(n=2)}'
 
     if dir is None:
-        archive = None
+        archive = ''
     else:
         archive = compress(dir, state.ROOT / 'archives' / f'{name}.tar.gz')
     
