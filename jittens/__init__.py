@@ -1,1 +1,1 @@
-from . import machines, submit, manage
+from . import local, ssh

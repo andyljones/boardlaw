@@ -13,6 +13,10 @@ class SSHMachine(machines.Machine):
 
 getLogger('paramiko').setLevel('WARN')
 
+def add(name, **kwargs):
+    SSHMachine(name, **kwargs, processes=[])
+    machines.add(name, type='ssh', **kwargs)
+
 _connections = {}
 def connection(machine):
     if isinstance(machine, SSHMachine):
@@ -23,14 +27,15 @@ def connection(machine):
         _connections[name] = Connection(**machine['connection']) 
     return _connections[name]
 
-def machine(config):
+def machine(name, config):
     config = config.copy()
     del config['type']
     assert 'processes' not in config
     #TODO: Is there a better way than parsing ps?
-    r = connection(config).run('ps -A -o pid=', pty=False, hide='both')
+    r = connection({'name': name, **config}).run('ps -A -o pid=', pty=False, hide='both')
     pids = [int(pid) for pid in r.stdout.splitlines()]
     return SSHMachine( 
+        name=name,
         processes=pids,
         **config)
 

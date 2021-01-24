@@ -19,6 +19,10 @@ DEAD = ('zombie',)
 class LocalMachine(machines.Machine):
     pass
 
+def add(**kwargs):
+    LocalMachine('local', **kwargs, processes=[])
+    machines.add('local', type='local', **kwargs)
+
 def resource_env(job, machine):
     env = os.environ.copy()
     for k in job.resources:
@@ -27,14 +31,14 @@ def resource_env(job, machine):
         env[f'JITTENS_{k.upper()}'] = f'{start}:{end}'
     return env
 
-def machine(config):
+def machine(name, config):
     config = config.copy()
     del config['type']
     assert 'name' not in config
     assert 'processes' not in config
     pids = [p.info['pid'] for p in psutil.process_iter(['pid', 'status']) if p.info['status'] not in DEAD]
     return LocalMachine( 
-        name='local',
+        name=name,
         processes=pids,
         **config)
 

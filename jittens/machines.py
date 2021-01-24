@@ -16,27 +16,10 @@ class Machine:
 
 log = getLogger(__name__)
 
-def configurations():
-    configs = []
-    for path in state.ROOT.joinpath('machines').iterdir():
-        if path.suffix in ('.json',):
-            content = json.loads(path.read_text())
-        elif path.suffix in ('.yaml', '.yml'):
-            content = yaml.safe_load(path.read_text())
-        else:
-            content = []
-            log.warn(f'Can\'t handle type of config file "{path}"')
-        
-        if isinstance(content, dict):
-            content = [content]
-
-        configs.extend(content)
-
-    return configs
-
-def write(name, configs):
+def add(name, **kwargs):
     path = state.ROOT / f'machines/{name}.json'
-    path.write_text(json.dumps(configs))
+    path.parent.mkdir(exist_ok=True, parents=True)
+    path.write_text(json.dumps(kwargs))
 
 def module(x):
     if isinstance(x, dict):
@@ -48,11 +31,20 @@ def module(x):
     return importlib.import_module(module)
 
 def machines() -> Dict[str, Machine]:
-    ms = {}
-    for config in configurations():
-        m = module(config).machine(config)
-        ms[m.name] = m
-    return ms
+    machines = {}
+    for path in state.ROOT.joinpath('machines').iterdir():
+        if path.suffix in ('.json',):
+            config = json.loads(path.read_text())
+        elif path.suffix in ('.yaml', '.yml'):
+            config = yaml.safe_load(path.read_text())
+        else:
+            raise IOError(f'Can\'t handle type of config file "{path}"')
+            
+        name = path.with_suffix('').name
+        machine = module(config).machine(name, config)
+        machines[name] = machine
+
+    return machines
 
 def launch(job, machine) -> int:
     return module(machine).launch(job, machine)

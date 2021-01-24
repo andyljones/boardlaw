@@ -38,14 +38,9 @@ def test_compress():
         assert f.getnames() == ['test.txt']
 
 def mock_local_config():
-    path = state.ROOT / 'machines' / 'local.json'
-    path.parent.mkdir(exist_ok=True, parents=True)
-
-    content = json.dumps({
-        'type': 'local', 
-        'root': str(state.ROOT / 'local'),
-        'resources': {'gpu': 2, 'memory': 64}})
-    path.write_text(content)
+    local.add(
+        root=str(state.ROOT / 'local'),
+        resources={'gpu': 2, 'memory': 64})
 
 ### Test local
 
@@ -81,25 +76,19 @@ def test_local():
 ### Test ssh
 
 def mock_ssh_config():
-    path = state.ROOT / 'machines' / 'ssh.json'
-    path.parent.mkdir(exist_ok=True, parents=True)
-
-    content = json.dumps({
-        'type': 'ssh',
-        'name': 'ssh-mock',
-        'resources': {
+    ssh.add('ssh',
+        resources={
             'gpu': 2,
             'memory': 64},
-        'root': str((state.ROOT / 'ssh').absolute()),
-        'connection': {
+        root=str((state.ROOT / 'ssh').absolute()),
+        connection={
             'host': 'localhost', 
             'user': 'root', 
             'port': '22', 
             'connect_kwargs': {
                 'allow_agent': False,
                 'look_for_keys': False,
-                'key_filename': ['/root/.ssh/boardlaw_rsa']}}})
-    path.write_text(content)
+                'key_filename': ['/root/.ssh/boardlaw_rsa']}})
 
 @mock_dir
 def test_ssh():
