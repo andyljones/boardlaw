@@ -21,6 +21,46 @@ def jittenate():
                         'allow_agent': False,
                         'look_for_keys': False,
                         'key_filename': ['/root/.ssh/vast_rsa']}})
+
+def _fetch(name, machine):
+    from subprocess import Popen, PIPE
+    from pathlib import Path
+
+    source = str(Path(machine.root) / name / 'output')
+    conn = machine.connection
+    [keyfile] = conn['connect_kwargs']['key_filename']
+    ssh = f"ssh -o StrictHostKeyChecking=no -i '{keyfile}' -p {conn['port']}"
+
+    # https://unix.stackexchange.com/questions/104618/how-to-rsync-over-ssh-when-directory-names-have-spaces
+    command = f"""rsync -r -e "{ssh}" {conn['user']}@{conn['host']}:"'{source}/'" test/"""
+    return Popen(command, shell=True, stdout=PIPE, stderr=PIPE)
+
+def fetch():
+    from jittens.machines import machines
+    from jittens.jobs import jobs
+    from time import sleep
+
+    machines = machines()
+    ps = {}
+    for name, job in jobs().items():
+        ps[name] = _fetch(name, machines[job.machine])
+
+    while ps:
+        for name in list(ps):
+            r = ps[name].poll()
+            if r is None:
+                pass
+            else:
+                if r == 0:
+                    log.debug(f'Fetched "{name}"')
+                else:
+                    s = ps[name].stderr.read().decode()
+                    lines = '\n'.join([f'\t{l}' for l in s.splitlines()])
+                    log.warn(f'Fetching "{name}" failed with retcode {r}. Stdout:\n{lines}')
+                del ps[name]
+
+        sleep(1)
+         
     
 def ssh_command(label=-1):
     s = status(label)
