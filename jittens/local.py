@@ -1,5 +1,5 @@
 import os
-from . import state, machines
+from . import jobs, machines
 import shutil
 import psutil
 import tarfile

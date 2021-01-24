@@ -1,6 +1,6 @@
 import importlib
 from logging import getLogger
-from . import state
+from . import jobs
 import json
 import yaml
 from dataclasses import dataclass, asdict
@@ -17,7 +17,7 @@ class Machine:
 log = getLogger(__name__)
 
 def add(name, **kwargs):
-    path = state.ROOT / f'machines/{name}.json'
+    path = jobs.ROOT / f'machines/{name}.json'
     path.parent.mkdir(exist_ok=True, parents=True)
     path.write_text(json.dumps(kwargs))
 
@@ -32,7 +32,7 @@ def module(x):
 
 def machines() -> Dict[str, Machine]:
     machines = {}
-    for path in state.ROOT.joinpath('machines').iterdir():
+    for path in jobs.ROOT.joinpath('machines').iterdir():
         if path.suffix in ('.json',):
             config = json.loads(path.read_text())
         elif path.suffix in ('.yaml', '.yml'):

@@ -1,7 +1,7 @@
 import re
 from fabric import Connection
 from logging import getLogger
-from . import machines, state
+from . import machines, jobs
 from pathlib import Path
 from shlex import quote
 from dataclasses import dataclass, asdict
@@ -39,7 +39,7 @@ def machine(name, config):
         processes=pids,
         **config)
 
-def resource_string(job: state.Job, machine: SSHMachine):
+def resource_string(job: jobs.Job, machine: SSHMachine):
     s = []
     for k in job.resources:
         assert re.fullmatch(r'[\w\d_]+', k)
@@ -48,7 +48,7 @@ def resource_string(job: state.Job, machine: SSHMachine):
         s.append(f'JITTENS_{k.upper()}={start}:{end}')
     return ' '.join(s)
 
-def launch(job: state.Job, machine: SSHMachine):
+def launch(job: jobs.Job, machine: SSHMachine):
     env = resource_string(job, machine)
     dir = str(Path(machine.root) / job.name)
 

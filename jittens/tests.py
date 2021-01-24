@@ -1,45 +1,45 @@
 import json
 from pathlib import Path
 import shutil
-from . import state, manage, submit, local, ssh
+from . import jobs, manage, local, ssh
 from tempfile import TemporaryDirectory
 
 def mock_dir(f):
     def g(*args, **kwargs):
         try:
-            OLD = state.ROOT
-            state.ROOT = Path('.jittens-test')
-            if state.ROOT.exists():
-                shutil.rmtree(state.ROOT)
+            OLD = jobs.ROOT
+            jobs.ROOT = Path('.jittens-test')
+            if jobs.ROOT.exists():
+                shutil.rmtree(jobs.ROOT)
             return f(*args, **kwargs)
         finally:
-            state.ROOT = OLD
+            jobs.ROOT = OLD
     return g
 
 ### Test submit
 
 @mock_dir
 def test_submission():
-    submit.submit('test')
-    assert len(state.jobs()) == 1
+    jobs.submit('test')
+    assert len(jobs.jobs()) == 1
 
 @mock_dir
 def test_compress():
     import tarfile
 
-    p = state.ROOT / 'kitten-test-tmp'
+    p = jobs.ROOT / 'kitten-test-tmp'
     p.mkdir(parents=True)
     p.joinpath('test.txt').touch()
 
-    submit.submit('test', dir=p)
+    jobs.submit('test', dir=p)
 
-    [job] = state.jobs()
+    [job] = jobs.jobs()
     with tarfile.open(job.archive) as f:
         assert f.getnames() == ['test.txt']
 
 def mock_local_config():
     local.add(
-        root=str(state.ROOT / 'local'),
+        root=str(jobs.ROOT / 'local'),
         resources={'gpu': 2, 'memory': 64})
 
 ### Test local
@@ -53,17 +53,17 @@ def test_local():
         script = Path(d) / 'test.py'
         script.write_text('import os; print(os.environ["JITTENS_GPU"])')
 
-        name = submit.submit(
+        name = jobs.submit(
             'python test.py', dir=d, 
             resources={'gpu': 1}, stdout='logs.txt', stderr='logs.txt')
 
-    archive = state.ROOT / 'archives' / f'{name}.tar.gz'
+    archive = jobs.ROOT / 'archives' / f'{name}.tar.gz'
     assert archive.exists()
 
     while not manage.finished():
         manage.manage()
 
-    dir = state.ROOT / 'local' / name
+    dir = jobs.ROOT / 'local' / name
     assert (dir / 'test.py').exists()
     assert (dir / 'logs.txt').exists()
     assert (dir / 'logs.txt').read_text() == '1:2\n'
@@ -80,7 +80,7 @@ def mock_ssh_config():
         resources={
             'gpu': 2,
             'memory': 64},
-        root=str((state.ROOT / 'ssh').absolute()),
+        root=str((jobs.ROOT / 'ssh').absolute()),
         connection={
             'host': 'localhost', 
             'user': 'root', 
@@ -98,20 +98,20 @@ def test_ssh():
         script = Path(d) / 'test.py'
         script.write_text('import os; print(os.environ["JITTENS_GPU"])')
 
-        name = submit.submit(
+        name = jobs.submit(
             cmd='python test.py', 
             dir=d, 
             resources={'gpu': 1}, 
             stdout='logs.txt', 
             stderr='logs.txt')
 
-    archive = state.ROOT / 'archives' / f'{name}.tar.gz'
+    archive = jobs.ROOT / 'archives' / f'{name}.tar.gz'
     assert archive.exists()
 
     while not manage.finished():
         manage.manage()
 
-    dir = state.ROOT / 'ssh' / name
+    dir = jobs.ROOT / 'ssh' / name
     assert (dir / 'test.py').exists()
     assert (dir / 'logs.txt').exists()
     assert (dir / 'logs.txt').read_text() == '1:2\n'
@@ -125,13 +125,14 @@ print({i})'''
 
 @mock_dir
 def demo():
+    mock_local_config()
     mock_ssh_config()
 
     with TemporaryDirectory() as d:
         for i in range(5):
             (Path(d) / 'demo.py').write_text(DEMO.format(i=i))
 
-            submit.submit(
+            jobs.submit(
                 'python demo.py', 
                 dir=d, 
                 resources={'gpu': 1}, 

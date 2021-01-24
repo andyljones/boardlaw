@@ -1,4 +1,4 @@
-from . import state, machines
+from . import jobs, machines
 from logging import getLogger
 from pathlib import Path
 
@@ -10,7 +10,7 @@ def decrement(job, machine):
 
 def available():
     ms = machines.machines()
-    for job in state.jobs('active').values():
+    for job in jobs.jobs('active').values():
         if job.machine in ms:
             decrement(job, ms[job.machine])
     return ms
@@ -32,7 +32,7 @@ def launch(j, m):
     log.info(f'Launching job "{j.name}" on machine "{m.name}"')
     pid = machines.launch(j, m)
     log.info(f'Launched with PID #{pid}')
-    with state.update() as s:
+    with jobs.update() as s:
         job = s['jobs'][j.name]
         job['status'] = 'active'
         job['machine'] = m.name
@@ -50,26 +50,26 @@ def dead(job):
 
 def manage():
     # Get the jobs
-    for job in state.jobs('fresh').values():
+    for job in jobs.jobs('fresh').values():
         ms = available()
         machine = select(job, ms)
         if machine:
             launch(job, machine)
 
-    for job in state.jobs('active').values():
+    for job in jobs.jobs('active').values():
         if dead(job):
-            with state.update() as s:
+            with jobs.update() as s:
                 job = s['jobs'][job.name]
                 job['status'] = 'dead'
 
 def finished():
-    return all(j.status == 'dead' for j in state.jobs().values())
+    return all(j.status == 'dead' for j in jobs.jobs().values())
 
 def cleanup():
-    for job in state.jobs('dead').values():
+    for job in jobs.jobs('dead').values():
         machines.cleanup(job)
         if job.archive:
             Path(job.archive).unlink()
-        with state.update() as s:
+        with jobs.update() as s:
             del s['jobs'][job.name]
 
