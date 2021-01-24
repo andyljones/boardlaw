@@ -32,8 +32,8 @@ def launch(j, m):
     log.info(f'Launching job "{j.name}" on machine "{m.name}"')
     pid = machines.launch(j, m)
     log.info(f'Launched with PID #{pid}')
-    with jobs.update() as s:
-        job = s['jobs'][j.name]
+    with jobs.update() as js:
+        job = js[j.name]
         job['status'] = 'active'
         job['machine'] = m.name
         job['process'] = pid
@@ -58,8 +58,8 @@ def manage():
 
     for job in jobs.jobs('active').values():
         if dead(job):
-            with jobs.update() as s:
-                job = s['jobs'][job.name]
+            with jobs.update() as js:
+                job = js[job.name]
                 job['status'] = 'dead'
 
 def finished():
@@ -70,6 +70,6 @@ def cleanup():
         machines.cleanup(job)
         if job.archive:
             Path(job.archive).unlink()
-        with jobs.update() as s:
-            del s['jobs'][job.name]
+        with jobs.update() as js:
+            del js[job.name]
 

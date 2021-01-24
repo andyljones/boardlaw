@@ -13,10 +13,6 @@ log = getLogger(__name__)
 
 ROOT = Path('.jittens')
 
-DEFAULT_STATE = {
-    'jobs': {}
-}
-
 #TODO: Subclass this for 'Job awaiting submission' and 'Job submitted'
 @dataclass
 class Job:
@@ -33,7 +29,7 @@ class Job:
     process: Optional[str] = None
 
 def path():
-    return ROOT / 'state.json'
+    return ROOT / 'jobs.json'
 
 _lock = None
 @contextmanager
@@ -53,24 +49,24 @@ def lock():
     with _lock:
         yield
 
-def state():
+def raw_jobs():
     with lock():
         if not path().exists():
             path().parent.mkdir(exist_ok=True, parents=True)
-            path().write_text(json.dumps(DEFAULT_STATE))
+            path().write_text(json.dumps({}))
         return json.loads(path().read_text())
-
-def jobs(status=None) -> Dict[str, Job]:
-    if status:
-        return {name: job for name, job in jobs().items() if job.status == status}
-    return {name: Job(**job) for name, job in state()['jobs'].items()}
 
 @contextmanager
 def update():
     with lock():
-        s = state()
-        yield s
-        path().write_text(json.dumps(s))
+        js = raw_jobs()
+        yield js
+        path().write_text(json.dumps(js))
+
+def jobs(status=None) -> Dict[str, Job]:
+    if status:
+        return {name: job for name, job in jobs().items() if job.status == status}
+    return {name: Job(**job) for name, job in raw_jobs().items()}
 
 def compress(source, target):
     target = Path(target).absolute()
@@ -94,7 +90,7 @@ def submit(cmd, dir=None, **kwargs):
     else:
         archive = compress(dir, ROOT / 'archives' / f'{name}.tar.gz')
     
-    with update() as s:
+    with update() as js:
         job = Job(
             name=name,
             submitted=str(now),
@@ -102,7 +98,7 @@ def submit(cmd, dir=None, **kwargs):
             archive=archive,
             **kwargs,
             status='fresh')
-        s['jobs'][name] = asdict(job)
+        js[name] = asdict(job)
 
     return name
 
