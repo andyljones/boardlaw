@@ -110,8 +110,11 @@ def test_ssh():
         script.write_text('import os; print(os.environ["JITTENS_GPU"])')
 
         name = submit.submit(
-            'python test.py', dir=d, 
-            resources={'gpu': 1}, stdout='logs.txt', stderr='logs.txt')
+            cmd='python test.py', 
+            dir=d, 
+            resources={'gpu': 1}, 
+            stdout='logs.txt', 
+            stderr='logs.txt')
 
     archive = state.ROOT / 'archives' / f'{name}.tar.gz'
     assert archive.exists()
@@ -123,3 +126,28 @@ def test_ssh():
     assert (dir / 'test.py').exists()
     assert (dir / 'logs.txt').exists()
     assert (dir / 'logs.txt').read_text() == '1:2\n'
+
+
+DEMO = '''
+import os
+import time
+time.sleep(5)
+print({i})'''
+
+@mock_dir
+def demo():
+    mock_ssh_config()
+
+    with TemporaryDirectory() as d:
+        for i in range(5):
+            (Path(d) / 'demo.py').write_text(DEMO.format(i=i))
+
+            submit.submit(
+                'python demo.py', 
+                dir=d, 
+                resources={'gpu': 1}, 
+                stdout='logs.txt', 
+                stderr='logs.txt')
+
+    while not manage.finished():
+        manage.manage()

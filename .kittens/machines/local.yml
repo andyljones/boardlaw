@@ -1,5 +1,0 @@
-type: local
-root: '.kittens/local'
-resources:
-  gpu: 0
-  memory: 64

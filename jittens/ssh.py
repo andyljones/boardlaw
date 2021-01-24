@@ -68,7 +68,6 @@ def launch(job: state.Job, machine: SSHMachine):
         '>/tmp/jittens-ssh.log '
         '2>/tmp/jittens-ssh.log '
         f'& echo $!')
-    print(wrapper)
 
     r = connection(machine).run(wrapper, hide='both')
     return int(r.stdout)

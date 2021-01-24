@@ -21,7 +21,7 @@ def compress(source, target):
         log.error(f'Archival failed with output "{e.stdout.decode()}"')
         raise 
 
-def submit(command, dir=None, **kwargs):
+def submit(cmd, dir=None, **kwargs):
     now = datetime.utcnow()
     name = f'{now.strftime(r"%Y-%m-%d %H-%M-%S")} {humanhash(n=2)}'
 
@@ -34,7 +34,7 @@ def submit(command, dir=None, **kwargs):
         job = state.Job(
             name=name,
             submitted=str(now),
-            command=command,
+            command=cmd,
             archive=archive,
             **kwargs,
             status='fresh')
