@@ -1,6 +1,6 @@
 from pathlib import Path
 import shutil
-from . import jobs, manage, local, ssh
+from . import jobs, manage, finished, cleanup, local, ssh
 from tempfile import TemporaryDirectory
 
 def mock_dir(f):
@@ -57,15 +57,15 @@ def test_local():
     archive = jobs.ROOT / 'archives' / f'{name}.tar.gz'
     assert archive.exists()
 
-    while not manage.finished():
-        manage.manage()
+    while not finished():
+        manage()
 
     dir = jobs.ROOT / 'local' / name
     assert (dir / 'test.py').exists()
     assert (dir / 'logs.txt').exists()
     assert (dir / 'logs.txt').read_text() == '1:2\n'
 
-    manage.cleanup()
+    cleanup()
 
     assert not dir.exists()
     assert not archive.exists()
@@ -103,8 +103,8 @@ def test_ssh():
     archive = jobs.ROOT / 'archives' / f'{name}.tar.gz'
     assert archive.exists()
 
-    while not manage.finished():
-        manage.manage()
+    while not finished():
+        manage()
 
     dir = jobs.ROOT / 'ssh' / name
     assert (dir / 'test.py').exists()
@@ -132,5 +132,5 @@ def demo():
                 dir=d, 
                 resources={'gpu': 1})
 
-    while not manage.finished():
-        manage.manage()
+    while not finished():
+        manage()

@@ -48,6 +48,13 @@ def dead(job):
         return True
     return False
 
+def check_stalled():
+    for job in jobs.jobs('fresh').values():
+        ms = machines.machines()
+        machine = select(job, ms)
+        if not machine:
+            log.info('Job "{job.name}" requires too many resources to run on any existing machine')
+
 def manage():
     # Get the jobs
     for job in jobs.jobs('fresh').values():
@@ -61,6 +68,8 @@ def manage():
             with jobs.update() as js:
                 job = js[job.name]
                 job['status'] = 'dead'
+
+    check_stalled()
 
 def finished():
     return all(j.status == 'dead' for j in jobs.jobs().values())
