@@ -3,6 +3,7 @@ from logging import getLogger
 from . import jobs
 import json
 import yaml
+import shutil
 from dataclasses import dataclass, asdict
 from typing import List, Dict
 
@@ -20,6 +21,13 @@ def add(name, **kwargs):
     path = jobs.ROOT / f'machines/{name}.json'
     path.parent.mkdir(exist_ok=True, parents=True)
     path.write_text(json.dumps(kwargs))
+
+def remove(name):
+    path = jobs.ROOT / f'machines/{name}.json'
+    path.unlink()
+
+def clear():
+    shutil.rmtree(jobs.ROOT / 'machines')
 
 def module(x):
     if isinstance(x, dict):
