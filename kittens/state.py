@@ -19,11 +19,12 @@ class Job:
     command: str
     resources: Dict[str, int]
     status: str
+    stdout: str = '/dev/null'
+    stderr: str = '/dev/null'
     archive: Optional[str] = None
 
     machine: Optional[str] = None
     process: Optional[str] = None
-    archive: Optional[str] = None
 
 def path():
     return ROOT / 'state.json'

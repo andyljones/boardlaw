@@ -7,7 +7,7 @@ from subprocess import Popen
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Dict, List
-
+from shlex import quote
 
 #TODO: Is there a way to just not create zombies in the first place? Double fork?
 # I'm actually a bit confused here, because it seems that the *most recent* dead process forms a zombie,
@@ -45,7 +45,9 @@ def launch(job, machine):
     if job.archive is not None:
         tarfile.open(job.archive).extractall(path)
 
-    proc = Popen(job.command, 
+    command = f'{job.command} >{quote(job.stdout)} 2>{quote(job.stderr)}'
+    proc = Popen(
+        command,
         cwd=path,
         start_new_session=True, 
         shell=True,

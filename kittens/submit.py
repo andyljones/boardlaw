@@ -21,14 +21,14 @@ def compress(source, target):
         log.error(f'Archival failed with output "{e.stdout.decode()}"')
         raise 
 
-def submit(command, dir=None, resources={}):
+def submit(command, dir=None, **kwargs):
     now = datetime.utcnow()
     name = f'{now.strftime(r"%Y-%m-%d %H-%M-%S")} {humanhash(n=2)}'
 
     if dir is None:
         archive = None
     else:
-        archive = compress(dir, state.ROOT.joinpath(name).with_suffix('.tar.gz'))
+        archive = compress(dir, state.ROOT / 'archives' / f'{name}.tar.gz')
     
     with state.update() as s:
         job = state.Job(
@@ -36,9 +36,11 @@ def submit(command, dir=None, resources={}):
             submitted=str(now),
             command=command,
             archive=archive,
-            resources=resources,
+            **kwargs,
             status='fresh')
         s['jobs'][name] = asdict(job)
+
+    return name
 
 ### TESTS
 

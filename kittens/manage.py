@@ -62,6 +62,9 @@ def manage():
                 job = s['jobs'][job.name]
                 job['status'] = 'dead'
 
+def finished():
+    return all(j.status == 'dead' for j in state.jobs().values())
+
 def cleanup():
     for job in state.jobs('dead').values():
         machines.cleanup(job)
@@ -73,17 +76,30 @@ def cleanup():
 @state.mock_dir
 def demo():
     from kittens import submit, local
+    from tempfile import TemporaryDirectory
 
     local.mock_config()
 
-    cmd = 'echo $KITTENS_GPU >"logs.txt" 2>&1'
-    submit.submit(cmd, dir='.', resources={'gpu': 1})
-    manage()
+    with TemporaryDirectory() as d:
+        script = Path(d) / 'test.py'
+        script.write_text('import os; print(os.environ["KITTENS_GPU"])')
 
-    assert list(state.ROOT.glob('local/*/logs.txt'))
-    assert list(state.ROOT.glob('local/*/readme.md'))
+        cmd = 'python test.py'
+        name = submit.submit(cmd, dir=d, 
+            resources={'gpu': 1}, stdout='logs.txt', stderr='logs.txt')
+
+    while not finished():
+        manage()
+
+    archive = state.ROOT / 'archives' / f'{name}.tar.gz'
+    assert archive.exists()
+
+    dir = state.ROOT / 'local' / name
+    assert (dir / 'test.py').exists()
+    assert (dir / 'logs.txt').exists()
+    assert (dir / 'logs.txt').read_text() == '1:2\n'
 
     cleanup()
 
-    assert not list(state.ROOT.glob('local/*/logs.txt'))
-    assert not list(state.ROOT.glob('*.tar.gz'))
+    assert not dir.exists()
+    assert not archive.exists()

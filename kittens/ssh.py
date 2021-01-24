@@ -9,8 +9,6 @@ from typing import Dict
 
 class SSHMachine(machines.Machine):
     connection: Dict
-    stdout: str = '/dev/null'
-    stderr: str = '/dev/null'
 
 getLogger('paramiko').setLevel('WARN')
 
