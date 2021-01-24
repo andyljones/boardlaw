@@ -38,7 +38,7 @@ def launch(job, machine):
     dir = Path(machine['root']) / job['name']
 
     if job['archive']:
-        remote_path = f'/tmp/{job["archive"]}'
+        remote_path = f'/tmp/{job["name"]}'
         connection(machine).put(job['archive'], remote_path)
         unarchive = f'tar -xzf {quote(remote_path)} && rm {quote(remote_path)}'
     else:
@@ -61,4 +61,5 @@ def launch(job, machine):
     return int(r.stdout)
 
 def cleanup(job, machine):
-    pass
+    dir = Path(machine['root']) / job['name']
+    connection(machine).run(f"rm -rf {quote(dir)}")
