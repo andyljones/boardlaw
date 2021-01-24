@@ -23,19 +23,19 @@ def viable(asked, offered):
             return False
     return True
 
-def select(j, ms):
-    for m in ms.values():
-        if viable(j.resources, m.resources):
+def select(job, machines):
+    for m in machines.values():
+        if viable(job.resources, m.resources):
             return m
 
-def launch(j, m):
-    log.info(f'Launching job "{j.name}" on machine "{m.name}"')
-    pid = machines.launch(j, m)
+def launch(job, machine):
+    log.info(f'Launching job "{job.name}" on machine "{machine.name}"')
+    pid = machines.launch(job, machine)
     log.info(f'Launched with PID #{pid}')
     with jobs.update() as js:
-        job = js[j.name]
+        job = js[job.name]
         job['status'] = 'active'
-        job['machine'] = m.name
+        job['machine'] = machine.name
         job['process'] = pid
 
 def dead(job):
@@ -56,13 +56,14 @@ def check_stalled():
             log.info('Job "{job.name}" requires too many resources to run on any existing machine')
 
 def manage():
-    # Get the jobs
+    # See if any fresh jobs can be submitted
     for job in jobs.jobs('fresh').values():
         ms = available()
         machine = select(job, ms)
         if machine:
             launch(job, machine)
 
+    # See if any of the active jobs are now dead
     for job in jobs.jobs('active').values():
         if dead(job):
             with jobs.update() as js:

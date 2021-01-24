@@ -165,7 +165,7 @@ def set_devices():
         start, end = re.match(r'.*(\d+):(\d+).*', os.environ['JITTENS_GPU']).group(1, 2)
         os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(str(i) for i in range(int(start), int(end)))
 
-def run(buffer_len=64, n_envs=32*1024, device='cuda', desc='an 11 run just because', timelimit=np.inf):
+def run(buffer_len=64, n_envs=24*1024, device='cuda', desc='an 11 run with a bigger batch', timelimit=np.inf):
     set_devices()
     start = time.time()
 

@@ -120,17 +120,32 @@ print({i})'''
 
 @mock_dir
 def demo():
+    # Add a faux local machine to jittens
+    # This just writes out a json file in `.jittens/machines`
     mock_local_config()
+
+    # Add a faux SSH machine too
+    # This just writes out another json file in `.jittens/machines`
     mock_ssh_config()
 
     with TemporaryDirectory() as d:
         for i in range(5):
+            # Write out five different scripts to run as jobs
             (Path(d) / 'demo.py').write_text(DEMO.format(i=i))
 
+            # Submit them all, asking for one GPU each.
+            # This'll package up the dir into an archive and add an entry
+            # to the `.jittens/jobs.json`
             jobs.submit(
                 'python demo.py >logs.txt', 
                 dir=d, 
                 resources={'gpu': 1})
 
+    # While there are jobs left alive, keep `manage`ing
     while not finished():
+        # This looks over the `jobs.json`, and if any fit in the available 
+        # machines as described by the `machines/` json files, it copies over 
+        # the archive, sets the job running, and gets a PID back. PID goes 
+        # into the job's entry in the `jobs.json`, and in every call after that, 
+        # if the PID's disappeared the job is marked dead.
         manage()
