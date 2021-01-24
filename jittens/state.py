@@ -6,7 +6,7 @@ import shutil
 from typing import Optional, Dict
 from dataclasses import dataclass
 
-ROOT = Path('.kittens')
+ROOT = Path('.jittens')
 
 DEFAULT_STATE = {
     'jobs': {}

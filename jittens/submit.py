@@ -44,21 +44,3 @@ def submit(command, dir=None, **kwargs):
 
 ### TESTS
 
-@state.mock_dir
-def test_submission():
-    submit('test')
-    assert len(state.jobs()) == 1
-
-@state.mock_dir
-def test_compress():
-    import tarfile
-
-    p = state.ROOT / 'kitten-test-tmp'
-    p.mkdir(parents=True)
-    p.joinpath('test.txt').touch()
-
-    submit('test', dir=p)
-
-    [job] = state.jobs()
-    with tarfile.open(job['archive']) as f:
-        assert f.getnames() == ['test.txt']

@@ -7,6 +7,7 @@ from shlex import quote
 from dataclasses import dataclass, asdict
 from typing import Dict
 
+@dataclass
 class SSHMachine(machines.Machine):
     connection: Dict
 
@@ -39,7 +40,7 @@ def resource_string(job: state.Job, machine: SSHMachine):
         assert re.fullmatch(r'[\w\d_]+', k)
         end = machine.resources[k]
         start = machine.resources[k] - job.resources[k]
-        s.append(f'KITTENS_{k.upper()}={start}:{end}')
+        s.append(f'JITTENS_{k.upper()}={start}:{end}')
     return ' '.join(s)
 
 def launch(job: state.Job, machine: SSHMachine):
@@ -49,24 +50,27 @@ def launch(job: state.Job, machine: SSHMachine):
     if job.archive:
         remote_path = f'/tmp/{job.name}'
         connection(machine).put(job.archive, remote_path)
-        unarchive = f'tar -xzf {quote(remote_path)} && rm {quote(remote_path)}'
+        unarchive = f'tar -xzf {quote(remote_path)} && rm {quote(remote_path)} && '
     else:
         unarchive = ''
 
-    subcommand = (
-        f'mkdir -p {quote(dir)} &&'
-        f'cd {quote(dir)} &&'
+    captive = f'{job.command} >{quote(job.stdout)} 2>{quote(job.stderr)}' 
+
+    setup = (
+        f'mkdir -p {quote(dir)} && '
+        f'cd {quote(dir)} && '
         f'{unarchive}'
-        f'export {env} &&'
-        f'{quote(job.command)}')
+        f'export {env} && '
+        f'{captive}')
 
-    command = (
-        f'/bin/bash -c {quote(subcommand)}'
-        f'>{quote(machine.stdout)}'
-        f'2>{quote(machine.stderr)}'
+    wrapper = (
+        f'/bin/bash -c {quote(setup)} '
+        '>/tmp/jittens-ssh.log '
+        '2>/tmp/jittens-ssh.log '
         f'& echo $!')
+    print(wrapper)
 
-    r = connection(machine).run(command, hide='both')
+    r = connection(machine).run(wrapper, hide='both')
     return int(r.stdout)
 
 def cleanup(job, machine):

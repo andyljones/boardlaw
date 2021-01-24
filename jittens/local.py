@@ -24,7 +24,7 @@ def resource_env(job, machine):
     for k in job.resources:
         end = str(machine.resources[k])
         start = machine.resources[k] - job.resources[k]
-        env[f'KITTENS_{k.upper()}'] = f'{start}:{end}'
+        env[f'JITTENS_{k.upper()}'] = f'{start}:{end}'
     return env
 
 def machine(config):

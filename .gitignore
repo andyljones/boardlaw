@@ -13,4 +13,4 @@ dist
 .env
 .cubicasa-confirmed
 credentials.json
-.kittens*
+.jittens*

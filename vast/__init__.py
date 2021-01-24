@@ -1,10 +1,10 @@
 from logging import getLogger
-import kittens
+import jittens
 from .api import launch, status, offers, wait, destroy
 
 log = getLogger(__name__)
 
-def write_kittens():
+def write_jittens():
     configs = []
     for name, row in status().iterrows():
         if row.actual_status == 'running':
@@ -26,7 +26,7 @@ def write_kittens():
         else:
             log.info(f'Skipping "{name}" as its status is "{row.actual_status}"')
     
-    kittens.machines.write('vast', configs)
+    jittens.machines.write('vast', configs)
     
 def ssh_command(label=-1):
     s = status(label)
