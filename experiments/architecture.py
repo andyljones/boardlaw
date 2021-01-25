@@ -117,7 +117,7 @@ def run():
 
     opt = torch.optim.Adam(network.parameters(), lr=1e-2)
 
-    for obs, seats, y in experience('*muddy-make'):    
+    for obs, seats, y in load():    
         yhat = network(obs, seats)
 
         loss = (y - yhat).pow(2).mean()
