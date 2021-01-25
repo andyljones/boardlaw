@@ -7,8 +7,6 @@ from rebar import recurrence, arrdict, profiling
 from torch.nn import functional as F
 from collections import namedtuple
 
-FIELDS = ('logits', 'v')
-
 class ReZeroResidual(nn.Linear):
 
     def __init__(self, width):
