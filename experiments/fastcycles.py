@@ -1,11 +1,15 @@
+from pathlib import Path
+import pickle
 from boardlaw.arena import evaluator
 from pavlov import storage
 from boardlaw.main import worldfunc, agentfunc, mix, half, as_chunk, optimize
 import torch
 from rebar import arrdict
 from logging import getLogger
-from itertools import combinations, product
+from itertools import combinations, combinations_with_replacement, product
 from tqdm.auto import tqdm
+import pandas as pd
+import seaborn as sns
 
 log = getLogger(__name__)
 
@@ -74,7 +78,22 @@ def run():
     sds = generate_state_dicts('*muddy-make')
 
     results = []
-    for i, j in tqdm(list(combinations(range(len(sds)), 2))):
-        results.extend(evaluate({i: sds[i], j: sds[j]}))
-    
+    for i, j in tqdm(list(combinations_with_replacement(range(len(sds)), 2))):
+        results.extend(evaluate({f'{i}.0': sds[i], f'{j}.1': sds[j]}))
+
+    p = Path('output/experiments/fastcycles.pkl')
+    p.parent.mkdir(exist_ok=True, parents=True)
+    p.write_bytes(pickle.dumps(results))
+
+    from collections import defaultdict
+    summary = defaultdict(lambda: 0.)
+    for r in results:
+        blk = int(r.names[0][0])
+        wht = int(r.names[1][0])
+        summary[blk, wht, 'blk'] += r['wins'][0]
+        summary[blk, wht, 'wht'] += r['wins'][1]
+    df = pd.Series(summary).unstack(2).pipe(lambda df: df.div(df.sum(1), 0)).unstack(1)
+
+    sns.heatmap(df.wht, vmin=.4, vmax=.6, cmap='RdBu')
+
     return results
