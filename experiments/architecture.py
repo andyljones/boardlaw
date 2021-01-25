@@ -1,3 +1,6 @@
+import pickle
+from tqdm.auto import tqdm
+import numpy as np
 from boardlaw.main import worldfunc, agentfunc, mix, half
 from boardlaw.learning import reward_to_go
 from pavlov import storage
@@ -39,6 +42,20 @@ class FCModel(nn.Module):
         v = self.value(neck).squeeze(-1)
         return heads.scatter_values(torch.tanh(v), seats)
 
+def compress(obs, seats, y):
+    return {
+        'obs': np.packbits(obs.bool().cpu().numpy()),
+        'obs_shape': obs.shape,
+        'seats': seats.bool().cpu().numpy(),
+        'y': y.cpu().numpy()}
+
+def decompress(comp):
+    raw = np.unpackbits(comp['obs'])
+    obs = torch.as_tensor(raw.reshape(comp['obs_shape'])).cuda().float()
+    seats = torch.as_tensor(comp['seats']).cuda().int()
+    y = torch.as_tensor(comp['y']).cuda().float()
+    return obs, seats, y
+
 def experience(run, n_envs=8*1024, device='cuda'):
     #TODO: Restore league and sched when you go back to large boards
     worlds = mix(worldfunc(n_envs, device=device))
@@ -66,7 +83,7 @@ def experience(run, n_envs=8*1024, device='cuda'):
             targets = reward_to_go(
                         chunk.transitions.rewards.float(), 
                         chunk.decisions.v.float(), 
-                        terminal).half()
+                        terminal)
             
             yield chunk.worlds.obs[0], chunk.worlds.seats[0], targets[0]
         else:
@@ -74,6 +91,16 @@ def experience(run, n_envs=8*1024, device='cuda'):
 
 
         worlds = new_worlds
+
+def save(count=1024):
+    buffer = []
+    for obs, seats, y in tqdm(experience('*muddy-make'), total=count):    
+        buffer.append(compress(obs, seats, y))
+
+        if len(buffer) == count:
+            with open('output/architecture-batches.pkl', 'wb+') as f:
+                pickle.dump(buffer, f)
+            break
 
 def run():
     network = FCModel(worldfunc(1).boardsize).cuda()
