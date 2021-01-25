@@ -64,7 +64,7 @@ def generate_state_dicts(run):
 
     return state_dicts 
 
-def evaluate(pair, n_envs=256, device='cuda'):
+def evaluate(pair, n_envs=64*1024, device='cuda'):
     agents = {}
     for name, sd in pair.items():
         agent = agentfunc(device)

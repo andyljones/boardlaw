@@ -3,6 +3,7 @@ import pandas as pd
 import torch
 from pavlov import storage, runs
 from boardlaw import hex, mohex, mcts, analysis
+import matplotlib.pyplot as plt
 
 def count_wins(transitions):
     return (transitions.rewards
@@ -54,3 +55,18 @@ def run(source_run, snapshot):
             print(results[-1])
     df = pd.DataFrame(results).pivot('c_puct', 'n_nodes', ['elo', 'kl'])
     return df
+
+def as_dataframe(s):
+    from io import StringIO
+    df = pd.read_csv(StringIO(s), sep='\t', index_col=0).iloc[1:]
+    df.index = pd.to_numeric(df.index)
+    df.columns.name = 'n_nodes'
+    df.index.name = 'c_puct'
+    return df
+
+def plot(df, ax=None):
+    _, ax = plt.subplots() if ax is None else (None, ax)
+    ax = df.plot(cmap='viridis', marker='o', ax=ax)
+    ax.set_xscale('log', basex=2)
+    ax.axhline(0, color='k', alpha=.5)
+    return ax
