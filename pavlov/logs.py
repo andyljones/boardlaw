@@ -74,9 +74,9 @@ def paths(run=-1, proc=None):
         df = df.loc[lambda df: df._process_name == proc]
     return df._path.tolist()
 
-def tail(run=-1, proc=None, count=50):
-    lines = paths(run, proc)[0].read_text().splitlines()
-    print('\n'.join(lines[-count:]))
+def slice(run=-1, proc=None, idx=0, start=-50, end=None):
+    lines = paths(run, proc)[idx].read_text().splitlines()
+    print('\n'.join(lines[start:end]))
 
 def _tail(iterable, n):
     return iter(deque(iterable, maxlen=n))
