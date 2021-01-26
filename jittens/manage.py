@@ -79,6 +79,7 @@ def finished():
 
 def cleanup():
     for job in jobs.jobs('dead').values():
+        log.info(f'Cleaning up {job.name}')
         machines.cleanup(job)
         if job.archive:
             Path(job.archive).unlink()

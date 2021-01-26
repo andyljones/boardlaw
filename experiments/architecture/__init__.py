@@ -1,3 +1,4 @@
+import time
 import matplotlib.pyplot as plt
 import re
 import pandas as pd
@@ -154,7 +155,7 @@ def run(name, width, depth, T=np.inf):
         n = torch.nn.utils.clip_grad_norm_(network.parameters(), 1).item()
         opt.step()
 
-        stat = {'train': residual_var(y, yhat), 'test': np.nan, 'n': n}
+        stat = {'train': residual_var(y, yhat), 'test': np.nan, 'n': n, 'time': time.time()}
         if t % 100 == 0:
             res_var_test = residual_var(y_test, network(obs_test, seats_test))
             stat['test'] = res_var_test
