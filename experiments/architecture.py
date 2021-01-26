@@ -114,7 +114,7 @@ def load():
     return np.random.permutation(compressed)
 
 def residual_var(y, yhat):
-    return (y - yhat).pow(2).mean()/y.pow(2).mean()
+    return (y - yhat).pow(2).mean().div(y.pow(2).mean()).item()
 
 def report(stats):
     last = pd.DataFrame(stats).ffill().iloc[-1]
@@ -124,6 +124,9 @@ def report(stats):
         f'train {last.train:.2f}\n'
         f'test  {last.test:.2f}\n'
         f'gap   {last.train - last.test:.2f}')
+
+def plot(stats):
+    pd.DataFrame(stats).applymap(float).ewm(span=20).mean().ffill().plot()
 
 def run():
     network = FCModel(worldfunc(1).boardsize).cuda()
@@ -144,7 +147,7 @@ def run():
         loss.backward()
         opt.step()
 
-        stat = {'train': residual_var(y, yhat.detach()), 'test': np.nan}
+        stat = {'train': residual_var(y, yhat), 'test': np.nan}
         if i % 100 == 0:
             res_var_test = residual_var(y_test, network(obs_test, seats_test).detach())
             stat['test'] = res_var_test
@@ -152,3 +155,5 @@ def run():
             
         if i % 10 == 0:
             report(stats)
+
+    plot(stats)
