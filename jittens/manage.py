@@ -57,6 +57,7 @@ def check_stalled():
 
 def manage():
     # See if any fresh jobs can be submitted
+    log.info(f'There are {len(jobs.jobs("fresh"))} fresh jobs.')
     for job in jobs.jobs('fresh').values():
         ms = available()
         machine = select(job, ms)
@@ -64,6 +65,7 @@ def manage():
             launch(job, machine)
 
     # See if any of the active jobs are now dead
+    log.info(f'There are {len(jobs.jobs("active"))} active jobs.')
     for job in jobs.jobs('active').values():
         if dead(job):
             with jobs.update() as js:

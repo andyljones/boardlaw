@@ -89,6 +89,7 @@ def submit(cmd, dir=None, **kwargs):
         archive = compress(dir, ROOT / 'archives' / f'{name}.tar.gz')
     
     with update() as js:
+        log.info(f'Submitting job "{name}"')
         job = Job(
             name=name,
             submitted=str(now),

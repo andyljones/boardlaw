@@ -1,6 +1,7 @@
 from logging import getLogger
 import jittens
 from .api import launch, status, offers, wait, destroy
+import shutil
 
 log = getLogger(__name__)
 
@@ -23,22 +24,25 @@ def jittenate(local=False):
                         'key_filename': ['/root/.ssh/vast_rsa']}})
 
     if local:
-        jittens.local.add(root='.jittens/local', resources={'gpu': 1})
+        jittens.local.add(root='.jittens/local', resources={'gpu': 2})
 
-def _fetch(name, machine):
+def _fetch(name, machine, source, target):
     from subprocess import Popen, PIPE
     from pathlib import Path
 
-    source = str(Path(machine.root) / name / 'output')
-    conn = machine.connection
-    [keyfile] = conn['connect_kwargs']['key_filename']
-    ssh = f"ssh -o StrictHostKeyChecking=no -i '{keyfile}' -p {conn['port']}"
+    source = str(Path(machine.root) / name / source)
+    if hasattr(machine, 'connection'):
+        conn = machine.connection
+        [keyfile] = conn['connect_kwargs']['key_filename']
+        ssh = f"ssh -o StrictHostKeyChecking=no -i '{keyfile}' -p {conn['port']}"
 
-    # https://unix.stackexchange.com/questions/104618/how-to-rsync-over-ssh-when-directory-names-have-spaces
-    command = f"""rsync -r -e "{ssh}" {conn['user']}@{conn['host']}:"'{source}/'" output/"""
+        # https://unix.stackexchange.com/questions/104618/how-to-rsync-over-ssh-when-directory-names-have-spaces
+        command = f"""rsync -r -e "{ssh}" {conn['user']}@{conn['host']}:"'{source}/'" "{target}" """
+    else:
+        command = f"""rsync -r "{source}" "{target}" """
     return Popen(command, shell=True, stdout=PIPE, stderr=PIPE)
 
-def fetch():
+def fetch(source, target):
     from jittens.machines import machines
     from jittens.jobs import jobs
     from time import sleep
@@ -46,7 +50,11 @@ def fetch():
     machines = machines()
     ps = {}
     for name, job in jobs().items():
-        ps[name] = _fetch(name, machines[job.machine])
+        if job.status in ('active', 'dead'):
+            if job.machine in machines:
+                ps[name] = _fetch(name, machines[job.machine], source, target)
+            else:
+                log.info(f'Skipping "{name}" as the machine "{job.machine}" is no longer available')
 
     while ps:
         for name in list(ps):
@@ -63,6 +71,33 @@ def fetch():
                 del ps[name]
 
         sleep(1)
+
+def tails(path, count=50):
+    from jittens.machines import machines
+    from jittens.jobs import jobs
+    from jittens.ssh import connection
+    from pathlib import Path
+
+    machines = machines()
+    promises = {}
+    for name, job in jobs().items():
+        if job.status in ('active', 'dead'):
+            if job.machine in machines:
+                machine = machines[job.machine]
+                if hasattr(machine, 'connection'):
+                    conn = connection(machine)
+                    fullpath = Path(machine.root) / name / path
+                    promises[name] = conn.run(f'tail -n {count} "{fullpath}"', hide='both', asynchronous=True)
+    
+    stdouts = {}
+    for name, promise in promises.items():
+        try:
+            stdouts[name] = promise.join().stdout
+        except Exception as e:
+            stdouts[name] = f'Fabric error: {e}'
+    
+    return stdouts
+
          
 def ssh_command(label=-1):
     s = status(label)

@@ -1,3 +1,4 @@
+import re
 import pandas as pd
 import pickle
 from tqdm.auto import tqdm
@@ -169,9 +170,14 @@ def run(width, depth, T=5000):
     path.parent.mkdir(exist_ok=True, parents=True)
     df.to_csv(path)
 
-def load_results(width, depth):
-    path = ROOT / 'results' / f'{width}n{depth}l.csv'
-    return pd.read_csv(path, index_col=0)
+def load_results():
+    results = {}
+    for path in (ROOT / 'results').glob('*.csv'):
+        n, l = re.match(r'(\d+)n(\d+)l.csv', path.name).group(1, 2)
+        results[int(n), int(l)] = pd.read_csv(path, index_col=0)
+    df = pd.concat(results, 1)
+    df.columns.names = ('n', 'l', 'field')
+    return df
 
 def demo():
     import jittens
