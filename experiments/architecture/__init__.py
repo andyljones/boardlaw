@@ -203,7 +203,7 @@ def plot_envelope(aug, xlabel, ax=None):
 
 
 def plot_results():
-    df = load_results().xs('train', 1, 2).ewm(span=100).mean().iloc[-1].unstack(1)
+    df = load_results('fc').xs('train', 1, 2).ewm(span=100).mean().min().unstack(1)
     df.columns.name = 'depth'
     df.index.name = 'width'
 
