@@ -126,7 +126,6 @@ def residual_var(y, yhat):
 
 def report(stats):
     last = pd.DataFrame(stats).ffill().iloc[-1]
-    clear_output(wait=True)
     print(
         f'step  {len(stats)}\n'
         f'train {last.train:.2f}\n'
@@ -135,7 +134,7 @@ def report(stats):
 def plot(stats):
     pd.DataFrame(stats).applymap(float).ewm(span=20).mean().ffill().plot()
 
-def run(width, depth, T=5000):
+def run(name, width, depth, T=np.inf):
     set_devices()
     full = load_trained('2021-01-24 20-30-48 muddy-make')
     train, test = full[:1023], full[-1]
@@ -161,14 +160,21 @@ def run(width, depth, T=5000):
             stat['test'] = res_var_test
         stats.append(stat)
             
-        if t % 10 == 0:
+        if t % 100 == 0:
             report(stats)
+
+        if (t > 1000) & (t % 100 == 0):
+            diff = (pd.DataFrame(stats)['train']
+                        .ewm(span=100).mean()
+                        .pipe(lambda df: df.iloc[-1000] - df.iloc[-1]))
+            if diff < .005:
+                break
 
         if t == T:
             break
 
     df = pd.DataFrame(stats)
-    path = ROOT / 'results' / f'{width}n{depth}l.csv'
+    path = ROOT / 'results' / name / f'{width}n{depth}l.csv'
     path.parent.mkdir(exist_ok=True, parents=True)
     df.to_csv(path)
 
