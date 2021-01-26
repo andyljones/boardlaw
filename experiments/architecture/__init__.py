@@ -2,7 +2,7 @@ import pandas as pd
 import pickle
 from tqdm.auto import tqdm
 import numpy as np
-from boardlaw.main import mix
+from boardlaw.main import mix, set_devices
 from boardlaw.mcts import MCTSAgent
 from boardlaw.hex import Hex
 from boardlaw.learning import reward_to_go
@@ -17,6 +17,8 @@ from itertools import cycle
 from pathlib import Path
 
 log = getLogger(__name__)
+
+ROOT = Path('output/experiments/architecture')
 
 def generate(agent, worlds):
     buffer = []
@@ -92,14 +94,20 @@ def save_trained(run, count=1024):
             break
 
     run = runs.resolve(run)
-    path = Path(f'output/experiments/architecture/batches/{run}.pkl')
+    path = ROOT / 'batches' / '{run}.pkl'
     path.parent.mkdir(exist_ok=True, parents=True)
     with open(path, 'wb+') as f:
         pickle.dump(buffer, f)
 
 def load_trained(run):
-    run = runs.resolve(run)
-    with open(f'output/experiments/architecture/batches/{run}.pkl', 'rb+') as f:
+    for root in [Path('/tmp'), ROOT]:
+        path = root / 'batches' / f'{run}.pkl'
+        if path.exists():
+            break
+    else:
+        raise IOError()
+        
+    with open(path, 'rb+') as f:
         compressed = pickle.load(f)
 
     np.random.seed(0)
@@ -118,36 +126,60 @@ def report(stats):
     clear_output(wait=True)
     print(
         f'step  {len(stats)}\n'
-        f'train {last.train:.2f}')
+        f'train {last.train:.2f}\n'
+        f'test  {last.test:.2f}')
 
 def plot(stats):
     pd.DataFrame(stats).applymap(float).ewm(span=20).mean().ffill().plot()
 
-def run():
-    full = load_trained('*muddy-make')
+def run(width, depth, T=5000):
+    set_devices()
+    full = load_trained('2021-01-24 20-30-48 muddy-make')
     train, test = full[:1023], full[-1]
     obs_test, seats_test, y_test = decompress(test)
 
-    network = models.FCModel(obs_test.size(1)).cuda()
+    network = models.FCModel(obs_test.size(1), width=width, depth=depth).cuda()
     opt = torch.optim.Adam(network.parameters(), lr=1e-2)
 
     stats = []
-    for i, (obs, seats, y) in enumerate(split(cycle(train), 1)):
+    for t, (obs, seats, y) in enumerate(split(cycle(train), 1)):
         yhat = network(obs, seats)
 
         loss = (y - yhat).pow(2).mean()
 
         opt.zero_grad()
         loss.backward()
+        n = torch.nn.utils.clip_grad_norm_(network.parameters(), 1).item()
         opt.step()
 
-        stat = {'train': residual_var(y, yhat), 'test': np.nan}
-        if i % 100 == 0:
+        stat = {'train': residual_var(y, yhat), 'test': np.nan, 'n': n}
+        if t % 100 == 0:
             res_var_test = residual_var(y_test, network(obs_test, seats_test))
             stat['test'] = res_var_test
         stats.append(stat)
             
-        if i % 10 == 0:
+        if t % 10 == 0:
             report(stats)
 
-    plot(stats)
+        if t == T:
+            break
+
+    df = pd.DataFrame(stats)
+    path = ROOT / 'results' / f'{width}n{depth}l.csv'
+    path.parent.mkdir(exist_ok=True, parents=True)
+    df.to_csv(path)
+
+def load_results(width, depth):
+    path = ROOT / 'results' / f'{width}n{depth}l.csv'
+    return pd.read_csv(path, index_col=0)
+
+def demo():
+    import jittens
+    widths = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+    depths = [1, 2, 4, 8, 16, 32, 64, 128]
+    for width in widths:
+        for depth in depths:
+            jittens.submit(f'python -c "from experiments.architecture import *; run({width}, {depth})" >logs.txt 2>&1', dir='.', resources={'gpu': 1})
+
+    while not jittens.finished():
+        jittens.manage()

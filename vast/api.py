@@ -10,7 +10,7 @@ from logging import getLogger
 log = getLogger(__name__)
 
 DISK = 10
-MAX_DPH = .5
+MAX_DPH = 2
 MAX_INSTANCES = 3
 
 OFFER_COLS = [
