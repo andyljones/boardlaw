@@ -39,7 +39,7 @@ def _fetch(name, machine, source, target):
         # https://unix.stackexchange.com/questions/104618/how-to-rsync-over-ssh-when-directory-names-have-spaces
         command = f"""rsync -r -e "{ssh}" {conn['user']}@{conn['host']}:"'{source}/'" "{target}" """
     else:
-        command = f"""rsync -r "{source}" "{target}" """
+        command = f"""rsync -r "{source}/" "{target}" """
     return Popen(command, shell=True, stdout=PIPE, stderr=PIPE)
 
 def fetch(source, target):
@@ -80,16 +80,18 @@ def tails(path, count=50):
 
     machines = machines()
     promises = {}
+    stdouts = {}
     for name, job in jobs().items():
         if job.status in ('active', 'dead'):
             if job.machine in machines:
                 machine = machines[job.machine]
+                fullpath = Path(machine.root) / name / path
                 if hasattr(machine, 'connection'):
                     conn = connection(machine)
-                    fullpath = Path(machine.root) / name / path
                     promises[name] = conn.run(f'tail -n {count} "{fullpath}"', hide='both', asynchronous=True)
+                else:
+                    stdouts[name] = '\n'.join(fullpath.read_text().splitlines()[-count:])
     
-    stdouts = {}
     for name, promise in promises.items():
         try:
             stdouts[name] = promise.join().stdout

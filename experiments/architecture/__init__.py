@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import re
 import pandas as pd
 import pickle
@@ -16,6 +17,7 @@ from . import models
 from IPython.display import clear_output
 from itertools import cycle
 from pathlib import Path
+import matplotlib as mpl
 
 log = getLogger(__name__)
 
@@ -178,6 +180,41 @@ def load_results():
     df = pd.concat(results, 1)
     df.columns.names = ('n', 'l', 'field')
     return df
+
+def plot_envelope(aug, xlabel, ax=None):
+    x = aug.pivot('width', 'depth', xlabel)
+    y = aug.pivot('width', 'depth', 'rv')
+    colors = plt.cm.viridis(np.linspace(0, 1, x.shape[1]))
+    _, ax = plt.subplots(1, 1) if ax is None else (None, ax)
+    ax.set_xscale('log', basex=2)
+    for c, color in zip(x.columns, colors):
+        ax.plot(x[c], y[c], marker='.', label=c, color=color)
+    ax.legend(title='depth')
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel('resid var')
+    ax.grid(True)
+
+
+def plot_results():
+    df = load_results().xs('train', 1, 2).ewm(span=100).mean().iloc[-1].unstack(1)
+    df.columns.name = 'depth'
+    df.index.name = 'width'
+
+    aug = (df
+        .stack()
+        .rename('rv')
+        .reset_index()
+        .assign(params=lambda df: (df.width**2 + df.width)*df.depth)
+        .assign(flops=lambda df: (df.width**3 + df.width)*df.depth))
+
+    with plt.style.context('seaborn-poster'):
+        mpl.rcParams['legend.title_fontsize'] = 'xx-large'
+        fig, axes = plt.subplots(1, 2, sharey=True)
+        plot_envelope(aug, 'params', axes[0])
+        plot_envelope(aug, 'flops', axes[1])
+        axes[1].set_ylabel('')
+        fig.set_size_inches(16, 8)
+        fig.suptitle('performance envelopes for predicting outcome of 11x11 Hex games with fully-connected networks\n(lines are varying width, constant depth)')
 
 def demo():
     import jittens
