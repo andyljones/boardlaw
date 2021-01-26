@@ -1,3 +1,4 @@
+import pandas as pd
 import pickle
 from tqdm.auto import tqdm
 import numpy as np
@@ -52,7 +53,7 @@ def compress(obs, seats, y):
 
 def decompress(comp):
     raw = np.unpackbits(comp['obs'])
-    obs = torch.as_tensor(raw.reshape(comp['obs_shape'])).cuda()
+    obs = torch.as_tensor(raw.reshape(comp['obs_shape'])).cuda().float()
     seats = torch.as_tensor(comp['seats']).cuda().int()
     y = torch.as_tensor(comp['y']).cuda().float()
     return obs, seats, y
@@ -108,16 +109,33 @@ def save(count=1024):
 def load():
     with open('output/architecture-batches.pkl', 'rb+') as f:
         compressed = pickle.load(f)
-    
-    for comp in cycle(compressed):
-        yield decompress(comp)
+
+    np.random.seed(0)
+    return np.random.permutation(compressed)
+
+def residual_var(y, yhat):
+    return (y - yhat).pow(2).mean()/y.pow(2).mean()
+
+def report(stats):
+    last = pd.DataFrame(stats).ffill().iloc[-1]
+    clear_output(wait=True)
+    print(
+        f'step  {len(stats)}\n'
+        f'train {last.train:.2f}\n'
+        f'test  {last.test:.2f}\n'
+        f'gap   {last.train - last.test:.2f}')
 
 def run():
     network = FCModel(worldfunc(1).boardsize).cuda()
 
     opt = torch.optim.Adam(network.parameters(), lr=1e-2)
 
-    for obs, seats, y in load():    
+    full = load()
+    train, test = full[:1023], full[-1]
+    obs_test, seats_test, y_test = decompress(test)
+    stats = []
+    for i, comp in enumerate(cycle(train)):
+        obs, seats, y = decompress(comp)
         yhat = network(obs, seats)
 
         loss = (y - yhat).pow(2).mean()
@@ -126,6 +144,11 @@ def run():
         loss.backward()
         opt.step()
 
-        resid_var = (y - yhat).pow(2).mean()/y.pow(2).mean()
-        clear_output(wait=True)
-        log.info(f'{resid_var:.3f}')
+        stat = {'train': residual_var(y, yhat.detach()), 'test': np.nan}
+        if i % 100 == 0:
+            res_var_test = residual_var(y_test, network(obs_test, seats_test).detach())
+            stat['test'] = res_var_test
+        stats.append(stat)
+            
+        if i % 10 == 0:
+            report(stats)
