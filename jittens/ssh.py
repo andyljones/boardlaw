@@ -76,5 +76,5 @@ def launch(job: jobs.Job, machine: SSHMachine):
     return int(r.stdout)
 
 def cleanup(job, machine):
-    dir = Path(machine.root) / job.name
+    dir = str(Path(machine.root) / job.name)
     connection(machine).run(f"rm -rf {quote(dir)}")

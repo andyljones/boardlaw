@@ -27,7 +27,9 @@ def remove(name):
     path.unlink()
 
 def clear():
-    shutil.rmtree(jobs.ROOT / 'machines')
+    path = (jobs.ROOT / 'machines')
+    if path.exists():
+        shutil.rmtree(path)
 
 def module(x):
     if isinstance(x, dict):

@@ -178,9 +178,9 @@ def run(name, width, depth, T=np.inf):
     path.parent.mkdir(exist_ok=True, parents=True)
     df.to_csv(path)
 
-def load_results():
+def load_results(name):
     results = {}
-    for path in (ROOT / 'results').glob('*.csv'):
+    for path in (ROOT / 'results' / name).glob('*.csv'):
         n, l = re.match(r'(\d+)n(\d+)l.csv', path.name).group(1, 2)
         results[int(n), int(l)] = pd.read_csv(path, index_col=0)
     df = pd.concat(results, 1)
