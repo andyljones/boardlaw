@@ -135,17 +135,17 @@ def report(stats):
 def plot(stats):
     pd.DataFrame(stats).applymap(float).ewm(span=20).mean().ffill().plot()
 
-def run(name, width, depth, T=np.inf):
+def run(name, width, depth, batch, lr, T=np.inf):
     set_devices()
     full = load_trained('2021-01-24 20-30-48 muddy-make')
     train, test = full[:1023], full[-1]
     obs_test, seats_test, y_test = decompress(test)
 
     network = models.FCModel(obs_test.size(1), width=width, depth=depth).cuda()
-    opt = torch.optim.Adam(network.parameters(), lr=1e-2)
+    opt = torch.optim.Adam(network.parameters(), lr=lr)
 
     stats = []
-    for t, (obs, seats, y) in enumerate(split(cycle(train), 1)):
+    for t, (obs, seats, y) in enumerate(split(cycle(train), 32*1024//batch)):
         yhat = network(obs, seats)
 
         loss = (y - yhat).pow(2).mean()
@@ -175,7 +175,7 @@ def run(name, width, depth, T=np.inf):
             break
 
     df = pd.DataFrame(stats)
-    path = ROOT / 'results' / name / f'{width}n{depth}l.csv'
+    path = ROOT / 'results' / name / f'{width}n{depth}l{batch}b{lr/1e-4:.0f}lr.csv'
     path.parent.mkdir(exist_ok=True, parents=True)
     df.to_csv(path)
 
@@ -186,6 +186,15 @@ def load_results(name):
         results[int(n), int(l)] = pd.read_csv(path, index_col=0)
     df = pd.concat(results, 1)
     df.columns.names = ('n', 'l', 'field')
+    return df
+
+def load_opt_results(name):
+    results = {}
+    for path in (ROOT / 'results' / name).glob('*.csv'):
+        n, l, b, lr = re.match(r'(\d+)n(\d+)l(\d+)b(\d+)lr.csv', path.name).group(1, 2, 3, 4)
+        results[int(n), int(l), int(b), float(lr)*1e-4] = pd.read_csv(path, index_col=0)
+    df = pd.concat(results, 1)
+    df.columns.names = ('n', 'l', 'b', 'lr', 'field')
     return df
 
 def plot_envelope(aug, xlabel, ax=None):
@@ -237,11 +246,15 @@ def plot_results():
 
 def demo():
     import jittens
-    widths = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
-    depths = [1, 2, 4, 8, 16, 32, 64, 128]
+    widths = [1, 8, 64, 512]
+    depths = [1, 8, 64, 512]
+    batches = [1024, 4*1024, 16*1024]
+    lrs = [1e-4, 8e-4, 64e-4, 512e-4]
     for width in widths:
         for depth in depths:
-            jittens.submit(f'python -c "from experiments.architecture import *; run({width}, {depth})" >logs.txt 2>&1', dir='.', resources={'gpu': 1})
+            for batch in batches:
+                for lr in lrs:
+                    jittens.submit(f'python -c "from experiments.architecture import *; run(\'fc-opt\', {width}, {depth}, {batch}, {lr})" >logs.txt 2>&1', dir='.', resources={'gpu': 1})
 
     while not jittens.finished():
         jittens.manage()

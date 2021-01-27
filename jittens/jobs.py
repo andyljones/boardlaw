@@ -105,7 +105,7 @@ def cancel(name=None):
     if name is None:
         for name in jobs():
             cancel(name)
-
-    with update() as js:
-        del js[name]
+    else:
+        with update() as js:
+            del js[name]
 
