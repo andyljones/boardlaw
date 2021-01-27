@@ -168,7 +168,7 @@ def run(name, width, depth, T=np.inf):
             diff = (pd.DataFrame(stats)['train']
                         .ewm(span=100).mean()
                         .pipe(lambda df: df.iloc[-1000] - df.iloc[-1]))
-            if diff < .005:
+            if abs(diff) < .005:
                 break
 
         if t == T:
@@ -193,35 +193,47 @@ def plot_envelope(aug, xlabel, ax=None):
     y = aug.pivot('width', 'depth', 'rv')
     colors = plt.cm.viridis(np.linspace(0, 1, x.shape[1]))
     _, ax = plt.subplots(1, 1) if ax is None else (None, ax)
-    ax.set_xscale('log', basex=2)
+    ax.set_xscale('log', basex=10)
     for c, color in zip(x.columns, colors):
         ax.plot(x[c], y[c], marker='.', label=c, color=color)
     ax.legend(title='depth')
     ax.set_xlabel(xlabel)
     ax.set_ylabel('resid var')
     ax.grid(True)
+    ax.set_ylim(None, 1)
 
 
 def plot_results():
     df = load_results('fc').xs('train', 1, 2).ewm(span=100).mean().min().unstack(1)
-    df.columns.name = 'depth'
+
+    steps = load_results('fc').xs('time', 1, 2).notnull().sum().unstack(1)
+    time = load_results('fc').xs('time', 1, 2).pipe(lambda df: df - df.iloc[0]).max().unstack(1)
+    df = pd.concat({'rv': df, 'time': time, 'steps': steps}, 1)
+    df.columns.names = ('field', 'depth')
     df.index.name = 'width'
 
     aug = (df
         .stack()
-        .rename('rv')
         .reset_index()
         .assign(params=lambda df: (df.width**2 + df.width)*df.depth)
+        .assign(memory=lambda df: df.width*df.depth)
         .assign(flops=lambda df: (df.width**3 + df.width)*df.depth))
+
 
     with plt.style.context('seaborn-poster'):
         mpl.rcParams['legend.title_fontsize'] = 'xx-large'
-        fig, axes = plt.subplots(1, 2, sharey=True)
-        plot_envelope(aug, 'params', axes[0])
-        plot_envelope(aug, 'flops', axes[1])
-        axes[1].set_ylabel('')
-        fig.set_size_inches(16, 8)
-        fig.suptitle('performance envelopes for predicting outcome of 11x11 Hex games with fully-connected networks\n(lines are varying width, constant depth)')
+        fig, axes = plt.subplots(3, 2, sharey=True)
+        plot_envelope(aug, 'width', axes[0, 0])
+        plot_envelope(aug, 'params', axes[0, 1])
+        plot_envelope(aug, 'flops', axes[1, 1])
+        plot_envelope(aug, 'memory', axes[1, 0])
+        plot_envelope(aug, 'time', axes[2, 0])
+        plot_envelope(aug, 'steps', axes[2, 1])
+        axes[0, 1].set_ylabel('')
+        axes[1, 1].set_ylabel('')
+        axes[2, 1].set_ylabel('')
+        fig.set_size_inches(16, 24)
+        fig.suptitle('performance envelopes for predicting outcome of 11x11 Hex games with fully-connected networks\n(depth doubles line-to-line, width doubles node-to-node)')
 
 def demo():
     import jittens
