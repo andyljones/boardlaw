@@ -45,19 +45,23 @@ def _fetch(name, machine, source, target):
 def fetch(source, target):
     from jittens.machines import machines
     from jittens.jobs import jobs
-    from time import sleep
 
     machines = machines()
     ps = {}
     queue = iter(jobs().items())
     while True:
-        if len(ps) < 8:
-            for name, job in queue:
+        # Anything more than 10 and default SSH configs start having trouble, throwing 235 & 255 errors.
+        # Need to up `MaxStartups` if you wanna go higher.
+        if len(ps) <= 8:
+            try:
+                name, job = next(queue)
                 if job.status in ('active', 'dead'):
                     if job.machine in machines:
                         ps[name] = _fetch(name, machines[job.machine], source, target)
                     else:
                         log.info(f'Skipping "{name}" as the machine "{job.machine}" is no longer available')
+            except StopIteration:
+                pass
 
         if not ps:
             break
@@ -76,8 +80,6 @@ def fetch(source, target):
                     lines = '\n'.join([f'\t{l}' for l in s.splitlines()])
                     log.warn(f'Fetching "{name}" failed with retcode {r}. Stdout:\n{lines}')
                 del ps[name]
-
-        sleep(1)
 
 def tails(path, jobglob='*', count=5):
     from jittens.machines import machines

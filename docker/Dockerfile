@@ -20,7 +20,9 @@ ENV PATH /opt/conda/bin:/opt/nvidia/nsight-compute/2020.2.1/:/opt/nvidia/nsight-
 # Set up SSH server
 ADD boardlaw_rsa.pub /root/.ssh/boardlaw_rsa.pub
 RUN mkdir -p ~/.ssh && cat ~/.ssh/boardlaw_rsa.pub > ~/.ssh/authorized_keys && \
-    echo PermitUserEnvironment yes >> /etc/ssh/sshd_config
+    echo PermitUserEnvironment yes >> /etc/ssh/sshd_config && \
+    echo MaxStartups 100 >> /etc/ssh/sshd_config && \
+    echo LoginGraceTime 120 >> /etc/ssh/sshd_config
 EXPOSE 22
 
 WORKDIR /code
