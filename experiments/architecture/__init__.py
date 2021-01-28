@@ -203,7 +203,7 @@ def run(name, width, depth, batch, lr, T=np.inf):
     path.parent.mkdir(exist_ok=True, parents=True)
     df.to_csv(path)
 
-def load_results(name):
+def load_basic_results(name):
     results = {}
     for path in (ROOT / 'results' / name).glob('*.csv'):
         n, l = re.match(r'(\d+)n(\d+)l.csv', path.name).group(1, 2)
@@ -221,12 +221,12 @@ def load_opt_results(name):
     df.columns.names = ('n', 'l', 'b', 'lr', 'field')
     return df
 
-def plot_envelope(aug, xlabel, ax=None):
-    x = aug.pivot('width', 'depth', xlabel)
-    y = aug.pivot('width', 'depth', 'rv')
+def plot_envelope(aug, xlabel, ax=None, base=10):
+    x = aug.pivot('depth', 'width', xlabel)
+    y = aug.pivot('depth', 'width', 'rv')
     colors = plt.cm.viridis(np.linspace(0, 1, x.shape[1]))
     _, ax = plt.subplots(1, 1) if ax is None else (None, ax)
-    ax.set_xscale('log', basex=10)
+    ax.set_xscale('log', basex=base)
     for c, color in zip(x.columns, colors):
         ax.plot(x[c], y[c], marker='.', label=c, color=color)
     ax.legend(title='depth')
@@ -237,35 +237,30 @@ def plot_envelope(aug, xlabel, ax=None):
 
 
 def plot_results():
-    df = load_results('fc').xs('train', 1, 2).ewm(span=100).mean().min().unstack(1)
+    raw = load_opt_results('fc-opt')
 
-    steps = load_results('fc').xs('time', 1, 2).notnull().sum().unstack(1)
-    time = load_results('fc').xs('time', 1, 2).pipe(lambda df: df - df.iloc[0]).max().unstack(1)
-    df = pd.concat({'rv': df, 'time': time, 'steps': steps}, 1)
-    df.columns.names = ('field', 'depth')
-    df.index.name = 'width'
+    aug = (raw
+            .xs('train', 1, 4)
+            .ewm(span=100).mean().min()
+            .groupby(['n', 'l']).min()
+            .reset_index())
+    aug.columns = ['width', 'depth', 'rv']
 
-    aug = (df
-        .stack()
-        .reset_index()
-        .assign(params=lambda df: (df.width**2 + df.width)*df.depth)
-        .assign(memory=lambda df: df.width*df.depth)
-        .assign(flops=lambda df: (df.width**3 + df.width)*df.depth))
-
+    aug = (aug
+            .assign(params=lambda df: (df.width**2 + df.width)*df.depth)
+            .assign(memory=lambda df: df.width*df.depth)
+            .assign(flops=lambda df: (df.width**3 + df.width)*df.depth))
 
     with plt.style.context('seaborn-poster'):
         mpl.rcParams['legend.title_fontsize'] = 'xx-large'
-        fig, axes = plt.subplots(3, 2, sharey=True)
-        plot_envelope(aug, 'width', axes[0, 0])
+        fig, axes = plt.subplots(2, 2, sharey=True)
+        plot_envelope(aug, 'depth', axes[0, 0])
         plot_envelope(aug, 'params', axes[0, 1])
         plot_envelope(aug, 'flops', axes[1, 1])
         plot_envelope(aug, 'memory', axes[1, 0])
-        plot_envelope(aug, 'time', axes[2, 0])
-        plot_envelope(aug, 'steps', axes[2, 1])
         axes[0, 1].set_ylabel('')
         axes[1, 1].set_ylabel('')
-        axes[2, 1].set_ylabel('')
-        fig.set_size_inches(16, 24)
+        fig.set_size_inches(16, 16)
         fig.suptitle('performance envelopes for predicting outcome of 11x11 Hex games with fully-connected networks\n(depth doubles line-to-line, width doubles node-to-node)')
 
 def demo():
