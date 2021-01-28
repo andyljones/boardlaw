@@ -31,6 +31,7 @@ def machine(name, config):
     config = config.copy()
     del config['type']
     assert 'processes' not in config
+    config['resources'] = {k: list(range(int(v))) for k, v in config['resources'].items()}
     #TODO: Is there a better way than parsing ps?
     r = connection({'name': name, **config}).run('ps -A -o pid=', pty=False, hide='both')
     pids = [int(pid) for pid in r.stdout.splitlines()]
@@ -39,17 +40,15 @@ def machine(name, config):
         processes=pids,
         **config)
 
-def resource_string(job: jobs.Job, machine: SSHMachine):
+def resource_string(allocation):
     s = []
-    for k in job.resources:
-        assert re.fullmatch(r'[\w\d_]+', k)
-        end = machine.resources[k]
-        start = machine.resources[k] - job.resources[k]
-        s.append(f'JITTENS_{k.upper()}={start}:{end}')
+    for k, vs in allocation.items():
+        vals = ",".join(map(str, vs))
+        s.append(f'JITTENS_{k.upper()}={vals}')
     return ' '.join(s)
 
-def launch(job: jobs.Job, machine: SSHMachine):
-    env = resource_string(job, machine)
+def launch(job: jobs.Job, machine: SSHMachine, allocation={}):
+    env = resource_string(allocation)
     dir = str(Path(machine.root) / job.name)
 
     if job.archive:

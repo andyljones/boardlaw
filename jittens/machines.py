@@ -56,8 +56,8 @@ def machines() -> Dict[str, Machine]:
 
     return machines
 
-def launch(job, machine) -> int:
-    return module(machine).launch(job, machine)
+def launch(job, machine, allocation) -> int:
+    return module(machine).launch(job, machine, allocation)
 
 def cleanup(job):
     ms = machines()

@@ -160,10 +160,11 @@ def half(x):
 
 def set_devices():
     import os
-    import re
     if 'JITTENS_GPU' in os.environ:
-        start, end = re.match(r'.*(\d+):(\d+).*', os.environ['JITTENS_GPU']).group(1, 2)
-        os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(str(i) for i in range(int(start), int(end)))
+        os.environ['CUDA_VISIBLE_DEVICES'] = os.environ['JITTENS_GPU']
+        print(f'Devices set to "{os.environ["CUDA_VISIBLE_DEVICES"]}"')
+    else:
+        print('No devices set')
 
 def run(buffer_len=64, n_envs=24*1024, device='cuda', desc='an 11 run with a bigger batch', timelimit=np.inf):
     set_devices()

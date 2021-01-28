@@ -23,12 +23,11 @@ def add(**kwargs):
     LocalMachine('local', **kwargs, processes=[])
     machines.add('local', type='local', **kwargs)
 
-def resource_env(job, machine):
+def allocation_env(allocation):
     env = os.environ.copy()
-    for k in job.resources:
-        end = str(machine.resources[k])
-        start = machine.resources[k] - job.resources[k]
-        env[f'JITTENS_{k.upper()}'] = f'{start}:{end}'
+    for k, vs in allocation.items():
+        vals = ",".join(map(str, vs))
+        env[f'JITTENS_{k.upper()}'] = vals
     return env
 
 def machine(name, config):
@@ -36,13 +35,14 @@ def machine(name, config):
     del config['type']
     assert 'name' not in config
     assert 'processes' not in config
+    config['resources'] = {k: list(range(int(v))) for k, v in config['resources'].items()}
     pids = [p.info['pid'] for p in psutil.process_iter(['pid', 'status']) if p.info['status'] not in DEAD]
     return LocalMachine( 
         name=name,
         processes=pids,
         **config)
 
-def launch(job, machine):
+def launch(job, machine, allocation={}):
     path = Path(machine.root) / job.name
     path.mkdir(parents=True)
 
@@ -54,7 +54,7 @@ def launch(job, machine):
         cwd=path,
         start_new_session=True, 
         shell=True,
-        env=resource_env(job, machine))
+        env=allocation_env(allocation))
 
     return proc.pid
 

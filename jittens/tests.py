@@ -63,7 +63,7 @@ def test_local():
     dir = jobs.ROOT / 'local' / name
     assert (dir / 'test.py').exists()
     assert (dir / 'logs.txt').exists()
-    assert (dir / 'logs.txt').read_text() == '1:2\n'
+    assert (dir / 'logs.txt').read_text() == '0\n'
 
     cleanup()
 
@@ -109,7 +109,7 @@ def test_ssh():
     dir = jobs.ROOT / 'ssh' / name
     assert (dir / 'test.py').exists()
     assert (dir / 'logs.txt').exists()
-    assert (dir / 'logs.txt').read_text() == '1:2\n'
+    assert (dir / 'logs.txt').read_text() == '0\n'
 
 
 DEMO = '''

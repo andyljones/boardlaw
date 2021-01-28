@@ -5,11 +5,10 @@ from pathlib import Path
 log = getLogger(__name__)
 
 def decrement(job, machine):
-    for k in set(job.resources) & set(machine.resources):
-        machine.resources[k] -= job.resources[k]
+    for k in set(job.allocation) & set(machine.resources):
+        machine.resources[k] = list(set(machine.resources[k]) - set(job.allocation[k]))
 
-def available():
-    ms = machines.machines()
+def available(ms):
     for job in jobs.jobs('active').values():
         if job.machine in ms:
             decrement(job, ms[job.machine])
@@ -19,7 +18,7 @@ def viable(asked, offered):
     for k in asked:
         if k not in offered:
             return False
-        if asked[k] > offered[k]:
+        if asked[k] > len(offered[k]):
             return False
     return True
 
@@ -28,15 +27,23 @@ def select(job, machines):
         if viable(job.resources, m.resources):
             return m
 
+def allocate(job, machine):
+    alloc = {}
+    for k, count in job.resources.items():
+        alloc[k] = machine.resources[k][:count]
+    return alloc
+
 def launch(job, machine):
     log.info(f'Launching job "{job.name}" on machine "{machine.name}"')
-    pid = machines.launch(job, machine)
+    allocation = allocate(job, machine)
+    pid = machines.launch(job, machine, allocation)
     log.info(f'Launched with PID #{pid}')
     with jobs.update() as js:
         job = js[job.name]
         job['status'] = 'active'
         job['machine'] = machine.name
         job['process'] = pid
+        job['allocation'] = allocation
 
 def dead(job):
     ms = machines.machines()
@@ -58,9 +65,10 @@ def check_stalled():
 def manage():
     # See if any fresh jobs can be submitted
     log.info(f'There are {len(jobs.jobs("fresh"))} fresh jobs.')
+    ms = machines.machines()
     for job in jobs.jobs('fresh').values():
-        ms = available()
-        machine = select(job, ms)
+        av = available(ms)
+        machine = select(job, av)
         if machine:
             launch(job, machine)
 

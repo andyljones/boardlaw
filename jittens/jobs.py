@@ -2,8 +2,8 @@ import json
 from portalocker import RLock
 from pathlib import Path
 from contextlib import contextmanager
-from typing import Optional, Dict
-from dataclasses import dataclass, asdict
+from typing import Optional, Dict, List
+from dataclasses import dataclass, asdict, field
 from subprocess import STDOUT, check_output, CalledProcessError
 from logging import getLogger
 from datetime import datetime
@@ -23,6 +23,7 @@ class Job:
     status: str
     archive: str = ''
 
+    allocation: Dict[str, List[int]] = field(default_factory=dict)
     machine: Optional[str] = None
     process: Optional[str] = None
 
