@@ -166,7 +166,7 @@ def set_devices():
     else:
         print('No devices set')
 
-def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='an 11 run with a bigger batch', timelimit=np.inf):
+def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='another deep-net run, doubled lr', timelimit=np.inf):
     set_devices()
     start = time.time()
 
@@ -175,7 +175,7 @@ def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='an 11 run with a big
     agent = agentfunc(device)
     network = agent.network
 
-    opt = torch.optim.Adam(network.parameters(), lr=1e-3, amsgrad=True)
+    opt = torch.optim.Adam(network.parameters(), lr=2e-3, amsgrad=True)
     scaler = torch.cuda.amp.GradScaler()
 
     parent = warm_start(agent, opt, '')
