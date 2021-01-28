@@ -64,6 +64,8 @@ def fetch(source, target):
             else:
                 if r == 0:
                     log.debug(f'Fetched "{name}"')
+                elif r == 23:
+                    log.info(f'Skipped "{name}" as the requested dir doesn\'t exist')
                 else:
                     s = ps[name].stderr.read().decode()
                     lines = '\n'.join([f'\t{l}' for l in s.splitlines()])
