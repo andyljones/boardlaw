@@ -197,7 +197,7 @@ def grad_noise_scale(B):
 
     G2 = df.m.pow(2)
     s = B*(df.v - df.m.pow(2))
-    noise_scale = s.div(G2).pow(.5)
+    noise_scale = s.div(G2)
 
     return noise_scale
 

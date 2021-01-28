@@ -19,7 +19,7 @@ class ReZeroResidual(nn.Linear):
 
 class FCModel(nn.Module):
 
-    def __init__(self, obs_space, action_space, width=256, depth=64):
+    def __init__(self, obs_space, action_space, width=512, depth=16):
         super().__init__()
         self.policy = heads.output(action_space, width)
         self.sampler = self.policy.sample

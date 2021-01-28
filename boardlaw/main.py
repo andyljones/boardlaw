@@ -137,12 +137,13 @@ def agentfunc(device='cuda'):
     network = networks.FCModel(worlds.obs_space, worlds.action_space).to(worlds.device)
     return mcts.MCTSAgent(network, n_nodes=64)
 
-def warm_start(agent, opt, parent):
+def warm_start(agent, opt, scaler, parent):
     if parent:
         parent = runs.resolve(parent)
         sd = storage.load_latest(parent, device='cuda')
         agent.load_state_dict(sd['agent'])
         opt.load_state_dict(sd['opt'])
+        scaler.load_state_dict(sd['scaler'])
     return parent
 
 def mix(worlds, T=2500):
@@ -166,7 +167,7 @@ def set_devices():
     else:
         print('No devices set')
 
-def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='another deep-net run, doubled lr', timelimit=np.inf):
+def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='wide-net run', timelimit=np.inf):
     set_devices()
     start = time.time()
 
@@ -175,10 +176,10 @@ def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='another deep-net run
     agent = agentfunc(device)
     network = agent.network
 
-    opt = torch.optim.Adam(network.parameters(), lr=2e-3, amsgrad=True)
+    opt = torch.optim.Adam(network.parameters(), lr=1e-3, amsgrad=True)
     scaler = torch.cuda.amp.GradScaler()
 
-    parent = warm_start(agent, opt, '')
+    parent = warm_start(agent, opt, scaler, '')
 
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
@@ -211,7 +212,7 @@ def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='another deep-net run
             optimize(network, scaler, opt, chunk[idxs])
             log.info('learner stepped')
 
-            sd = storage.state_dicts(agent=agent, opt=opt)
+            sd = storage.state_dicts(agent=agent, opt=opt, scaler=scaler)
             storage.throttled_latest(run, sd, 60)
             storage.throttled_snapshot(run, sd, 900)
             storage.throttled_raw(run, 'model', lambda: pickle.dumps(network), 900)

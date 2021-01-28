@@ -26,18 +26,22 @@ def optimize(network, scaler, opt, batch):
 
     opt.zero_grad()
     scaler.scale(loss).backward()
+    old = {k: v.detach().clone() for k, v in network.state_dict().items()}
+    scaler.step(opt)
+    scaler.update()
+    network.load_state_dict(old)
 
-def gradients(run, n_envs=16*1024, buffer_len=64, device='cuda'):
+def gradients(run, i, n_envs=16*1024, buffer_len=64, device='cuda'):
 
     #TODO: Restore league and sched when you go back to large boards
     worlds = mix(worldfunc(n_envs, device=device))
     agent = agentfunc(device)
     network = agent.network
 
-    opt = torch.optim.Adam(network.parameters(), lr=2e-3, amsgrad=True)
+    opt = torch.optim.Adam(network.parameters(), lr=0., amsgrad=True)
     scaler = torch.cuda.amp.GradScaler()
 
-    sd = storage.load_latest(run)
+    sd = storage.load_snapshot(run, i)
     agent.load_state_dict(sd['agent'])
     opt.load_state_dict(sd['opt'])
 
@@ -68,7 +72,7 @@ def gradients(run, n_envs=16*1024, buffer_len=64, device='cuda'):
 
         yield torch.cat([p.grad.flatten() for p in network.parameters() if p.grad is not None])
 
-def official_estimate(gs, Bsmall):
+def official_way(gs, Bsmall):
     Gbig2 = gs.mean(0).pow(2).mean()
     Gsmall2 = gs.pow(2).mean(1).mean()
 
@@ -82,21 +86,24 @@ def official_estimate(gs, Bsmall):
 def sensible_way(gs, Bsmall):
     return Bsmall*(gs - gs.mean(0, keepdims=True)).pow(2).mean()/gs.mean(0).pow(2).mean()
 
-def adam_way(run, Bsmall):
-    sd = storage.load_latest(run)['opt']['state']
+def adam_way(run, i, Bsmall):
+    # Doesn't work. Or at least it's wayyyy off from the 'official' estimates
+    # Gets S pretty much right, but is 5x too small on G2.
+    sd = storage.load_snapshot(run, i)['opt']['state']
     m0 = torch.cat([s['exp_avg'].flatten() for s in sd.values()])
     v0 = torch.cat([s['exp_avg_sq'].flatten() for s in sd.values()])
 
-    G2 = m0.pow(2).mean()
     S = Bsmall*(v0.mean() - m0.pow(2).mean())
-    return S.div(G2)
+    G2 = m0.pow(2).mean()
+
+    return S/G2
 
 def run():
     gs = []
     B = 16*1024
-    for _, g in zip(range(100), gradients('*large-model', B)):
+    for _, g in zip(range(128), gradients('*large-model', B)):
         log.info(f'{len(gs)} gradients')
         gs.append(g)
-    gs = torch.stack(gs)
+    gs = torch.stack(gs).cpu()
 
-    Bnoise = official_estimate(gs, B)
+    Bnoise = official_way(gs, B)
