@@ -49,14 +49,19 @@ def fetch(source, target):
 
     machines = machines()
     ps = {}
-    for name, job in jobs().items():
-        if job.status in ('active', 'dead'):
-            if job.machine in machines:
-                ps[name] = _fetch(name, machines[job.machine], source, target)
-            else:
-                log.info(f'Skipping "{name}" as the machine "{job.machine}" is no longer available')
+    queue = iter(jobs().items())
+    while True:
+        if len(ps) < 8:
+            for name, job in queue:
+                if job.status in ('active', 'dead'):
+                    if job.machine in machines:
+                        ps[name] = _fetch(name, machines[job.machine], source, target)
+                    else:
+                        log.info(f'Skipping "{name}" as the machine "{job.machine}" is no longer available')
 
-    while ps:
+        if not ps:
+            break
+
         for name in list(ps):
             r = ps[name].poll()
             if r is None:
