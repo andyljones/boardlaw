@@ -74,17 +74,18 @@ def fetch(source, target):
 
         sleep(1)
 
-def tails(path, count=50):
+def tails(path, jobglob='*', count=5):
     from jittens.machines import machines
     from jittens.jobs import jobs
     from jittens.ssh import connection
     from pathlib import Path
+    from fnmatch import fnmatch
 
     machines = machines()
     promises = {}
     stdouts = {}
     for name, job in jobs().items():
-        if job.status in ('active', 'dead'):
+        if fnmatch(job.name, jobglob) and job.status in ('active', 'dead'):
             if job.machine in machines:
                 machine = machines[job.machine]
                 fullpath = Path(machine.root) / name / path
@@ -92,15 +93,18 @@ def tails(path, count=50):
                     conn = connection(machine)
                     promises[name] = conn.run(f'tail -n {count} "{fullpath}"', hide='both', asynchronous=True)
                 else:
-                    stdouts[name] = '\n'.join(fullpath.read_text().splitlines()[-count:])
+                    stdouts[name] = fullpath.read_text().splitlines()[-count:]
     
     for name, promise in promises.items():
         try:
-            stdouts[name] = promise.join().stdout
+            stdouts[name] = promise.join().stdout.splitlines()[-count:]
         except Exception as e:
             stdouts[name] = f'Fabric error: {e}'
     
-    return stdouts
+    for name, stdout in stdouts.items():
+        print(f'{name}:')
+        for line in stdout:
+            print(f'\t{line}')
 
          
 def ssh_command(label=-1):

@@ -114,13 +114,14 @@ def download(run):
     url = f'https://f002.backblazeb2.com/file/boardlaw-public/experiments/architecture/batches/{run.replace(" ", "+")}.pkl'
     r = requests.get(url, stream=True)
     with tqdm(total=int(r.headers.get('content-length'))/(1024*1024)) as pbar:
-        with open(f'/tmp/{run}', 'wb+') as f:
+        with open(f'/tmp/batches/{run}.pkl', 'wb+') as f:
             for data in r.iter_content(chunk_size=1024*1024):
                 f.write(data)
                 pbar.update(len(data)/(1024*1024))
 
 def trained_path(run):
-    with portalocker.FileLock('/tmp/_lock'):
+    from portalocker import RLock
+    with RLock('/tmp/_lock'):
         path = ROOT / 'batches' / f'{run}.pkl' 
         if path.exists():
             return path

@@ -1,6 +1,7 @@
 from . import jobs, machines
 from logging import getLogger
 from pathlib import Path
+import copy
 
 log = getLogger(__name__)
 
@@ -9,6 +10,7 @@ def decrement(job, machine):
         machine.resources[k] = list(set(machine.resources[k]) - set(job.allocation[k]))
 
 def available(ms):
+    ms = copy.deepcopy(ms)
     for job in jobs.jobs('active').values():
         if job.machine in ms:
             decrement(job, ms[job.machine])
@@ -55,12 +57,11 @@ def dead(job):
         return True
     return False
 
-def check_stalled():
+def check_stalled(ms):
     for job in jobs.jobs('fresh').values():
-        ms = machines.machines()
         machine = select(job, ms)
         if not machine:
-            log.info('Job "{job.name}" requires too many resources to run on any existing machine')
+            log.info(f'Job "{job.name}" requires too many resources to run on any existing machine')
 
 def manage():
     # See if any fresh jobs can be submitted
@@ -80,7 +81,7 @@ def manage():
                 job = js[job.name]
                 job['status'] = 'dead'
 
-    check_stalled()
+    check_stalled(ms)
 
 def finished():
     return all(j.status == 'dead' for j in jobs.jobs().values())
