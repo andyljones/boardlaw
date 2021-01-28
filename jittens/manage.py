@@ -47,8 +47,7 @@ def launch(job, machine):
         job['process'] = pid
         job['allocation'] = allocation
 
-def dead(job):
-    ms = machines.machines()
+def dead(job, ms):
     if job.machine not in ms:
         log.info(f'Job "{job.name}" has died as the machine "{job.machine}" no longer exists')
         return True
@@ -64,6 +63,16 @@ def check_stalled(ms):
             log.info(f'Job "{job.name}" requires too many resources to run on any existing machine')
 
 def manage():
+    ms = machines.machines()
+
+    # See if any of the active jobs are now dead
+    log.info(f'There are {len(jobs.jobs("active"))} active jobs.')
+    for job in jobs.jobs('active').values():
+        if dead(job, ms):
+            with jobs.update() as js:
+                job = js[job.name]
+                job['status'] = 'dead'
+
     # See if any fresh jobs can be submitted
     log.info(f'There are {len(jobs.jobs("fresh"))} fresh jobs.')
     ms = machines.machines()
@@ -72,14 +81,6 @@ def manage():
         machine = select(job, av)
         if machine:
             launch(job, machine)
-
-    # See if any of the active jobs are now dead
-    log.info(f'There are {len(jobs.jobs("active"))} active jobs.')
-    for job in jobs.jobs('active').values():
-        if dead(job):
-            with jobs.update() as js:
-                job = js[job.name]
-                job['status'] = 'dead'
 
     check_stalled(ms)
 
