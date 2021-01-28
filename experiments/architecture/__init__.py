@@ -1,3 +1,4 @@
+import aljpy.plot
 import time
 import matplotlib.pyplot as plt
 import re
@@ -156,9 +157,6 @@ def report(stats):
         f'train {last.train:.2f}\n'
         f'test  {last.test:.2f}', flush=True)
 
-def plot(stats):
-    pd.DataFrame(stats).applymap(float).ewm(span=20).mean().ffill().plot()
-
 def run(name, width, depth, batch, lr, T=np.inf):
     set_devices()
     full = load_trained('2021-01-24 20-30-48 muddy-make')
@@ -221,47 +219,79 @@ def load_opt_results(name):
     df.columns.names = ('n', 'l', 'b', 'lr', 'field')
     return df
 
-def plot_envelope(aug, xlabel, ax=None, base=10):
+def plot_envelope(aug, xlabel, ax=None, base=2, legend=False):
     x = aug.pivot('depth', 'width', xlabel)
-    y = aug.pivot('depth', 'width', 'rv')
+    y = 1 - aug.pivot('depth', 'width', 'rv')
     colors = plt.cm.viridis(np.linspace(0, 1, x.shape[1]))
     _, ax = plt.subplots(1, 1) if ax is None else (None, ax)
     ax.set_xscale('log', basex=base)
     for c, color in zip(x.columns, colors):
         ax.plot(x[c], y[c], marker='.', label=c, color=color)
-    ax.legend(title='depth')
     ax.set_xlabel(xlabel)
-    ax.set_ylabel('resid var')
+    ax.set_ylabel('var explained')
     ax.grid(True)
-    ax.set_ylim(None, 1)
+    aljpy.plot.percent_axis(ax, axis='y')
+    if legend:
+        ax.legend(title='width')
 
+def plot_results(raw=None):
+    raw = load_opt_results('fc-opt') if raw is None else raw
 
-def plot_results():
-    raw = load_opt_results('fc-opt')
+    time = raw.xs('time', 1, 4).pipe(lambda df: df - df.iloc[0]).max()
+    train = raw.xs('train', 1, 4).ewm(span=100).mean().min()
+    steps = raw.xs('train', 1, 4).pipe(lambda df: df.ffill().where(df.bfill().notnull())).notnull().sum()
+    picks = train.groupby(['n', 'l']).idxmin()
 
-    aug = (raw
-            .xs('train', 1, 4)
-            .ewm(span=100).mean().min()
+    aug = (train
             .groupby(['n', 'l']).min()
             .reset_index())
     aug.columns = ['width', 'depth', 'rv']
+
+    aug['time'] = time[picks].values
+    aug['steps'] = steps[picks].values
 
     aug = (aug
             .assign(params=lambda df: (df.width**2 + df.width)*df.depth)
             .assign(memory=lambda df: df.width*df.depth)
             .assign(flops=lambda df: (df.width**3 + df.width)*df.depth))
 
-    with plt.style.context('seaborn-poster'):
-        mpl.rcParams['legend.title_fontsize'] = 'xx-large'
-        fig, axes = plt.subplots(2, 2, sharey=True)
-        plot_envelope(aug, 'depth', axes[0, 0])
-        plot_envelope(aug, 'params', axes[0, 1])
-        plot_envelope(aug, 'flops', axes[1, 1])
-        plot_envelope(aug, 'memory', axes[1, 0])
-        axes[0, 1].set_ylabel('')
-        axes[1, 1].set_ylabel('')
-        fig.set_size_inches(16, 16)
-        fig.suptitle('performance envelopes for predicting outcome of 11x11 Hex games with fully-connected networks\n(depth doubles line-to-line, width doubles node-to-node)')
+    aug['total_flops'] = aug.flops*aug.steps
+
+    fig, axes = plt.subplots(2, 2, sharey=True)
+    plot_envelope(aug, 'depth', axes[0, 0], base=2)
+    plot_envelope(aug, 'params', axes[0, 1])
+    plot_envelope(aug, 'memory', axes[1, 0], legend=True)
+    plot_envelope(aug, 'total_flops', axes[1, 1])
+    axes[0, 1].set_ylabel('')
+    axes[1, 1].set_ylabel('')
+    fig.set_size_inches(12, 12)
+    
+    title = (
+        'performance envelopes for predicting outcome of 11x11 Hex games with fully-connected networks\n'
+        '(width doubles line-to-line, depth doubles node-to-node)')
+    fig.suptitle(title, y=.95)
+
+def plot_bests(raw):
+    raw = load_opt_results('fc-opt') if raw is None else raw
+
+    time = raw.xs('time', 1, 4).pipe(lambda df: df - df.iloc[0])
+    train = raw.xs('train', 1, 4).pipe(lambda df: df.ewm(span=100).mean().where(df.notnull()))
+
+    best_time = {}
+    for t in np.arange(60, 2000, 60):
+        best_time[t] = train.where(time < t).min().idxmin()
+    best_time = pd.concat({r: pd.Series(train[r].values, pd.to_timedelta(time[r].values, unit='s')).dropna().resample('15s').mean() for r in best_time.values() if r in train}, 1)
+    best_time.columns.names = ('w', 'l', 'b', 'lr')
+
+    best_steps = {}
+    for s in np.arange(100, 7000, 100):
+        best_steps[s] = train[:s].min().idxmin()
+    best_steps = pd.concat({r: train[r] for r in best_steps.values() if r in train}, 1)
+
+    fig, axes = plt.subplots(2, 1)
+
+    best_time.plot(ax=axes[0], title='best by time')
+    best_steps.plot(ax=axes[1], title='best by num of steps')
 
 def demo():
     import jittens
