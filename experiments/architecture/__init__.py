@@ -19,6 +19,7 @@ from IPython.display import clear_output
 from itertools import cycle
 from pathlib import Path
 import matplotlib as mpl
+import portalocker
 
 log = getLogger(__name__)
 
@@ -103,13 +104,35 @@ def save_trained(run, count=1024):
     with open(path, 'wb+') as f:
         pickle.dump(buffer, f)
 
-def load_trained(run):
-    for root in [Path('/tmp'), ROOT]:
-        path = root / 'batches' / f'{run}.pkl'
+def upload():
+    from boardlaw import backup
+    backup.sync('output/experiments/architecture/batches', 'boardlaw-public:experiments/architecture/batches')
+
+def download(run):
+    import requests
+    from tqdm.auto import tqdm
+    url = f'https://f002.backblazeb2.com/file/boardlaw-public/experiments/architecture/batches/{run.replace(" ", "+")}.pkl'
+    r = requests.get(url, stream=True)
+    with tqdm(total=int(r.headers.get('content-length'))/(1024*1024)) as pbar:
+        with open(f'/tmp/{run}', 'wb+') as f:
+            for data in r.iter_content(chunk_size=1024*1024):
+                f.write(data)
+                pbar.update(len(data)/(1024*1024))
+
+def trained_path(run):
+    with portalocker.FileLock('/tmp/_lock'):
+        path = ROOT / 'batches' / f'{run}.pkl' 
         if path.exists():
-            break
-    else:
-        raise IOError()
+            return path
+        
+        path = Path('/tmp') / 'batches' / f'{run}.pkl'
+        if not path.exists():
+            download(run)
+
+        return path
+
+def load_trained(run):
+    path = trained_path(run)
         
     with open(path, 'rb+') as f:
         compressed = pickle.load(f)
@@ -130,7 +153,7 @@ def report(stats):
     print(
         f'step  {len(stats)}\n'
         f'train {last.train:.2f}\n'
-        f'test  {last.test:.2f}')
+        f'test  {last.test:.2f}', flush=True)
 
 def plot(stats):
     pd.DataFrame(stats).applymap(float).ewm(span=20).mean().ffill().plot()

@@ -7,29 +7,31 @@ import aljpy
 import multiprocessing
 
 @aljpy.memcache()
-def api():
+def api(bucket):
     # Keys are in 1Password
     api = b2.B2Api()
-    keys = json.loads(Path('credentials.json').read_text())['backblaze']
+    keys = json.loads(Path('credentials.json').read_text())['backblaze'][bucket]
     api.authorize_account('production', **keys)
     return api
 
 def sync(source, dest):
+    bucket, path = dest.split(':')
     workers = multiprocessing.cpu_count()
     syncer = b2.Synchronizer(workers)
     with b2.SyncReport(sys.stdout, False) as reporter:
         syncer.sync_folders(
-            source_folder=b2.parse_sync_folder(source, api()),
-            dest_folder=b2.parse_sync_folder(f'b2://boardlaw/{dest}', api()),
+            source_folder=b2.parse_sync_folder(source, api(bucket)),
+            dest_folder=b2.parse_sync_folder(f'b2://{bucket}/{path}', api(bucket)),
             now_millis=int(round(time.time() * 1000)),
             reporter=reporter
         )
 
 def upload(source, dest):
-    bucket = api().get_bucket_by_name('boardlaw')
+    bucket, path = dest.split(':')
+    bucket = api(bucket).get_bucket_by_name(dest)
     bucket.upload_local_file(
         local_file=source,
-        file_name=dest)
+        file_name=path)
 
 def backup():
     sync('./output/pavlov', 'output/pavlov')
