@@ -19,6 +19,16 @@ def kl_div(decisions):
     prior = decisions.prior.where(mask, zeros).float()
     return (logits - prior).mul(logits.exp()).sum(-1).mean()
 
+def rel_entropy(decisions):
+    mask = decisions.mask[..., None] & (decisions.logits > -np.inf) & (decisions.prior > -np.inf)
+    zeros = torch.zeros_like(decisions.logits)
+    logits = decisions.logits.where(mask, zeros).float()
+    ent = (logits.exp()*logits).sum(-1)
+    norm = mask.float().sum(-1).log()
+    rel_ent = ent/norm
+    rel_ent[norm == 0.] = 0.
+    return rel_ent.mean()
+
 def test(run, snapshot=-1, **kwargs):
     boardsize = runs.info(run)['boardsize']
     worlds = hex.Hex.initial(n_envs=1024, boardsize=boardsize)
@@ -42,7 +52,8 @@ def test(run, snapshot=-1, **kwargs):
     elo = torch.log(rate) - torch.log(1 - rate)
 
     kl =  (kl_div(fst.decisions['0']) + kl_div(snd.decisions['0']))/2
-    return {'elo': elo.item(), 'kl': kl.item()}
+    ent =  (rel_entropy(fst.decisions['0']) + rel_entropy(snd.decisions['0']))/2
+    return {'elo': elo.item(), 'kl': kl.item(), 'ent': ent.item()}
 
 def run(source_run, snapshot):
     results = []
