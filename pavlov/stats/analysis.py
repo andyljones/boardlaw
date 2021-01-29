@@ -1,5 +1,8 @@
 import numpy as np
 import pandas as pd
+from IPython import display
+import matplotlib.pyplot as plt
+import pandas as pd
 from . import registry
 from .. import runs, files
 from logging import getLogger
@@ -44,6 +47,22 @@ def plot(*args, ffill=False, skip=None, head=None, **kwargs):
     ax = df.iloc[skip:head].plot()
     ax.grid(True)
     return ax
+
+def periodic(*args, period=900, **kwargs):
+    epoch = pd.Timestamp('2020-1-1') 
+    last = 0
+    ax = None
+    while True:
+        now = pd.Timestamp.now()
+        new = int((now - epoch).total_seconds())//period
+        if new > last:
+            display.clear_output(wait=True)
+            if ax is not None:
+                plt.close(ax.figure)
+            ax = plot(*args, **kwargs)
+            ax.set_title(f'{now:%Y-%m-%d %H:%M:%S}')
+            display.display(ax.figure)
+            last = new
 
 def purge(minlen=900, cutoff=300):
     from tqdm.auto import tqdm
