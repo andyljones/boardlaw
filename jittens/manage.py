@@ -96,3 +96,6 @@ def cleanup():
         with jobs.update() as js:
             del js[job.name]
 
+def kill(name):
+    pass
+    

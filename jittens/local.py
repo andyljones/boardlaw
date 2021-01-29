@@ -3,7 +3,7 @@ from . import jobs, machines
 import shutil
 import psutil
 import tarfile
-from subprocess import Popen
+from subprocess import Popen, check_output
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Dict, List
@@ -58,8 +58,11 @@ def launch(job, machine, allocation={}):
 
     return proc.pid
 
+def run(machine, command):
+    assert isinstance(machine, LocalMachine)
+    check_output(command)
+
 def cleanup(job, machine):
     path = Path(machine.root) / job.name
-    if path.exists():
-        shutil.rmtree(path)
+    run(machine, f'rm -rf {quote(path)}')
 

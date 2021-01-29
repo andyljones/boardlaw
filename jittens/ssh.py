@@ -74,6 +74,9 @@ def launch(job: jobs.Job, machine: SSHMachine, allocation={}):
     r = connection(machine).run(wrapper, hide='both')
     return int(r.stdout)
 
+def run(machine, command):
+    connection(machine).run(command)
+
 def cleanup(job, machine):
     dir = str(Path(machine.root) / job.name)
-    connection(machine).run(f"rm -rf {quote(dir)}")
+    run(machine, f"rm -rf {quote(dir)}")
