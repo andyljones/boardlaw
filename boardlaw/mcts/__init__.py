@@ -29,7 +29,7 @@ def uniform_noise(logits, valid, eps):
 
 class MCTS:
 
-    def __init__(self, world, n_nodes, c_puct=1/16):
+    def __init__(self, world, n_nodes, c_puct=1/32):
         """
         c_puct high: concentrates on prior
         c_puct low: concentrates on value
@@ -74,7 +74,7 @@ class MCTS:
         with torch.no_grad():
             decisions = network(world)
             assert (decisions.logits > -np.inf).any(-1).all(), 'Some row of logits are all neginf or nan'
-        self.decisions.logits[:, self.sim] = uniform_noise(decisions.logits, world.valid, .25)
+        self.decisions.logits[:, self.sim] = dirichlet_noise(decisions.logits, world.valid, .25)
         self.decisions.v[:, 0] = decisions.v
 
         self.sim += 1

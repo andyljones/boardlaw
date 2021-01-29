@@ -135,7 +135,7 @@ def worldfunc(n_envs, device='cuda'):
 def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
     network = networks.FCModel(worlds.obs_space, worlds.action_space).to(worlds.device)
-    return mcts.MCTSAgent(network, n_nodes=64)
+    return mcts.MCTSAgent(network, n_nodes=128)
 
 def warm_start(agent, opt, scaler, parent):
     if parent:
@@ -167,7 +167,7 @@ def set_devices():
     else:
         print('No devices set')
 
-def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='uniform noise experiment', timelimit=np.inf):
+def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='doubled nodes, halved cpuct', timelimit=np.inf):
     set_devices()
     start = time.time()
 
