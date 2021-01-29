@@ -27,7 +27,7 @@ def rel_entropy(decisions):
     norm = mask.float().sum(-1).log()
     rel_ent = ent/norm
     rel_ent[norm == 0.] = 0.
-    return rel_ent.mean()
+    return -rel_ent.mean()
 
 def test(run, snapshot=-1, **kwargs):
     boardsize = runs.info(run)['boardsize']
@@ -64,7 +64,7 @@ def run(source_run, snapshot):
                 'n_nodes': n,
                 **test(source_run, snapshot, c_puct=c, n_nodes=n)})
             print(results[-1])
-    df = pd.DataFrame(results).pivot('c_puct', 'n_nodes', ['elo', 'kl'])
+    df = pd.DataFrame(results).pivot('c_puct', 'n_nodes', ['elo', 'kl', 'ent'])
     return df
 
 def as_dataframe(s):

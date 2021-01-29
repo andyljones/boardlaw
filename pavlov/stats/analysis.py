@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import pandas as pd
 from IPython import display
@@ -63,6 +64,8 @@ def periodic(*args, period=900, **kwargs):
             ax.set_title(f'{now:%Y-%m-%d %H:%M:%S}')
             display.display(ax.figure)
             last = new
+        else:
+            time.sleep(1)
 
 def purge(minlen=900, cutoff=300):
     from tqdm.auto import tqdm
