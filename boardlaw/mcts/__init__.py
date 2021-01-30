@@ -10,12 +10,8 @@ from rebar import profiling
 
 log = logging.getLogger(__name__)
 
-def uniform_noise(logits, valid, eps):
-    noise = valid.float()/valid.sum(-1, keepdims=True).float()
-    return (logits.exp()*(1 - eps) + eps*noise).log()
-
-def dirichlet_noise(logits, valid, eps, alpha=None):
-    alpha = alpha or 10/logits.size(-1)
+def dirichlet_noise(logits, valid, eps, alpha_scale=10):
+    alpha = alpha_scale/logits.size(-1)
     alpha = torch.full((valid.shape[-1],), alpha, dtype=torch.float, device=logits.device)
     dist = torch.distributions.Dirichlet(alpha)
     
@@ -30,7 +26,7 @@ def dirichlet_noise(logits, valid, eps, alpha=None):
 
 class MCTS:
 
-    def __init__(self, world, n_nodes, c_puct=1/16):
+    def __init__(self, world, n_nodes, c_puct=1/16, noise_eps=.25, alpha_scale=10):
         """
         c_puct high: concentrates on prior
         c_puct low: concentrates on value
@@ -70,12 +66,15 @@ class MCTS:
         # Larger c_puct -> greater regularization
         self.c_puct = torch.full((world.n_envs,), c_puct, device=self.device, dtype=torch.half)
 
+        self.noise_eps = noise_eps
+        self.alpha_scale = alpha_scale
+
     def initialize(self, network):
         world = self.worlds[:, 0]
         with torch.no_grad():
             decisions = network(world)
             assert (decisions.logits > -np.inf).any(-1).all(), 'Some row of logits are all neginf or nan'
-        self.decisions.logits[:, self.sim] = dirichlet_noise(decisions.logits, world.valid, .25)
+        self.decisions.logits[:, self.sim] = dirichlet_noise(decisions.logits, world.valid, self.noise_eps, self.alpha_scale)
         self.decisions.v[:, 0] = decisions.v
 
         self.sim += 1

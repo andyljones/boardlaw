@@ -57,15 +57,18 @@ def test(run, snapshot=-1, **kwargs):
 
 def run(source_run, snapshot):
     results = []
-    for n in [2, 4, 8, 16, 32, 64, 128]:
-        for c in [1/64, 1/32, 1/16, 1/8, 1/4, 1/2, 1, 2]:
-            results.append({
-                'c_puct': c,
-                'n_nodes': n,
-                **test(source_run, snapshot, c_puct=c, n_nodes=n)})
-            print(results[-1])
-    df = pd.DataFrame(results).pivot('c_puct', 'n_nodes', ['elo', 'kl', 'ent'])
-    return df
+    for n in [64]:
+        for c in [1/16]:
+            for eps in [.01, .02, .04, .08, .16, .32, .64]:
+                for alpha in [32, 16, 8, 4, 2, 1]:
+                    results.append({
+                        'c_puct': c,
+                        'n_nodes': n,
+                        'eps': eps,
+                        'alpha': alpha,
+                        **test(source_run, snapshot, c_puct=c, n_nodes=n, noise_eps=eps, alpha_scale=alpha)})
+                    print(results[-1])
+    return pd.DataFrame(results)
 
 def as_dataframe(s):
     from io import StringIO

@@ -132,10 +132,10 @@ def optimize(network, scaler, opt, batch):
 def worldfunc(n_envs, device='cuda'):
     return hex.Hex.initial(n_envs=n_envs, boardsize=11, device=device)
 
-def agentfunc(device='cuda'):
+def agentfunc(device='cuda', **kwargs):
     worlds = worldfunc(n_envs=1, device=device)
     network = networks.FCModel(worlds.obs_space, worlds.action_space).to(worlds.device)
-    return mcts.MCTSAgent(network, n_nodes=64)
+    return mcts.MCTSAgent(network, n_nodes=64, **kwargs)
 
 def warm_start(agent, opt, scaler, parent):
     if parent:
