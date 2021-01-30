@@ -5,8 +5,8 @@ import psutil
 import tarfile
 from subprocess import Popen, check_output
 from pathlib import Path
-from dataclasses import dataclass
-from typing import Dict, List
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
 from shlex import quote
 
 #TODO: Is there a way to just not create zombies in the first place? Double fork?
@@ -15,14 +15,6 @@ from shlex import quote
 # misery I've had in the past with subprocesses has been related to filehandles.
 DEAD = ('zombie',)
 
-@dataclass
-class LocalMachine(machines.Machine):
-    pass
-
-def add(**kwargs):
-    LocalMachine('local', **kwargs, processes=[])
-    machines.add('local', type='local', **kwargs)
-
 def allocation_env(allocation):
     env = os.environ.copy()
     for k, vs in allocation.items():
@@ -30,39 +22,48 @@ def allocation_env(allocation):
         env[f'JITTENS_{k.upper()}'] = vals
     return env
 
-def machine(name, config):
-    config = config.copy()
-    del config['type']
-    assert 'name' not in config
-    assert 'processes' not in config
-    config['resources'] = {k: list(range(int(v))) for k, v in config['resources'].items()}
-    pids = [p.info['pid'] for p in psutil.process_iter(['pid', 'status']) if p.info['status'] not in DEAD]
-    return LocalMachine( 
-        name=name,
-        processes=pids,
-        **config)
+@dataclass
+class Machine(machines.Machine):
+    _processes: Optional[List[int]] = None
 
-def launch(job, machine, allocation={}):
-    path = Path(machine.root) / job.name
-    path.mkdir(parents=True)
+    @staticmethod
+    def create(**config):
+        config = config.copy()
+        del config['type']
+        assert 'processes' not in config
+        config['resources'] = {k: list(range(int(v))) for k, v in config['resources'].items()}
+        return Machine(**config)
 
-    if job.archive:
-        tarfile.open(job.archive).extractall(path)
+    @property
+    def processes(self):
+        if self._processes is None:
+            self._processes = [p.info['pid'] for p in psutil.process_iter(['pid', 'status']) if p.info['status'] not in DEAD]
+        return self._processes
+    
+    def launch(self, job, allocation={}):
+        path = Path(self.root) / job.name
+        path.mkdir(parents=True)
 
-    proc = Popen(
-        job.command,
-        cwd=path,
-        start_new_session=True, 
-        shell=True,
-        env=allocation_env(allocation))
+        if job.archive:
+            tarfile.open(job.archive).extractall(path)
 
-    return proc.pid
+        proc = Popen(
+            job.command,
+            cwd=path,
+            start_new_session=True, 
+            shell=True,
+            env=allocation_env(allocation))
 
-def run(machine, command):
-    assert isinstance(machine, LocalMachine)
-    check_output(command)
+        return proc.pid
 
-def cleanup(job, machine):
-    path = Path(machine.root) / job.name
-    run(machine, f'rm -rf {quote(path)}')
+    def run(self, command):
+        check_output(command, shell=True)
 
+    def cleanup(self, job):
+        path = Path(self.root) / job.name
+        self.run(f'rm -rf {quote(str(path))} || true')
+
+def add(**kwargs):
+    # Check that it's actually valid
+    Machine.create(name='local', type='local', **kwargs)
+    machines.add('local', type='local', **kwargs)

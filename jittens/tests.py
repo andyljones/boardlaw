@@ -60,6 +60,9 @@ def test_local():
     while not finished():
         manage()
 
+    import time
+    time.sleep(1)
+
     dir = jobs.ROOT / 'local' / name
     assert (dir / 'test.py').exists()
     assert (dir / 'logs.txt').exists()

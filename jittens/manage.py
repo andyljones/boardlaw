@@ -1,4 +1,5 @@
 from . import jobs, machines
+from dataclasses import asdict
 from logging import getLogger
 from pathlib import Path
 import copy
@@ -38,14 +39,13 @@ def allocate(job, machine):
 def launch(job, machine):
     log.info(f'Launching job "{job.name}" on machine "{machine.name}"')
     allocation = allocate(job, machine)
-    pid = machines.launch(job, machine, allocation)
-    log.info(f'Launched with PID #{pid}')
+    job.status = 'active'
+    job.machine = machine.name
+    job.process = machine.launch(job, allocation)
+    job.allocation = allocation
     with jobs.update() as js:
-        job = js[job.name]
-        job['status'] = 'active'
-        job['machine'] = machine.name
-        job['process'] = pid
-        job['allocation'] = allocation
+        js[job.name] = asdict(job)
+    log.info(f'Launched with PID #{job.process}')
 
 def dead(job, ms):
     if job.machine not in ms:
@@ -69,9 +69,9 @@ def manage():
     log.info(f'There are {len(jobs.jobs("active"))} active jobs.')
     for job in jobs.jobs('active').values():
         if dead(job, ms):
+            job.status = 'dead'
             with jobs.update() as js:
-                job = js[job.name]
-                job['status'] = 'dead'
+                js[job.name] = asdict(job)
 
     # See if any fresh jobs can be submitted
     log.info(f'There are {len(jobs.jobs("fresh"))} fresh jobs.')

@@ -4,16 +4,15 @@ from . import jobs
 import json
 import yaml
 import shutil
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from typing import List, Dict
 
 #TODO: Config should be a superclass of Machine
 @dataclass
 class Machine:
     name: str
-    resources: Dict[str, int]
     root: str
-    processes: List[int]
+    resources: Dict[str, int]
 
 log = getLogger(__name__)
 
@@ -32,12 +31,7 @@ def clear():
         shutil.rmtree(path)
 
 def module(x):
-    if isinstance(x, dict):
-        module = f'{__package__}.{x["type"]}'
-    elif isinstance(x, Machine):
-        module = x.__module__
-    else:
-        raise ValueError()
+    module = f'{__package__}.{x["type"]}'
     return importlib.import_module(module)
 
 def machines() -> Dict[str, Machine]:
@@ -51,13 +45,10 @@ def machines() -> Dict[str, Machine]:
             raise IOError(f'Can\'t handle type of config file "{path}"')
             
         name = path.with_suffix('').name
-        machine = module(config).machine(name, config)
+        machine = module(config).Machine.create(name=name, **config)
         machines[name] = machine
 
     return machines
-
-def launch(job, machine, allocation) -> int:
-    return module(machine).launch(job, machine, allocation)
 
 def cleanup(job):
     ms = machines()
@@ -66,4 +57,4 @@ def cleanup(job):
         return 
 
     machine = ms[job.machine]
-    module(machine).cleanup(job, machine)
+    machine.cleanup(job)

@@ -4,41 +4,10 @@ from logging import getLogger
 from . import machines, jobs
 from pathlib import Path
 from shlex import quote
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from typing import Dict
 
-@dataclass
-class SSHMachine(machines.Machine):
-    connection: Dict
-
 getLogger('paramiko').setLevel('WARN')
-
-def add(name, **kwargs):
-    SSHMachine(name, **kwargs, processes=[])
-    machines.add(name, type='ssh', **kwargs)
-
-_connections = {}
-def connection(machine):
-    if isinstance(machine, SSHMachine):
-        machine = asdict(machine)
-    name = machine['name']
-
-    if name not in _connections:
-        _connections[name] = Connection(**machine['connection']) 
-    return _connections[name]
-
-def machine(name, config):
-    config = config.copy()
-    del config['type']
-    assert 'processes' not in config
-    config['resources'] = {k: list(range(int(v))) for k, v in config['resources'].items()}
-    #TODO: Is there a better way than parsing ps?
-    r = connection({'name': name, **config}).run('ps -A -o pid=', pty=False, hide='both')
-    pids = [int(pid) for pid in r.stdout.splitlines()]
-    return SSHMachine( 
-        name=name,
-        processes=pids,
-        **config)
 
 def resource_string(allocation):
     s = []
@@ -47,36 +16,69 @@ def resource_string(allocation):
         s.append(f'JITTENS_{k.upper()}={vals}')
     return ' '.join(s)
 
-def launch(job: jobs.Job, machine: SSHMachine, allocation={}):
-    env = resource_string(allocation)
-    dir = str(Path(machine.root) / job.name)
+@dataclass
+class Machine(machines.Machine):
+    connection_kwargs: Dict = field(default_factory=dict)
+    _connection = None
 
-    if job.archive:
-        remote_path = f'/tmp/{job.name}'
-        connection(machine).put(job.archive, remote_path)
-        unarchive = f'tar -xzf {quote(remote_path)} && rm {quote(remote_path)} && '
-    else:
-        unarchive = ''
+    @staticmethod
+    def create(name, config):
+        config = config.copy()
+        del config['type']
+        assert 'processes' not in config
+        config['resources'] = {k: list(range(int(v))) for k, v in config['resources'].items()}
+        #TODO: Is there a better way than parsing ps?
+        return Machine( 
+            name=name,
+            **config)
 
-    setup = (
-        f'mkdir -p {quote(dir)} && '
-        f'cd {quote(dir)} && '
-        f'{unarchive}'
-        f'export {env} && '
-        f'{job.command}')
+    @property
+    def connection(self):
+        if self._connection is None:
+            self._connection = Connection(**self.connection_kwargs) 
+        return self._connection
 
-    wrapper = (
-        f'/bin/bash -c {quote(setup)} '
-        '>/tmp/jittens-ssh.log '
-        '2>/tmp/jittens-ssh.log '
-        f'& echo $!')
+    @property
+    def processes(self):
+        if self._processes is None:
+            r = self.connection().run('ps -A -o pid=', pty=False, hide='both')
+            self._processes = [int(pid) for pid in r.stdout.splitlines()]
+        return self._processes
 
-    r = connection(machine).run(wrapper, hide='both')
-    return int(r.stdout)
+    def launch(self, job: jobs.Job, allocation={}):
+        env = resource_string(allocation)
+        dir = str(Path(self.root) / job.name)
 
-def run(machine, command):
-    connection(machine).run(command)
+        if job.archive:
+            remote_path = f'/tmp/{job.name}'
+            self._connection.put(job.archive, remote_path)
+            unarchive = f'tar -xzf {quote(remote_path)} && rm {quote(remote_path)} && '
+        else:
+            unarchive = ''
 
-def cleanup(job, machine):
-    dir = str(Path(machine.root) / job.name)
-    run(machine, f"rm -rf {quote(dir)}")
+        setup = (
+            f'mkdir -p {quote(dir)} && '
+            f'cd {quote(dir)} && '
+            f'{unarchive}'
+            f'export {env} && '
+            f'{job.command}')
+
+        wrapper = (
+            f'/bin/bash -c {quote(setup)} '
+            '>/tmp/jittens-ssh.log '
+            '2>/tmp/jittens-ssh.log '
+            f'& echo $!')
+
+        r = self.connection.run(wrapper, hide='both')
+        return int(r.stdout)
+
+    def run(self, command):
+        self.connection.run(command)
+
+    def cleanup(self, job):
+        dir = str(Path(self.root) / job.name)
+        self.run(f"rm -rf {quote(dir)}")
+
+def add(name, **kwargs):
+    Machine(name, **kwargs, processes=[])
+    machines.add(name, type='ssh', **kwargs)
