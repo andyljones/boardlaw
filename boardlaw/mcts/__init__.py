@@ -14,6 +14,20 @@ def uniform_noise(logits, valid, eps):
     noise = valid.float()/valid.sum(-1, keepdims=True).float()
     return (logits.exp()*(1 - eps) + eps*noise).log()
 
+def dirichlet_noise(logits, valid, eps, alpha=None):
+    alpha = alpha or 10/logits.size(-1)
+    alpha = torch.full((valid.shape[-1],), alpha, dtype=torch.float, device=logits.device)
+    dist = torch.distributions.Dirichlet(alpha)
+    
+    draw = dist.sample(logits.shape[:-1])
+
+    # This gives us a Dirichlet draw over the valid values
+    draw[~valid] = 0.
+    draw = draw/draw.sum(-1, keepdims=True)
+
+    return (logits.exp()*(1 - eps) + draw*eps).log()
+
+
 class MCTS:
 
     def __init__(self, world, n_nodes, c_puct=1/16):
@@ -61,7 +75,7 @@ class MCTS:
         with torch.no_grad():
             decisions = network(world)
             assert (decisions.logits > -np.inf).any(-1).all(), 'Some row of logits are all neginf or nan'
-        self.decisions.logits[:, self.sim] = uniform_noise(decisions.logits, world.valid, .25)
+        self.decisions.logits[:, self.sim] = dirichlet_noise(decisions.logits, world.valid, .25)
         self.decisions.v[:, 0] = decisions.v
 
         self.sim += 1
