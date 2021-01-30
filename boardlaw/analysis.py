@@ -160,11 +160,11 @@ def demo_record(run_name=-1):
     agent = agentfunc()
     agent.load_state_dict(storage.load_latest(run_name)['agent'])
     mhx = mohex.MoHexAgent()
-    analysis.record(world, [agent, mhx], n_reps=1, N=0).notebook()
+    analysis.record(world, [agent, agent], n_reps=1, N=0).notebook()
 
 def demo_rollout():
     from . import networks, mcts, mohex
-    env = hex.Hex.initial(n_envs=4, boardsize=9, device='cuda')
+    env = hex.Hex.initial(n_envs=4, boardsize=11, device='cuda')
     network = networks.FCModel(env.obs_space, env.action_space, D=128).to(env.device)
     agent = mcts.MCTSAgent(env, network, n_nodes=16)
     oppo = mohex.MoHexAgent(env)

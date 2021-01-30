@@ -6,6 +6,8 @@ import torch.distributions
 import torch.cuda
 import torch.testing
 
+OPEN_SPIEL_CHARS = 'bw'
+
 ### CUDA
 
 B = 0
@@ -154,7 +156,7 @@ def test_open_spiel():
     import pyspiel
 
     e = 1
-    ours = Hex.initial(3, 11, device='cpu')
+    ours = Hex.initial(64, 11)
 
     theirs = pyspiel.load_game("hex")
     state = theirs.new_initial_state()
@@ -211,3 +213,18 @@ def obs_test():
     board = torch.tensor([[[0, 0], [0, 0]]]).type(torch.uint8).cuda()
     seats = torch.tensor([1,]).type(torch.long).cuda()
     cuda.observe(board, seats)
+
+def bad_board():
+    # Black to play on (8, 4); replaces white :/
+    bad = np.array([
+            [0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 0, 0, 2, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1, 0, 0, 2, 0, 0, 0],
+            [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+            [0, 2, 2, 0, 0, 0, 1, 0, 0, 0, 0],
+            [0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 1, 2, 0, 0, 1, 0, 0, 0, 0, 0],
+            [0, 1, 2, 1, 0, 1, 2, 0, 0, 0, 0],
+            [0, 1, 2, 0, 2, 2, 0, 1, 0, 0, 0],
+            [0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]])
