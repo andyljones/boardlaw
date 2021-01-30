@@ -26,7 +26,7 @@ def dirichlet_noise(logits, valid, eps, alpha_scale=10):
 
 class MCTS:
 
-    def __init__(self, world, n_nodes, c_puct=1/16, noise_eps=.25, alpha_scale=10):
+    def __init__(self, world, n_nodes=128, c_puct=1/32, noise_eps=.25, alpha_scale=10):
         """
         c_puct high: concentrates on prior
         c_puct low: concentrates on value
@@ -231,7 +231,7 @@ class MCTSAgent:
         network = {k[8:]: v for k, v in sd.items() if k.startswith('network.')}
         kwargs = {k[7:]: v for k, v in sd.items() if k.startswith('kwargs.')}
         self.network.load_state_dict(network)
-        self.kwargs.update(kwargs)
+        # self.kwargs.update(kwargs)
 
     def state_dict(self):
         network = {f'network.{k}': v for k, v in self.network.state_dict().items()}

@@ -135,7 +135,7 @@ def worldfunc(n_envs, device='cuda'):
 def agentfunc(device='cuda', **kwargs):
     worlds = worldfunc(n_envs=1, device=device)
     network = networks.FCModel(worlds.obs_space, worlds.action_space).to(worlds.device)
-    return mcts.MCTSAgent(network, n_nodes=64, **kwargs)
+    return mcts.MCTSAgent(network, **kwargs)
 
 def warm_start(agent, opt, scaler, parent):
     if parent:
@@ -167,7 +167,7 @@ def set_devices():
     else:
         print('No devices set')
 
-def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='uniform noise post bug-fix', timelimit=np.inf):
+def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='doubled nodes, halved cpuct fine-tune', timelimit=np.inf):
     set_devices()
     start = time.time()
 
@@ -179,7 +179,7 @@ def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='uniform noise post b
     opt = torch.optim.Adam(network.parameters(), lr=1e-3, amsgrad=True)
     scaler = torch.cuda.amp.GradScaler()
 
-    parent = warm_start(agent, opt, scaler, '')
+    parent = warm_start(agent, opt, scaler, '*gross-steams')
 
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
