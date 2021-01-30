@@ -11,7 +11,7 @@ from rebar import profiling
 log = logging.getLogger(__name__)
 
 def uniform_noise(logits, valid, eps):
-    noise = 1/valid.sum(-1, keepdims=True).float()
+    noise = valid.float()/valid.sum(-1, keepdims=True).float()
     return (logits.exp()*(1 - eps) + eps*noise).log()
 
 class MCTS:

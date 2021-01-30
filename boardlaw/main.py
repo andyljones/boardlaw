@@ -167,7 +167,7 @@ def set_devices():
     else:
         print('No devices set')
 
-def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='uniform noise fine-tune', timelimit=np.inf):
+def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='uniform noise post bug-fix', timelimit=np.inf):
     set_devices()
     start = time.time()
 
@@ -179,7 +179,7 @@ def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='uniform noise fine-t
     opt = torch.optim.Adam(network.parameters(), lr=1e-3, amsgrad=True)
     scaler = torch.cuda.amp.GradScaler()
 
-    parent = warm_start(agent, opt, scaler, '*joyous-father')
+    parent = warm_start(agent, opt, scaler, '')
 
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 

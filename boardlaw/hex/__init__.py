@@ -120,6 +120,7 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seats'))):
             actions = actions[..., 0]*self.boardsize + actions[:, 1]
 
         assert actions.shape == (self.n_envs,)
+        assert self.valid.gather(1, actions[:, None]).squeeze(-1).all()
 
         new_board = self.board.clone()
         rewards = cuda.step(new_board, self.seats.int(), actions.int())
