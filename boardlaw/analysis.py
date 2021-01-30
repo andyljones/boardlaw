@@ -128,17 +128,6 @@ def rollout_model(run=-1, mohex=True, eval=True, n_envs=1):
         agents = [agent, agent]
     return rollout(worlds, agents, n_reps=1, eval=eval)
 
-def demo(run_name=-1):
-    from boardlaw import mohex
-    from .main import worldfunc, agentfunc
-
-    n_envs = 9
-    world = worldfunc(n_envs, device='cuda:1')
-    agent = agentfunc(device='cuda:1')
-    agent.load_state_dict(storage.select(storage.load_latest(run_name), 'agent'))
-    mhx = mohex.MoHexAgent(presearch=False, max_games=1)
-    record(world, [agent, mhx], n_reps=1, N=0).notebook()
-
 def compare(fst_run=-1, snd_run=-1, n_envs=256, device='cuda:1'):
     import pandas as pd
     from .main import worldfunc, agentfunc
@@ -169,6 +158,7 @@ def demo_record(run_name=-1):
     n_envs = 9
     world = worldfunc(n_envs)
     agent = agentfunc()
+    agent.load_state_dict(storage.load_latest(run_name)['agent'])
     mhx = mohex.MoHexAgent()
     analysis.record(world, [agent, mhx], n_reps=1, N=0).notebook()
 
@@ -182,24 +172,6 @@ def demo_rollout():
     trace = rollout(env, [agent, oppo], 20)
 
     trace.responses.rewards.sum(0).sum(0)
-
-def grad_noise_scale(B):
-    import pandas as pd
-
-    results = {}
-    for i, row in storage.stored_periodic('2020-12-24 16-22-48 residual-9x9').iterrows():
-        sd = torch.load(row.path, map_location='cpu')['opt.state']
-        m0 = torch.cat([s['exp_avg'].flatten() for s in sd.values()])
-        v0 = torch.cat([s['exp_avg_sq'].flatten() for s in sd.values()])
-        results[i] = (m0.sum().item(), v0.sum().item())
-
-    df = pd.DataFrame(results, index=('m', 'v')).T
-
-    G2 = df.m.pow(2)
-    s = B*(df.v - df.m.pow(2))
-    noise_scale = s.div(G2)
-
-    return noise_scale
 
 def board_runs(boardsize=9):
     import pandas as pd
@@ -227,23 +199,3 @@ def board_runs(boardsize=9):
         ax.set_title(f'all runs on {boardsize}x{boardsize} boards')
 
     return smoothed
-
-def noise_scale(state_dict, B):
-    state = state_dict['state']
-    v0 = torch.cat([s['exp_avg_sq'].reshape(-1) for _, s in state.items()]).norm()
-    m0 = torch.cat([s['exp_avg'].reshape(-1) for _, s in state.items()]).norm()
-    return B*(v0 - m0**2).item()
-
-def noise_scales(run, B=8*1024):
-    import pandas as pd
-    scales = {}
-    for n, s in storage.snapshots(run).items():
-        state = storage.load_path(s['path'])['opt']
-        scales[s['_created']] = noise_scale(state, B)
-
-    scales = pd.Series(scales)
-    scales.index = pd.to_datetime(scales.index)
-    scales.index = scales.index - scales.index[0]
-    scales = scales.resample('15min').mean().interpolate()
-
-    return scales

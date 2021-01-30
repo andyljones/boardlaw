@@ -44,6 +44,7 @@ def gradients(run, i, n_envs=16*1024, buffer_len=64, device='cuda'):
     sd = storage.load_snapshot(run, i)
     agent.load_state_dict(sd['agent'])
     opt.load_state_dict(sd['opt'])
+    scaler.load_state_dict(sd['scaler'])
 
     buffer = []
 
@@ -101,7 +102,7 @@ def adam_way(run, i, Bsmall):
 def run():
     gs = []
     B = 16*1024
-    for _, g in zip(range(128), gradients('*large-model', B)):
+    for _, g in zip(range(128), gradients('*joyous-father', 37, B)):
         log.info(f'{len(gs)} gradients')
         gs.append(g)
     gs = torch.stack(gs).cpu()
