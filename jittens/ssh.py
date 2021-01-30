@@ -5,7 +5,7 @@ from . import machines, jobs
 from pathlib import Path
 from shlex import quote
 from dataclasses import dataclass, asdict, field
-from typing import Dict
+from typing import Dict, Any, Optional, List
 
 getLogger('paramiko').setLevel('WARN')
 
@@ -19,18 +19,17 @@ def resource_string(allocation):
 @dataclass
 class Machine(machines.Machine):
     connection_kwargs: Dict = field(default_factory=dict)
-    _connection = None
+    _connection: Any = None
+    _processes: Optional[List[int]] = None
 
     @staticmethod
-    def create(name, config):
+    def create(**config):
         config = config.copy()
         del config['type']
         assert 'processes' not in config
         config['resources'] = {k: list(range(int(v))) for k, v in config['resources'].items()}
         #TODO: Is there a better way than parsing ps?
-        return Machine( 
-            name=name,
-            **config)
+        return Machine(**config)
 
     @property
     def connection(self):
@@ -41,7 +40,7 @@ class Machine(machines.Machine):
     @property
     def processes(self):
         if self._processes is None:
-            r = self.connection().run('ps -A -o pid=', pty=False, hide='both')
+            r = self.connection.run('ps -A -o pid=', pty=False, hide='both')
             self._processes = [int(pid) for pid in r.stdout.splitlines()]
         return self._processes
 
@@ -51,7 +50,7 @@ class Machine(machines.Machine):
 
         if job.archive:
             remote_path = f'/tmp/{job.name}'
-            self._connection.put(job.archive, remote_path)
+            self.connection.put(job.archive, remote_path)
             unarchive = f'tar -xzf {quote(remote_path)} && rm {quote(remote_path)} && '
         else:
             unarchive = ''
@@ -80,5 +79,5 @@ class Machine(machines.Machine):
         self.run(f"rm -rf {quote(dir)}")
 
 def add(name, **kwargs):
-    Machine(name, **kwargs, processes=[])
+    Machine(name=name, **kwargs)
     machines.add(name, type='ssh', **kwargs)

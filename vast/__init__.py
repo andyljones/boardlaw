@@ -14,7 +14,7 @@ def jittenate(local=False):
                     'gpu': row.num_gpus,
                     'memory': row.cpu_ram*row.gpu_frac},
                 root='/code',
-                connection={
+                connection_kwargs={
                     'host': row.ssh_host, 
                     'user': 'root', 
                     'port': int(row.ssh_port), 

@@ -81,7 +81,7 @@ def mock_ssh_config():
             'gpu': 2,
             'memory': 64},
         root=str((jobs.ROOT / 'ssh').absolute()),
-        connection={
+        connection_kwargs={
             'host': 'localhost', 
             'user': 'root', 
             'port': '22', 

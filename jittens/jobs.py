@@ -22,13 +22,11 @@ class Job:
     resources: Dict[str, int]
     status: str
     archive: str = ''
-    # aux: Dict[str, None] = field(default_factory=dict)
+    aux: Dict[str, None] = field(default_factory=dict)
 
     allocation: Dict[str, List[int]] = field(default_factory=dict)
     machine: Optional[str] = None
     process: Optional[str] = None
-
-
 
 def path():
     return ROOT / 'jobs.json'
