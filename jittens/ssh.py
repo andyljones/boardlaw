@@ -71,8 +71,8 @@ class Machine(machines.Machine):
         r = self.connection.run(wrapper, hide='both')
         return int(r.stdout)
 
-    def run(self, command):
-        self.connection.run(command)
+    def run(self, command, **kwargs):
+        return self.connection.run(command, **kwargs)
 
     def cleanup(self, job):
         dir = str(Path(self.root) / job.name)

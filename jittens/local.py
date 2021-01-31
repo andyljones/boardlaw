@@ -1,3 +1,4 @@
+import invoke
 import os
 from . import jobs, machines
 import shutil
@@ -56,8 +57,8 @@ class Machine(machines.Machine):
 
         return proc.pid
 
-    def run(self, command):
-        check_output(command, shell=True)
+    def run(self, command, **kwargs):
+        return invoke.context.Context().run(command, **kwargs)
 
     def cleanup(self, job):
         path = Path(self.root) / job.name

@@ -6,7 +6,7 @@ import shutil
 log = getLogger(__name__)
 
 def jittenate(local=False):
-    jittens.clear()
+    jittens.machines.clear()
     for name, row in status().iterrows():
         if row.actual_status == 'running':
             jittens.ssh.add(name,
@@ -82,26 +82,20 @@ def fetch(source, target):
                 del ps[name]
 
 def tails(path, jobglob='*', count=5):
-    from jittens.machines import machines
-    from jittens.jobs import jobs
-    from jittens.ssh import connection
+    import jittens
     from pathlib import Path
     from fnmatch import fnmatch
 
-    machines = machines()
+    machines = jittens.machines.machines()
     promises = {}
-    stdouts = {}
-    for name, job in jobs().items():
+    for name, job in jittens.jobs.jobs().items():
         if fnmatch(job.name, jobglob) and job.status in ('active', 'dead'):
             if job.machine in machines:
                 machine = machines[job.machine]
                 fullpath = Path(machine.root) / name / path
-                if hasattr(machine, 'connection'):
-                    conn = connection(machine)
-                    promises[name] = conn.run(f'tail -n {count} "{fullpath}"', hide='both', asynchronous=True)
-                else:
-                    stdouts[name] = fullpath.read_text().splitlines()[-count:]
+                promises[name] = machine.run(f'tail -n {count} "{fullpath}"', hide='both', asynchronous=True)
     
+    stdouts = {}
     for name, promise in promises.items():
         try:
             stdouts[name] = promise.join().stdout.splitlines()[-count:]

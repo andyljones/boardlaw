@@ -103,10 +103,10 @@ def submit(cmd, dir=None, **kwargs):
 
     return name
 
-def cancel(name=None):
+def delete(name=None):
     if name is None:
         for name in jobs():
-            cancel(name)
+            delete(name)
     else:
         with update() as js:
             del js[name]

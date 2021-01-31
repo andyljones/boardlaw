@@ -14,6 +14,9 @@ class Machine:
     root: str
     resources: Dict[str, int]
 
+    def run(self, command, **kwargs):
+        raise NotImplementedError()
+
 log = getLogger(__name__)
 
 def add(name, **kwargs):
