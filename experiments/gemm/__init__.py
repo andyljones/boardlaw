@@ -12,10 +12,10 @@ def test():
     B = 5
     U, V = 2, 3
 
-    W = torch.zeros((B, U, V)).cuda()
+    W = torch.zeros((1, U, V)).cuda()
     x = torch.zeros((B, V)).cuda()
-    b = torch.zeros((B, U)).cuda()
+    b = torch.zeros((1, U)).cuda()
 
-    idxs = torch.zeros((B,)).int().cuda()
+    idxs = torch.zeros((B,)).long().cuda()
 
     y = module().linear(W, x, b, idxs)

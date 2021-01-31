@@ -8,6 +8,53 @@ namespace py = pybind11;
 using namespace pybind11::literals;
 using namespace std::string_literals;
 
+const char* _cublasGetErrorEnum(cublasStatus_t error) {
+  if (error == CUBLAS_STATUS_SUCCESS) {
+    return "CUBLAS_STATUS_SUCCESS";
+  }
+  if (error == CUBLAS_STATUS_NOT_INITIALIZED) {
+    return "CUBLAS_STATUS_NOT_INITIALIZED";
+  }
+  if (error == CUBLAS_STATUS_ALLOC_FAILED) {
+    return "CUBLAS_STATUS_ALLOC_FAILED";
+  }
+  if (error == CUBLAS_STATUS_INVALID_VALUE) {
+    return "CUBLAS_STATUS_INVALID_VALUE";
+  }
+  if (error == CUBLAS_STATUS_ARCH_MISMATCH) {
+    return "CUBLAS_STATUS_ARCH_MISMATCH";
+  }
+  if (error == CUBLAS_STATUS_MAPPING_ERROR) {
+    return "CUBLAS_STATUS_MAPPING_ERROR";
+  }
+  if (error == CUBLAS_STATUS_EXECUTION_FAILED) {
+    return "CUBLAS_STATUS_EXECUTION_FAILED";
+  }
+  if (error == CUBLAS_STATUS_INTERNAL_ERROR) {
+    return "CUBLAS_STATUS_INTERNAL_ERROR";
+  }
+  if (error == CUBLAS_STATUS_NOT_SUPPORTED) {
+    return "CUBLAS_STATUS_NOT_SUPPORTED";
+  }
+#ifdef CUBLAS_STATUS_LICENSE_ERROR
+  if (error == CUBLAS_STATUS_LICENSE_ERROR) {
+    return "CUBLAS_STATUS_LICENSE_ERROR";
+  }
+#endif
+  return "<unknown>";
+}
+
+// Copied in from https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/cuda/Exceptions.h 
+// since the underlying _cublasGetErrorEnum doesn't seem to be exported
+#define TORCH_CUDABLAS_CHECK(EXPR)                              \
+  do {                                                          \
+    cublasStatus_t __err = EXPR;                                \
+    TORCH_CHECK(__err == CUBLAS_STATUS_SUCCESS,                 \
+                "CUDA error: ",                                 \
+                _cublasGetErrorEnum(__err),                     \
+                " when calling `" #EXPR "`");                   \
+  } while (0)
+
 TT linear(TT& W, const TT& x, const TT& b, const TT& idxs) {
     // https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/native/cuda/LinearAlgebra.cu#L155
     CHECK_INPUT(W)
@@ -19,7 +66,7 @@ TT linear(TT& W, const TT& x, const TT& b, const TT& idxs) {
     TORCH_CHECK_TYPE(W.scalar_type() == at::kFloat, "W expected ", toString(at::kFloat), " got ", toString(W.scalar_type()));
     TORCH_CHECK_TYPE(x.scalar_type() == at::kFloat, "x expected ", toString(at::kFloat), " got ", toString(x.scalar_type()));
     TORCH_CHECK_TYPE(b.scalar_type() == at::kFloat, "b expected ", toString(at::kFloat), " got ", toString(b.scalar_type()));
-    TORCH_CHECK_TYPE(idxs.scalar_type() == at::kInt, "idxs expected ", toString(at::kInt), " got ", toString(idxs.scalar_type()));
+    TORCH_CHECK_TYPE(idxs.scalar_type() == at::kLong, "idxs expected ", toString(at::kLong), " got ", toString(idxs.scalar_type()));
 
     TORCH_CHECK(W.dim() == 3, "W must be a 3D tensor");
     TORCH_CHECK(x.dim() == 2, "x must be a 2D tensor");
@@ -60,7 +107,7 @@ TT linear(TT& W, const TT& x, const TT& b, const TT& idxs) {
     auto C = (long)y.data_ptr() + range*m;
 
     // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemmbatched
-    cublasSgemmBatched(
+    TORCH_CUDABLAS_CHECK(cublasSgemmBatched(
         handle, 
         CUBLAS_OP_N, 
         CUBLAS_OP_N, 
@@ -70,8 +117,8 @@ TT linear(TT& W, const TT& x, const TT& b, const TT& idxs) {
         (float**)B.data_ptr(), ldb, 
         &beta,
         (float**)C.data_ptr(), ldc, 
-        l);
-
+        l));
+    
     return y;
 }
 
