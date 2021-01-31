@@ -236,6 +236,7 @@ def plot_envelope(aug, xlabel, ax=None, base=2, legend=False):
     aljpy.plot.percent_axis(ax, axis='y')
     if legend:
         ax.legend(title='width')
+    return ax
 
 def plot_results(raw=None):
     raw = load_opt_results('fc-opt') if raw is None else raw
@@ -254,9 +255,9 @@ def plot_results(raw=None):
     aug['steps'] = steps[picks].values
 
     aug = (aug
-            .assign(params=lambda df: (df.width**2 + df.width)*df.depth)
-            .assign(memory=lambda df: df.width*df.depth)
-            .assign(flops=lambda df: (df.width**3 + df.width)*df.depth))
+            .assign(params=lambda df: (9*df.width**2 + df.width)*df.depth)
+            .assign(memory=lambda df: 11*11*df.width*df.depth)
+            .assign(flops=lambda df: 11*11*(9*df.width**3 + df.width)*df.depth))
 
     aug['total_flops'] = aug.flops*aug.steps
 
@@ -270,7 +271,7 @@ def plot_results(raw=None):
     fig.set_size_inches(12, 12)
     
     title = (
-        'performance envelopes for predicting outcome of 11x11 Hex games with fully-connected networks\n'
+        'performance envelopes for predicting outcome of 11x11 Hex games with conv networks\n'
         '(width doubles line-to-line, depth doubles node-to-node)')
     fig.suptitle(title, y=.95)
 
