@@ -42,13 +42,13 @@ class ReZeroConv(nn.Conv2d):
 
 class ConvModel(nn.Module):
 
-    def __init__(self, boardsize, D, n_layers=16):
+    def __init__(self, boardsize, width, depth=16):
         super().__init__()
 
-        layers = [nn.Conv2d(2, D, 3, 1, 1)]
-        for l in range(n_layers):
-            layers.append(ReZeroConv(D, D))
-        layers.append(nn.Conv2d(D, 1, 3, 1, 1))
+        layers = [nn.Conv2d(2, width, 3, 1, 1)]
+        for l in range(depth):
+            layers.append(ReZeroConv(width, width))
+        layers.append(nn.Conv2d(width, 1, 3, 1, 1))
         self.layers = nn.ModuleList(layers)
 
         self.value = nn.Linear(boardsize**2, 1)

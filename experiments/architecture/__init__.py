@@ -163,7 +163,7 @@ def run(name, width, depth, batch, lr, T=np.inf):
     train, test = full[:1023], full[-1]
     obs_test, seats_test, y_test = decompress(test)
 
-    network = models.FCModel(obs_test.size(1), width=width, depth=depth).cuda()
+    network = models.ConvModel(obs_test.size(1), width=width, depth=depth).cuda()
     opt = torch.optim.Adam(network.parameters(), lr=lr)
 
     stats = []
@@ -183,14 +183,14 @@ def run(name, width, depth, batch, lr, T=np.inf):
             stat['test'] = res_var_test
         stats.append(stat)
             
-        if t % 100 == 0:
-            report(stats)
-
-        if (t > 1000) & (t % 100 == 0):
-            diff = (pd.DataFrame(stats)['train']
-                        .ewm(span=100).mean()
-                        .pipe(lambda df: df.iloc[-1000] - df.iloc[-1]))
-            if abs(diff) < .005:
+        if (t % 100 == 0):
+            df = (pd.DataFrame(stats)
+                        .assign(time=lambda df: df.time - df.time.iloc[0])
+                        .set_index('time')['train']
+                        .ewm(span=100).mean())
+            diff = df.loc[df.index.max() - 60:].iloc[0] - df.iloc[-1]
+            log.info(f'{df.index.max():.0f}s: {df.iloc[-1]:.2f}l, {diff:.3f}δ')
+            if abs(diff) < .01 and df.index.max() > 60:
                 break
 
         if t == T:
@@ -295,15 +295,15 @@ def plot_bests(raw):
 
 def demo():
     import jittens
-    widths = [1, 8, 64, 512]
-    depths = [1, 8, 64, 512]
-    batches = [1024, 4*1024, 16*1024]
-    lrs = [1e-4, 8e-4, 64e-4, 512e-4]
+    widths = [1, 2, 4, 8, 16, 32, 64, 128]
+    depths = [1, 2, 4, 8, 16, 32, 64, 128]
+    batches = [16*1024]
+    lrs = [8e-4]
     for width in widths:
         for depth in depths:
             for batch in batches:
                 for lr in lrs:
-                    jittens.submit(f'python -c "from experiments.architecture import *; run(\'fc-opt\', {width}, {depth}, {batch}, {lr})" >logs.txt 2>&1', dir='.', resources={'gpu': 1})
+                    jittens.jobs.submit(f'python -c "from experiments.architecture import *; run(\'conv-opt\', {width}, {depth}, {batch}, {lr})" >logs.txt 2>&1', dir='.', resources={'gpu': 1})
 
     while not jittens.finished():
         jittens.manage()

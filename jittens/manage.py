@@ -62,8 +62,8 @@ def check_stalled(ms):
         if not machine:
             log.info(f'Job "{job.name}" requires too many resources to run on any existing machine')
 
-def manage():
-    ms = machines.machines()
+def manage(ms=None):
+    ms = machines.machines() if ms is None else ms
 
     # See if any of the active jobs are now dead
     log.info(f'There are {len(jobs.jobs("active"))} active jobs.')
