@@ -26,12 +26,12 @@ TT linear(TT& W, const TT& x, const TT& b, const TT& idxs) {
     TORCH_CHECK(b.dim() == 2, "b must be a 2D tensor");
     TORCH_CHECK(idxs.dim() == 1, "idxs must be a 1D tensor");
 
-    TORCH_CHECK(W.size(0) == x.size(0), "W dim 0 must match x dim 0");
     TORCH_CHECK(W.size(0) == b.size(0), "W dim 0 must match b dim 0");
-    TORCH_CHECK(W.size(2) == x.size(1), "W dim 2 must match x dim 1");
     TORCH_CHECK(W.size(1) == b.size(1), "W dim 1 must match b dim 1");
+    TORCH_CHECK(W.size(2) == x.size(1), "W dim 2 must match x dim 1");
+    TORCH_CHECK(idxs.size(0) == x.size(0), "idxs dim 0 must match x dim 0");
 
-    auto y = b.clone();
+    auto y = b.index(idxs);
 
     // handle pathological cases that blas may not like
     if (y.numel() == 0) {
@@ -42,13 +42,22 @@ TT linear(TT& W, const TT& x, const TT& b, const TT& idxs) {
     // globalContext().alertCuBLASConfigNotDeterministic();
     auto handle = at::cuda::getCurrentCUDABlasHandle();
 
-    auto B = W.size(0);
+    auto l = W.size(0);
     auto m = W.size(1);
-    auto n = W.size(2);
-    auto k = 1;
+    auto n = 1;
+    auto k = W.size(2);
+
+    auto lda = m;
+    auto ldb = k;
+    auto ldc = m;
 
     float alpha = 1.f;
     float beta = 1.f;
+
+    auto range = at::arange(l, idxs.options());
+    auto A = (long)W.data_ptr() + idxs*(m*k);
+    auto B = (long)x.data_ptr() + range*k;
+    auto C = (long)y.data_ptr() + range*m;
 
     // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemmbatched
     cublasSgemmBatched(
@@ -57,11 +66,11 @@ TT linear(TT& W, const TT& x, const TT& b, const TT& idxs) {
         CUBLAS_OP_N, 
         m, n, k,
         &alpha, 
-        a, lda, 
-        b, ldb, 
+        (float**)A.data_ptr(), lda, 
+        (float**)B.data_ptr(), ldb, 
         &beta,
-        c, ldc, 
-        B);
+        (float**)C.data_ptr(), ldc, 
+        l);
 
     return y;
 }
