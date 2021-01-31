@@ -64,18 +64,19 @@ class ConvModel(nn.Module):
 
 class FCConvModel(nn.Module):
 
-    def __init__(self, boardsize, width=256, depth=20):
+    def __init__(self, boardsize, width=256, depth=20, conv_width=16):
         super().__init__()
 
-        self.legs = nn.ModuleList([
-            nn.Conv2d(2, 8, 3, 1, 0),
-            nn.Conv2d(8, 16, 3, 1, 0),
-            nn.Conv2d(16, 32, 3, 1, 0)])
+        legs = [nn.Conv2d(2, conv_width, 3, 1, 1)]
+        for l in range(depth//2):
+            legs.append(ReZeroConv(conv_width, conv_width))
+        legs.append(nn.Conv2d(conv_width, 4, 3, 1, 1))
+        self.legs = nn.ModuleList(legs)
 
-        blocks = [nn.Linear(800, width)]
-        for _ in range(depth):
-            blocks.append(ReZeroResidual(width))
-        self.body = nn.Sequential(*blocks) 
+        body = [nn.Linear(4*boardsize**2, width)]
+        for _ in range(depth//2):
+            body.append(ReZeroResidual(width))
+        self.body = nn.Sequential(*body) 
 
         self.value = nn.Linear(width, 1)
 
