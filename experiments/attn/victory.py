@@ -106,7 +106,7 @@ def run_trial(Model, B=4*1024, T=1000, boardsize=7, device='cuda', **kwargs):
     boardsize = worlds.boardsize
     model = Model(common.PosActions, boardsize, **kwargs).to(device)
 
-    opt = torch.optim.Adam(model.parameters(), lr=1e-2)
+    opt = torch.optim.Adam(model.parameters(), lr=1e-3)
 
     losses = {}
     start = time.time()

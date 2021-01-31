@@ -165,7 +165,7 @@ def run(name, width, depth, batch, lr, T=np.inf):
     train, test = full[:1023], full[-1]
     obs_test, seats_test, y_test = decompress(test)
 
-    network = models.ConvModel(obs_test.size(1), width=width, depth=depth).cuda()
+    network = models.FCConvModel(obs_test.size(1), width=width, depth=depth).cuda()
     opt = torch.optim.Adam(network.parameters(), lr=lr)
 
     stats = []

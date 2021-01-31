@@ -31,10 +31,10 @@ class FCModel(nn.Module):
         super().__init__()
 
         self.D = D
-        layers = [nn.Linear(boardsize**2, D)]
+        layers = [nn.Linear(2*boardsize**2, D)]
         for _ in range(n_layers):
             layers.append(ReZeroResidual(D)) 
-        self.layers = nn.ModuleList(layers)
+        self.layers = nn.Sequential(*layers)
 
         pos = positions(boardsize)
         self.register_buffer('pos', pos)
@@ -42,10 +42,8 @@ class FCModel(nn.Module):
         self.head = Head(D, pos.shape[-1])
 
     def forward(self, obs):
-        B, boardsize, boardsize, _ = obs.shape
-        x = (obs[..., 0] - obs[..., 1]).reshape(B, boardsize*boardsize)
-        for l in self.layers:
-            x = F.relu(l(x))
+        x = obs.flatten(1)
+        x = self.layers(x)
         return self.head(x, self.pos)
 
 class ReZeroConv(nn.Conv2d):
@@ -63,18 +61,44 @@ class ConvModel(nn.Module):
         super().__init__()
 
         layers = [nn.Conv2d(2, D, 3, 1, 1)]
-        for l in range(n_layers):
+        for l in range(n_layers//2):
             layers.append(ReZeroConv(D, D))
-            
         layers.append(nn.Conv2d(D, 1, 3, 1, 1))
-        self.layers = nn.ModuleList(layers)
+        self.layers = nn.Sequential(*layers)
 
     def forward(self, obs):
         B, boardsize, boardsize, _ = obs.shape
         x = obs.permute(0, 3, 1, 2)
-        for l in self.layers:
-            x = l(x)
-        x = x.reshape(B, -1)
+        x = self.layers(x)
+        x = x.flatten(1)
+        x = F.log_softmax(x, -1)
+        return x.reshape(B, boardsize, boardsize)
+
+class ConvFCModel(nn.Module):
+
+    def __init__(self, Head, boardsize, D, n_layers=16):
+        super().__init__()
+
+        layers = [nn.Conv2d(2, D, 3, 1, 1)]
+        for l in range(n_layers//2):
+            layers.append(ReZeroConv(D, D))
+        layers.append(nn.Conv2d(D, 4, 3, 1, 1))
+        self.layers = nn.Sequential(*layers)
+
+        layers = [nn.Linear(4*boardsize**2, 16*D)]
+        for _ in range(n_layers//2):
+            layers.append(ReZeroResidual(16*D)) 
+        self.neck = nn.Sequential(*layers)
+
+        self.head = nn.Linear(16*D, boardsize**2)
+
+    def forward(self, obs):
+        B, boardsize, boardsize, _ = obs.shape
+        x = obs.permute(0, 3, 1, 2)
+        x = self.layers(x)
+        x = x.flatten(1)
+        x = self.neck(x)
+        x = self.head(x).squeeze(-1)
         x = F.log_softmax(x, -1)
         return x.reshape(B, boardsize, boardsize)
 
