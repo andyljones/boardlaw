@@ -190,9 +190,9 @@ def run(name, width, depth, batch, lr, T=np.inf):
                         .assign(time=lambda df: df.time - df.time.iloc[0])
                         .set_index('time')['train']
                         .ewm(span=100).mean())
-            diff = df.loc[df.index.max() - 60:].iloc[0] - df.iloc[-1]
+            diff = df.loc[df.index.max() - 300:].iloc[0] - df.iloc[-1]
             log.info(f'{df.index.max():.0f}s: {df.iloc[-1]:.2f}l, {diff:.3f}δ')
-            if abs(diff) < .01 and df.index.max() > 60:
+            if abs(diff) < .01 and df.index.max() > 300:
                 break
 
         if t == T:
