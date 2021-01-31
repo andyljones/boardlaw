@@ -169,7 +169,8 @@ def run(name, width, depth, batch, lr, T=np.inf):
     opt = torch.optim.Adam(network.parameters(), lr=lr)
 
     stats = []
-    for t, (obs, seats, y) in enumerate(split(cycle(train), 32*1024//batch)):
+    mult = 32*1024//batch
+    for t, (obs, seats, y) in enumerate(split(cycle(train), mult)):
         yhat = network(obs, seats)
 
         loss = (y - yhat).pow(2).mean()
@@ -185,14 +186,14 @@ def run(name, width, depth, batch, lr, T=np.inf):
             stat['test'] = res_var_test
         stats.append(stat)
             
-        if (t % 100 == 0):
-            df = (pd.DataFrame(stats)
-                        .assign(time=lambda df: df.time - df.time.iloc[0])
-                        .set_index('time')['train']
-                        .ewm(span=100).mean())
-            diff = df.loc[df.index.max() - 300:].iloc[0] - df.iloc[-1]
-            log.info(f'{df.index.max():.0f}s: {df.iloc[-1]:.2f}l, {diff:.3f}δ')
-            if abs(diff) < .01 and df.index.max() > 300:
+        if t % 100 == 0:
+            report(stats)
+
+        if (t > 500*mult) & (t % 100 == 0):
+            diff = (pd.DataFrame(stats)['train']
+                        .ewm(span=100).mean()
+                        .pipe(lambda df: df.iloc[-500*mult] - df.iloc[-1]))
+            if abs(diff) < .005:
                 break
 
         if t == T:
