@@ -5,7 +5,7 @@ from pkg_resources import resource_filename
 
 DEBUG = False
 
-def load(pkg):
+def load(pkg, files=('wrappers.cpp', 'kernels.cu')):
     # This import is pretty slow, so let's defer it
     import torch.utils.cpp_extension
 
@@ -15,7 +15,7 @@ def load(pkg):
     libpython_ver = sysconfig.get_config_var('LDVERSION')
     return torch.utils.cpp_extension.load(
         name=name, 
-        sources=[resource_filename(pkg, f'cpp/{fn}') for fn in ('wrappers.cpp', 'kernels.cu')], 
+        sources=[resource_filename(pkg, f'cpp/{fn}') for fn in files], 
         extra_cflags=['-std=c++17'] + (['-g'] if DEBUG else []), 
         extra_cuda_cflags=['--use_fast_math', '-lineinfo', '-std=c++14'] + (['-g', '-G'] if DEBUG else []),
         extra_ldflags=[
