@@ -33,11 +33,11 @@ def _fetch(name, machine, source, target):
     source = str(Path(machine.root) / name / source)
     if hasattr(machine, 'connection'):
         conn = machine.connection
-        [keyfile] = conn['connect_kwargs']['key_filename']
-        ssh = f"ssh -o StrictHostKeyChecking=no -i '{keyfile}' -p {conn['port']}"
+        [keyfile] = conn.connect_kwargs['key_filename']
+        ssh = f"ssh -o StrictHostKeyChecking=no -i '{keyfile}' -p {conn.port}"
 
         # https://unix.stackexchange.com/questions/104618/how-to-rsync-over-ssh-when-directory-names-have-spaces
-        command = f"""rsync -r -e "{ssh}" {conn['user']}@{conn['host']}:"'{source}/'" "{target}" """
+        command = f"""rsync -r -e "{ssh}" {conn.user}@{conn.host}:"'{source}/'" "{target}" """
     else:
         command = f"""rsync -r "{source}/" "{target}" """
     return Popen(command, shell=True, stdout=PIPE, stderr=PIPE)
