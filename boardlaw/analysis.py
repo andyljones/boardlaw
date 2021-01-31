@@ -163,7 +163,7 @@ def demo_record(run_name=-1):
     analysis.record(world, [agent, agent], n_reps=1, N=0).notebook()
 
 def demo_rollout(run_name=-1):
-    from boardlaw import mohex, analysis
+    from boardlaw import mohex
     from .main import worldfunc, agentfunc
 
     n_envs = 9
@@ -172,9 +172,9 @@ def demo_rollout(run_name=-1):
     agent.load_state_dict(storage.load_latest(run_name)['agent'])
     mhx = mohex.MoHexAgent()
 
-    trace = rollout(world, [agent, mhx], 20)
+    trace = rollout(world, [agent, mhx], n_reps=1)
 
-    trace.responses.rewards.sum(0).sum(0)
+    trace.transitions.rewards.sum(0).sum(0)
 
 def board_runs(boardsize=9):
     import pandas as pd
@@ -202,3 +202,18 @@ def board_runs(boardsize=9):
         ax.set_title(f'all runs on {boardsize}x{boardsize} boards')
 
     return smoothed
+
+def mohex_benchmark(run):
+    from boardlaw import mohex
+    from boardlaw.main import worldfunc, agentfunc
+    from boardlaw.arena import evaluator
+
+    n_envs = 8
+    worlds = worldfunc(n_envs)
+    agent = agentfunc()
+    agent.load_state_dict(storage.load_latest('*gross-steams')['agent'])
+    # agent.kwargs['n_nodes'] = 512
+    # agent.kwargs['noise_eps'] = 0.
+    mhx = mohex.MoHexAgent()
+
+    return evaluator.evaluate(worlds, {'boardlaw': agent, 'mohex': mhx})
