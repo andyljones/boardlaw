@@ -31,24 +31,27 @@ class FCModel(nn.Module):
         v = self.value(neck).squeeze(-1)
         return scatter_values(torch.tanh(v), seats)
 
-class ReZeroConv(nn.Conv2d):
+class ReZeroConv(nn.Module):
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, padding=1, stride=1, kernel_size=3, **kwargs)
+        super().__init__()
+        self.first = nn.Conv2d(*args, 3, 1, 1, **kwargs)
+        self.second = nn.Conv2d(*args, 1, 1, 0, **kwargs)
         self.register_parameter('α', nn.Parameter(torch.zeros(())))
 
+
     def forward(self, x, *args, **kwargs):
-        return x + self.α*F.relu(super().forward(x))
+        return x + self.α*self.second(F.relu(self.first(x)))
 
 class ConvModel(nn.Module):
 
     def __init__(self, boardsize, width, depth=16):
         super().__init__()
 
-        layers = [nn.Conv2d(2, width, 3, 1, 1)]
+        layers = [nn.Conv2d(2, width, 1, 1, 0)]
         for l in range(depth):
             layers.append(ReZeroConv(width, width))
-        layers.append(nn.Conv2d(width, 1, 3, 1, 1))
+        layers.append(nn.Conv2d(width, 1, 1, 1, 0))
         self.layers = nn.ModuleList(layers)
 
         self.value = nn.Linear(boardsize**2, 1)
