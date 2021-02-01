@@ -50,15 +50,18 @@ def benchmark(batchsize=64*1024, n_weights=16, dim=256, n_repeats=16):
     chunk = batchsize // n_weights
     slices = [slice(i, i+chunk) for i in range(0, batchsize, chunk)]
 
-    # cstreamed = prof.nvtx(cuda.load(__package__).mul)
+    cstreamed = prof.nvtx(cuda.load(__package__, ('multimult.cpp',)).cstreamed)
 
     times = {}
-    for f in [ideal, naive, streamed]:
+    for f in [ideal, naive, streamed, cstreamed]:
         for _ in range(10):
             torch.cuda.synchronize()
             start = time.time()
 
-            f(X, W, slices, streams, n_repeats)
+            if f == cstreamed:
+                f(X, W, [s.start for s in slices], [s.stop for s in slices], n_repeats)
+            else:
+                f(X, W, slices, streams, n_repeats)
 
             torch.cuda.synchronize()
             end = time.time()
