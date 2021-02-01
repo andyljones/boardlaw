@@ -57,15 +57,11 @@ TT test(TT W, TT x, TT b, TT idxs) {
     float *devMatrices = W.data_ptr<float>();
     float *devVectors = b.data_ptr<float>();
 
-    size_t devMatricesPitch = W.stride(0)*sizeof(float);
-    size_t devVectorsPitch = x.stride(0)*sizeof(float);
-
     auto handle = at::cuda::getCurrentCUDABlasHandle();
 
     // allocate result space on device
     auto y = b.index(idxs);
     float *devResult = y.data_ptr<float>();
-    size_t devResultPitch = y.stride(0)*sizeof(float);
 
     // create lists of device pointers to inputs and outputs
     float **AList = 0, **BList = 0, **CList = 0;
@@ -74,9 +70,9 @@ TT test(TT W, TT x, TT b, TT idxs) {
     CList = (float**)malloc(num * sizeof(float*));
 
     for(int i = 0; i < num; i++){
-        AList[i] = devMatrices + devMatricesPitch/sizeof(float) * size * i;
-        BList[i] = devVectors + devVectorsPitch/sizeof(float) * i;
-        CList[i] = devResult + devResultPitch/sizeof(float) * i;
+        AList[i] = devMatrices + W.stride(0) * size * i;
+        BList[i] = devVectors + x.stride(0) * i;
+        CList[i] = devResult + y.stride(0) * i;
     }
 
     // copy pointer lists to device
@@ -88,9 +84,9 @@ TT test(TT W, TT x, TT b, TT idxs) {
     assert(!cudaMemcpy(devBList, BList, num * sizeof(float*), cudaMemcpyHostToDevice)); 
     assert(!cudaMemcpy(devCList, CList, num * sizeof(float*), cudaMemcpyHostToDevice));
 
-    int lda = devMatricesPitch / sizeof(float);
-    int ldb = devVectorsPitch / sizeof(float);
-    int ldc = devResultPitch / sizeof(float);
+    int lda = W.stride(0);
+    int ldb = x.stride(0);
+    int ldc = y.stride(0);
     const float alpha = 1.0f, beta = 0.0f;
 
     TORCH_CUDABLAS_CHECK2(cublasSgemmBatched(handle,
