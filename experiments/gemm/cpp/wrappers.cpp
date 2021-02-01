@@ -50,7 +50,7 @@ const char* _cublasGetErrorEnum(cublasStatus_t error) {
   } while (0)
 
 TT linear(TT W, TT x, TT b, TT idxs) {
-    int l = W.size(0);
+    int l = x.size(0);
     int h = W.size(1);
     int w = W.size(2);
 
@@ -61,10 +61,10 @@ TT linear(TT W, TT x, TT b, TT idxs) {
     float *y_ptr = y.data_ptr<float>();
 
     //TODO: Think these are wrong
-    auto range = (long)sizeof(float)*idxs;
-    auto A = (long)w_ptr + w*h*range;
-    auto B = (long)x_ptr + w*range;
-    auto C = (long)y_ptr + h*range;
+    auto range = at::arange(l, idxs.options());
+    auto A = (long)w_ptr + (long)sizeof(float)*w*h*idxs;
+    auto B = (long)x_ptr + (long)sizeof(float)*w*range;
+    auto C = (long)y_ptr + (long)sizeof(float)*h*range;
 
     int m = h;
     int n = 1;

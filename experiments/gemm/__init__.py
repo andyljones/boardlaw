@@ -1,3 +1,4 @@
+import numpy as np
 import time
 import torch
 from boardlaw import cuda
@@ -39,13 +40,7 @@ def test_one_batch():
     torch.testing.assert_allclose(y.cpu(), [[5]])
 
 @profiling.profilable
-def benchmark():
-    M = 16
-    B = 16*1024
-    U = 256
-    V = 256
-    T = 128
-
+def benchmark(M=16, U=256, V=256, B=16*1024, T=128):
     W = torch.zeros((M, U, V)).cuda()
     x = torch.zeros((B, V)).cuda()
     b = torch.zeros((M, U)).cuda()
@@ -63,13 +58,7 @@ def benchmark():
 
     print((B*T)/(end - start)/1e6)
 
-def ideal():
-    M = 16
-    B = 16*1024
-    U = 256
-    V = 256
-    T = 128
-
+def ideal(M=16, U=256, V=256, B=16*1024, T=128):
     W = torch.zeros((U, V)).cuda()
     x = torch.zeros((B, V)).cuda()
     b = torch.zeros((U,)).cuda()
@@ -85,13 +74,7 @@ def ideal():
 
     print((B*T)/(end - start)/1e6)
 
-def sequential():
-    M = 16
-    B = 16*1024
-    U = 256
-    V = 256
-    T = 128
-
+def sequential(M=16, U=256, V=256, B=16*1024, T=128):
     W = torch.zeros((M, U, V)).cuda()
     x = torch.zeros((B, V)).cuda()
     b = torch.zeros((M, U,)).cuda()
@@ -107,3 +90,19 @@ def sequential():
     end = time.time()
 
     print((B*T)/(end - start)/1e6)
+
+
+def test_fuzz(M=16, U=256, V=256, B=16*1024):
+    W = torch.randn((M, U, V)).cuda()
+    x = torch.randn((B, V)).cuda()
+    b = torch.randn((M, U)).cuda()
+    idxs = torch.arange(B).cuda() % M
+
+    W = W.transpose(1, 2).contiguous().transpose(1, 2)
+    actual = module().linear(W, x, b, idxs)
+
+    expected = torch.full_like(actual, np.nan)
+    for m in range(M):
+        expected[idxs == m] = torch.matmul(W[m], x[idxs == m].unsqueeze(-1)).squeeze(-1) + b[m]
+
+    torch.testing.assert_allclose(expected, actual, rtol=1e-3, atol=1e-3)
