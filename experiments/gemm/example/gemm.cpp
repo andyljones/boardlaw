@@ -51,42 +51,55 @@ const char* _cublasGetErrorEnum(cublasStatus_t error) {
   } while (0)
 
 TT test(TT W, TT x, TT b, TT idxs) {
-    int size = W.size(1);
-    int num = W.size(0);
+    int l = W.size(0);
+    int h = W.size(1);
+    int w = W.size(2);
 
-    float *devMatrices = W.data_ptr<float>();
-    float *devVectors = x.data_ptr<float>();
-
-    auto handle = at::cuda::getCurrentCUDABlasHandle();
+    float *w_ptr = W.data_ptr<float>();
+    float *x_ptr = x.data_ptr<float>();
 
     auto y = b.index(idxs);
-    float *devResult = y.data_ptr<float>();
+    float *y_ptr = y.data_ptr<float>();
 
-    auto range = at::arange(num, idxs.options());
-    auto devAList = (long)devMatrices + W.stride(0)*size*range;
-    auto devBList = (long)devVectors + x.stride(0)*range;
-    auto devCList = (long)devResult + y.stride(0)*range;
+    //TODO: Think these are wrong
+    auto range = at::arange(l, idxs.options());
+    auto A = (long)x_ptr + x.stride(0)*range;
+    auto B = (long)w_ptr + W.stride(0)*range;
+    auto C = (long)y_ptr + y.stride(0)*range;
 
-    int lda = W.stride(0);
-    int ldb = x.stride(0);
-    int ldc = y.stride(0);
-    const float alpha = 1.0f, beta = 1.0f;
+    // x: (l, w, 1)
+    // W: (l, h, w)
+    // y: (l, h, 1)
+    //
+    // op(A): (l, 1, w)
+    // op(B): (l, w, h)
+    // C: (l, 1, h)
 
+    int m = 1;
+    int n = h;
+    int k = w;
+
+    int lda = w;
+    int ldb = h;
+    int ldc = 1;
+    const float alpha = 1.0f, beta = 0.0f;
+
+    auto handle = at::cuda::getCurrentCUDABlasHandle();
     TORCH_CUDABLAS_CHECK2(cublasSgemmBatched(handle,
                 CUBLAS_OP_T,
                 CUBLAS_OP_T,
-                size,
-                1,
-                size,
+                m,
+                n,
+                k,
                 &alpha,
-                (const float**)devAList.data_ptr(),
+                (const float**)A.data_ptr(),
                 lda,
-                (const float**)devBList.data_ptr(),
+                (const float**)B.data_ptr(),
                 ldb,
                 &beta,
-                (float**)devCList.data_ptr(),
+                (float**)C.data_ptr(),
                 ldc,
-                num));
+                l));
 
     cout << y << endl;
 
