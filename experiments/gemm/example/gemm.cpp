@@ -63,31 +63,23 @@ TT test(TT W, TT x, TT b, TT idxs) {
 
     //TODO: Think these are wrong
     auto range = at::arange(l, idxs.options());
-    auto A = (long)x_ptr + x.stride(0)*range;
-    auto B = (long)w_ptr + W.stride(0)*range;
-    auto C = (long)y_ptr + y.stride(0)*range;
+    auto A = (long)w_ptr + w*h*range;
+    auto B = (long)x_ptr + w*range;
+    auto C = (long)y_ptr + h*range;
 
-    // x: (l, w, 1)
-    // W: (l, h, w)
-    // y: (l, h, 1)
-    //
-    // op(A): (l, 1, w)
-    // op(B): (l, w, h)
-    // C: (l, 1, h)
-
-    int m = 1;
-    int n = h;
+    int m = h;
+    int n = 1;
     int k = w;
 
-    int lda = w;
-    int ldb = h;
-    int ldc = 1;
+    int lda = h;
+    int ldb = w;
+    int ldc = h;
     const float alpha = 1.0f, beta = 0.0f;
 
     auto handle = at::cuda::getCurrentCUDABlasHandle();
     TORCH_CUDABLAS_CHECK2(cublasSgemmBatched(handle,
-                CUBLAS_OP_T,
-                CUBLAS_OP_T,
+                CUBLAS_OP_N,
+                CUBLAS_OP_N,
                 m,
                 n,
                 k,
@@ -107,15 +99,19 @@ TT test(TT W, TT x, TT b, TT idxs) {
 }
 
 int main() {
-    for (int i=0; i<100; i++) {
+    for (int i=0; i<1; i++) {
         auto options = at::TensorOptions().dtype(at::kFloat).device(at::kCUDA);
-        // [1 2] [7] + [5] = [28]
-        // [3 4] [8]   [6]   [59]
-        auto W = at::tensor({1, 2, 3, 4}, options).view({1, 2, 2});
-        auto x = at::tensor({7, 8}, options).view({1, 2});
-        auto b = at::tensor({5, 6}, options).view({1, 2});
+        // [1 2 3] [7] + [10] = [60]
+        // [4 5 6] [8]   [11]   [133]
+        //         [9]
+        auto W = at::tensor({1, 2, 3, 4, 5, 6}, options).view({1, 2, 3});
+        auto x = at::tensor({7, 8, 9}, options).view({1, 3});
+        auto b = at::tensor({10, 11}, options).view({1, 2});
+
+        W = W.transpose(1, 2).contiguous().transpose(1, 2);
 
         auto idxs = at::tensor({0}).toType(at::kLong).cuda();
+        // auto expected = at::tensordot(W, x, {2}, {1}).squeeze(2) + b;
 
         test(W, x, b, idxs);
     }
