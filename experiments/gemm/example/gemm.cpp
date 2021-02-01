@@ -3,10 +3,14 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <ATen/cuda/CUDABlas.h>
+#include <ATen/ATen.h>
+
+#include "../../../boardlaw/cpp/common.h"
 
 using namespace std;
 
 int main() {
+    auto x = at::zeros(1).cuda();
 
     int size = 1;
     int num = 2;
