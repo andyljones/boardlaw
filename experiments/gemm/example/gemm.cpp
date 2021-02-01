@@ -55,39 +55,22 @@ TT test(TT W, TT x, TT b, TT idxs) {
     int num = W.size(0);
 
     float *devMatrices = W.data_ptr<float>();
-    float *devVectors = b.data_ptr<float>();
+    float *devVectors = x.data_ptr<float>();
 
     auto handle = at::cuda::getCurrentCUDABlasHandle();
 
-    // allocate result space on device
     auto y = b.index(idxs);
     float *devResult = y.data_ptr<float>();
 
-    // create lists of device pointers to inputs and outputs
-    float **AList = 0, **BList = 0, **CList = 0;
-    AList = (float**)malloc(num * sizeof(float*));
-    BList = (float**)malloc(num * sizeof(float*));
-    CList = (float**)malloc(num * sizeof(float*));
-
-    for(int i = 0; i < num; i++){
-        AList[i] = devMatrices + W.stride(0) * size * i;
-        BList[i] = devVectors + x.stride(0) * i;
-        CList[i] = devResult + y.stride(0) * i;
-    }
-
-    // copy pointer lists to device
-    float **devAList = 0, **devBList = 0, **devCList = 0;
-    assert(!cudaMalloc((void**)&devAList, num * sizeof(float*)));
-    assert(!cudaMalloc((void**)&devBList, num * sizeof(float*)));
-    assert(!cudaMalloc((void**)&devCList, num * sizeof(float*)));
-    assert(!cudaMemcpy(devAList, AList, num * sizeof(float*), cudaMemcpyHostToDevice));
-    assert(!cudaMemcpy(devBList, BList, num * sizeof(float*), cudaMemcpyHostToDevice)); 
-    assert(!cudaMemcpy(devCList, CList, num * sizeof(float*), cudaMemcpyHostToDevice));
+    auto range = at::arange(num, idxs.options());
+    auto devAList = (long)devMatrices + W.stride(0)*size*range;
+    auto devBList = (long)devVectors + x.stride(0)*range;
+    auto devCList = (long)devResult + y.stride(0)*range;
 
     int lda = W.stride(0);
     int ldb = x.stride(0);
     int ldc = y.stride(0);
-    const float alpha = 1.0f, beta = 0.0f;
+    const float alpha = 1.0f, beta = 1.0f;
 
     TORCH_CUDABLAS_CHECK2(cublasSgemmBatched(handle,
                 CUBLAS_OP_T,
@@ -96,20 +79,16 @@ TT test(TT W, TT x, TT b, TT idxs) {
                 1,
                 size,
                 &alpha,
-                (const float**)devAList,
+                (const float**)devAList.data_ptr(),
                 lda,
-                (const float**)devBList,
+                (const float**)devBList.data_ptr(),
                 ldb,
                 &beta,
-                devCList,
+                (float**)devCList.data_ptr(),
                 ldc,
                 num));
 
     cout << y << endl;
-
-    free(AList);
-    free(BList);
-    free(CList);
 
     return y;
 }
