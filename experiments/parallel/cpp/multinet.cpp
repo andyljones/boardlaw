@@ -1,7 +1,7 @@
 #include <torch/extension.h>
 #include <torch/csrc/autograd/variable.h>
 #include <pybind11/pybind11.h>
-#include "common.h"
+#include "../../../boardlaw/cpp/common.h"
 #include <c10/cuda/CUDAStream.h>
 #include <c10/cuda/CUDAGuard.h>
 

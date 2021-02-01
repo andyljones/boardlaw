@@ -4,7 +4,7 @@ from torch import nn
 from torch.nn import functional as F
 from rebar import recurrence, profiling
 import time
-from . import cuda
+from boardlaw import cuda
 
 class Optimal(nn.Module):
 
@@ -78,7 +78,7 @@ class Compiled(nn.Module):
         self.Ws = nn.ModuleList([nn.ParameterList([nn.Parameter(torch.zeros(n_features, n_features)) for _ in range(n_layers)]) for _ in range(n_models)])
         self.bs = nn.ModuleList([nn.ParameterList([nn.Parameter(torch.zeros(n_features,)) for _ in range(n_layers)]) for _ in range(n_models)])
 
-        self._forward = cuda.load(__package__).forward
+        self._forward = cuda.load(__package__, ('multinet.cpp',)).forward
 
     @profiling.nvtx
     def forward(self, x, slices):
@@ -97,7 +97,7 @@ class Hybrid(nn.Module):
         self.register_parameter('Wlil', nn.Parameter(torch.zeros((n_layers, n_models-1, n_features, n_features))))
         self.register_parameter('Blil', nn.Parameter(torch.zeros((n_layers, n_models-1, n_features))))
 
-        self._forward = cuda.load(__package__).forward
+        self._forward = cuda.load(__package__, ('multinet.cpp',)).forward
         self.bigstream = torch.cuda.Stream()
         self.lilstream = torch.cuda.Stream()
 

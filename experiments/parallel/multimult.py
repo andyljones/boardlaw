@@ -20,7 +20,7 @@ import pandas as pd
 import torch
 import time
 from rebar import profiling as prof
-from . import cuda
+from boardlaw import cuda
 
 @prof.nvtx
 def ideal(X, W, slices, streams, repeats):
@@ -68,8 +68,8 @@ def benchmark(batchsize=64*1024, n_weights=16, dim=256, n_repeats=16):
 
             times.setdefault(f.__name__, []).append(end - start)
 
-    times = pd.DataFrame(times).median().mul(1000)
-    print(times.map(lambda t: f'{t:.0f}ms'))
+    times = batchsize/pd.DataFrame(times).median()
+    print(times.map(lambda t: f'{t/1e6:.1f}m samples/sec'))
 
 if __name__ == '__main__':
     with torch.autograd.profiler.emit_nvtx():
