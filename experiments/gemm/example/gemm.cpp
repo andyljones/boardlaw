@@ -62,7 +62,7 @@ TT test(TT W, TT x, TT b, TT idxs) {
     float *y_ptr = y.data_ptr<float>();
 
     //TODO: Think these are wrong
-    auto range = at::arange(l, idxs.options());
+    auto range = (long)sizeof(float)*at::arange(l, idxs.options());
     auto A = (long)w_ptr + w*h*range;
     auto B = (long)x_ptr + w*range;
     auto C = (long)y_ptr + h*range;
@@ -96,26 +96,47 @@ TT test(TT W, TT x, TT b, TT idxs) {
     return y;
 }
 
+int test_one_batch() {
+    auto options = at::TensorOptions().dtype(at::kFloat).device(at::kCUDA);
+    // [1 2 3] [7] + [10] = [60]
+    // [4 5 6] [8]   [11]   [133]
+    //         [9]
+    auto W = at::tensor({1, 2, 3, 4, 5, 6}, options).view({1, 2, 3});
+    auto x = at::tensor({7, 8, 9}, options).view({1, 3});
+    auto b = at::tensor({10, 11}, options).view({1, 2});
+
+    W = W.transpose(1, 2).contiguous().transpose(1, 2);
+
+    auto idxs = at::tensor({0}).toType(at::kLong).cuda();
+    auto expected = at::bmm(W, x.unsqueeze(-1)).squeeze(-1) + b;
+
+    auto y = test(W, x, b, idxs);
+
+    cout << y << endl << expected << endl;
+
+    assert(at::allclose(expected, y));
+}
+
+int test_linear_batches() {
+    auto options = at::TensorOptions().dtype(at::kFloat).device(at::kCUDA);
+    auto W = at::tensor({1, 2, 3}, options).view({3, 1, 1});
+    auto x = at::tensor({4, 5, 6}, options).view({3, 1});
+    auto b = at::tensor({0, 0, 0}, options).view({3, 1});
+
+    W = W.transpose(1, 2).contiguous().transpose(1, 2);
+
+    auto idxs = at::arange(3).cuda();
+    auto expected = at::bmm(W, x.unsqueeze(-1)).squeeze(-1) + b;
+
+    auto y = test(W, x, b, idxs);
+
+    cout << y << endl << expected << endl;
+
+    assert(at::allclose(expected, y));
+}
+
 int main() {
-    for (int i=0; i<1; i++) {
-        auto options = at::TensorOptions().dtype(at::kFloat).device(at::kCUDA);
-        // [1 2 3] [7] + [10] = [60]
-        // [4 5 6] [8]   [11]   [133]
-        //         [9]
-        auto W = at::tensor({1, 2, 3, 4, 5, 6}, options).view({1, 2, 3});
-        auto x = at::tensor({7, 8, 9}, options).view({1, 3});
-        auto b = at::tensor({10, 11}, options).view({1, 2});
-
-        W = W.transpose(1, 2).contiguous().transpose(1, 2);
-
-        auto idxs = at::tensor({0}).toType(at::kLong).cuda();
-        auto expected = at::tensordot(W, x, {2}, {1}).squeeze(2) + b;
-
-        auto y = test(W, x, b, idxs);
-
-        assert(at::allclose(expected, y));
-
-        cout << y << endl << expected << endl;
-    }
+    test_one_batch();
+    test_linear_batches();
     return 0;
 }
