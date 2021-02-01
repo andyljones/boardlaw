@@ -166,5 +166,5 @@ def curve(**kwargs):
         results[m] = profile(models=m, **kwargs)
     results = pd.concat(results, 1)
 
-    return results.div(results.loc['Optimal'], 1).T[['Naive', 'Streamed']].round(2)
+    return results.div(results.loc['Optimal'], 1).T
 
