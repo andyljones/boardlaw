@@ -74,7 +74,7 @@ TT test(TT W, TT x, TT b, TT idxs) {
     int lda = h;
     int ldb = w;
     int ldc = h;
-    const float alpha = 1.0f, beta = 0.0f;
+    const float alpha = 1.0f, beta = 1.0f;
 
     auto handle = at::cuda::getCurrentCUDABlasHandle();
     TORCH_CUDABLAS_CHECK2(cublasSgemmBatched(handle,
@@ -93,8 +93,6 @@ TT test(TT W, TT x, TT b, TT idxs) {
                 ldc,
                 l));
 
-    cout << y << endl;
-
     return y;
 }
 
@@ -111,9 +109,13 @@ int main() {
         W = W.transpose(1, 2).contiguous().transpose(1, 2);
 
         auto idxs = at::tensor({0}).toType(at::kLong).cuda();
-        // auto expected = at::tensordot(W, x, {2}, {1}).squeeze(2) + b;
+        auto expected = at::tensordot(W, x, {2}, {1}).squeeze(2) + b;
 
-        test(W, x, b, idxs);
+        auto y = test(W, x, b, idxs);
+
+        assert(at::allclose(expected, y));
+
+        cout << y << endl << expected << endl;
     }
     return 0;
 }
