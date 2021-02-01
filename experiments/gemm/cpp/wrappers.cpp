@@ -80,7 +80,7 @@ TT linear(TT& W, const TT& x, const TT& b, const TT& idxs) {
         return y;
     } 
 
-    // https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/cuda/CUDABlas.cpp#L264
+    // https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/cuda/CUDABlas.cpp#L364
     // globalContext().alertCuBLASConfigNotDeterministic();
     auto handle = at::cuda::getCurrentCUDABlasHandle();
     assert(!cublasCreate(&handle));
