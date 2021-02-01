@@ -13,12 +13,11 @@ def load(pkg, files=('wrappers.cpp', 'kernels.cu')):
     [torch_libdir] = torch.utils.cpp_extension.library_paths()
     python_libdir = sysconfig.get_config_var('LIBDIR')
     libpython_ver = sysconfig.get_config_var('LDVERSION')
-    print('Warning: you took out fast math')
     return torch.utils.cpp_extension.load(
         name=name, 
         sources=[resource_filename(pkg, f'cpp/{fn}') for fn in files], 
         extra_cflags=['-std=c++17'] + (['-g'] if DEBUG else []), 
-        extra_cuda_cflags=['-lineinfo', '-std=c++14'] + (['-g', '-G'] if DEBUG else []),
+        extra_cuda_cflags=['--use_fast_math', '-lineinfo', '-std=c++14'] + (['-g', '-G'] if DEBUG else []),
         #TODO: Don't hardcode this
         extra_include_paths=['/usr/local/cuda/include'],
         extra_ldflags=[

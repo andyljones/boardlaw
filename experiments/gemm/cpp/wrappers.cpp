@@ -37,12 +37,6 @@ const char* _cublasGetErrorEnum(cublasStatus_t error) {
   if (error == CUBLAS_STATUS_NOT_SUPPORTED) {
     return "CUBLAS_STATUS_NOT_SUPPORTED";
   }
-#ifdef CUBLAS_STATUS_LICENSE_ERROR
-  if (error == CUBLAS_STATUS_LICENSE_ERROR) {
-    return "CUBLAS_STATUS_LICENSE_ERROR";
-  }
-#endif
-  return "<unknown>";
 }
 
 // Copied in from https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/cuda/Exceptions.h 
@@ -89,6 +83,7 @@ TT linear(TT& W, const TT& x, const TT& b, const TT& idxs) {
     // https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/cuda/CUDABlas.cpp#L264
     // globalContext().alertCuBLASConfigNotDeterministic();
     auto handle = at::cuda::getCurrentCUDABlasHandle();
+    assert(!cublasCreate(&handle));
 
     auto l = W.size(0);
     auto m = W.size(1);
@@ -143,8 +138,8 @@ TT linear(TT& W, const TT& x, const TT& b, const TT& idxs) {
 
 float exemplar() {
 
-    int size = 1;
-    int num = 1;
+    int size = 2;
+    int num = 2;
     
     float *matrices = (float*)malloc(size * size * num * sizeof(float));
     float *vectors = (float*)malloc(size * num * sizeof(float));
@@ -158,27 +153,27 @@ float exemplar() {
     for(int i = 0; i < num * size; i++)
         vectors[i] = 2.f;
 
-    cublasStatus_t stat;
-    cublasHandle_t handle;
-    assert(!cublasCreate(&handle));
+    at::globalContext().alertCuBLASConfigNotDeterministic();
+    auto handle = at::cuda::getCurrentCUDABlasHandle();
+    // assert(!cublasCreate(&handle));
 
     // allocate input space on device
     float *devMatrices;
     size_t devMatricesPitch;
-    assert(!cudaMallocPitch((void**)&devMatrices, &devMatricesPitch, size * sizeof(float), num * size));
+    C10_CUDA_CHECK(cudaMallocPitch((void**)&devMatrices, &devMatricesPitch, size * sizeof(float), num * size));
 
     float *devVectors = 0;
     size_t devVectorsPitch;
-    assert(!cudaMallocPitch((void**)&devVectors, &devVectorsPitch, size * sizeof(float), num));
+    C10_CUDA_CHECK(cudaMallocPitch((void**)&devVectors, &devVectorsPitch, size * sizeof(float), num));
 
     // allocate result space on device
     float *devResult = 0;
     size_t devResultPitch;
-    assert(!cudaMallocPitch((void**)&devResult, &devResultPitch, size * sizeof(float), num));
+    C10_CUDA_CHECK(cudaMallocPitch((void**)&devResult, &devResultPitch, size * sizeof(float), num));
 
     // copy data to device
-    assert(!cudaMemcpy2D(devMatrices, devMatricesPitch, matrices, size * sizeof(float), size * sizeof(float), size * num, cudaMemcpyHostToDevice));
-    assert(!cudaMemcpy2D(devVectors, devVectorsPitch, vectors, size * sizeof(float), size * sizeof(float), num, cudaMemcpyHostToDevice));
+    C10_CUDA_CHECK(cudaMemcpy2D(devMatrices, devMatricesPitch, matrices, size * sizeof(float), size * sizeof(float), size * num, cudaMemcpyHostToDevice));
+    C10_CUDA_CHECK(cudaMemcpy2D(devVectors, devVectorsPitch, vectors, size * sizeof(float), size * sizeof(float), num, cudaMemcpyHostToDevice));
 
     // create lists of device pointers to inputs and outputs
     float **AList = 0, **BList = 0, **CList = 0;
@@ -194,12 +189,12 @@ float exemplar() {
 
     // copy pointer lists to device
     float **devAList = 0, **devBList = 0, **devCList = 0;
-    assert(!cudaMalloc((void**)&devAList, num * sizeof(float*)));
-    assert(!cudaMalloc((void**)&devBList, num * sizeof(float*)));
-    assert(!cudaMalloc((void**)&devCList, num * sizeof(float*)));
-    assert(!cudaMemcpy(devAList, AList, num * sizeof(float*), cudaMemcpyHostToDevice));
-    assert(!cudaMemcpy(devBList, BList, num * sizeof(float*), cudaMemcpyHostToDevice)); 
-    assert(!cudaMemcpy(devCList, CList, num * sizeof(float*), cudaMemcpyHostToDevice));
+    C10_CUDA_CHECK(cudaMalloc((void**)&devAList, num * sizeof(float*)));
+    C10_CUDA_CHECK(cudaMalloc((void**)&devBList, num * sizeof(float*)));
+    C10_CUDA_CHECK(cudaMalloc((void**)&devCList, num * sizeof(float*)));
+    C10_CUDA_CHECK(cudaMemcpy(devAList, AList, num * sizeof(float*), cudaMemcpyHostToDevice));
+    C10_CUDA_CHECK(cudaMemcpy(devBList, BList, num * sizeof(float*), cudaMemcpyHostToDevice)); 
+    C10_CUDA_CHECK(cudaMemcpy(devCList, CList, num * sizeof(float*), cudaMemcpyHostToDevice));
 
     int lda = devMatricesPitch / sizeof(float);
     int ldb = devVectorsPitch / sizeof(float);
@@ -207,7 +202,7 @@ float exemplar() {
     const float alpha = 1.0f, beta = 0.0f;
 
     double sum = 0.0;
-    assert(!cublasSgemmBatched(handle,
+    TORCH_CUDABLAS_CHECK(cublasSgemmBatched(handle,
                 CUBLAS_OP_N,
                 CUBLAS_OP_N,
                 size,
@@ -222,11 +217,10 @@ float exemplar() {
                 devCList,
                 ldc,
                 num));
-    assert(!cudaGetLastError());
 
     // copy data to host
     float *result = (float*)malloc(devResultPitch);
-    assert(!cudaMemcpy2D(result, sizeof(float), devResult, devResultPitch, sizeof(float), num, cudaMemcpyDeviceToHost));
+    C10_CUDA_CHECK(cudaMemcpy2D(result, sizeof(float), devResult, devResultPitch, sizeof(float), num, cudaMemcpyDeviceToHost));
 
     float ret = result[0];
 
