@@ -120,7 +120,6 @@ class Hybrid(nn.Module):
         return torch.cat([ybig, ylil])
 
 
-@profiling.profilable
 @profiling.nvtx
 def benchmark(cls, features=256, layers=8, models=4, envs=8*1024, T=8, device='cuda'):
     assert envs % models == 0
@@ -144,6 +143,7 @@ def benchmark(cls, features=256, layers=8, models=4, envs=8*1024, T=8, device='c
         end = time.time()
     return 1e6*(end - start)/(T*envs)
 
+@profiling.profilable
 def profile(reps=1, **kwargs):
     """
     CUDA_VISIBLE_DEVICES=1 nsys profile --force-overwrite true -o "output/nsys" -c cudaProfilerApi --stop-on-range-end false -t cuda,cublas,nvtx -e EMIT_NVTX=1 python -c "from boardlaw.multinet import *; profile()"
