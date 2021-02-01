@@ -9,46 +9,63 @@
 
 using namespace std;
 
-int main() {
-    auto x = at::zeros(1).cuda();
+const char* _cublasGetErrorEnum(cublasStatus_t error) {
+  if (error == CUBLAS_STATUS_SUCCESS) {
+    return "CUBLAS_STATUS_SUCCESS";
+  }
+  if (error == CUBLAS_STATUS_NOT_INITIALIZED) {
+    return "CUBLAS_STATUS_NOT_INITIALIZED";
+  }
+  if (error == CUBLAS_STATUS_ALLOC_FAILED) {
+    return "CUBLAS_STATUS_ALLOC_FAILED";
+  }
+  if (error == CUBLAS_STATUS_INVALID_VALUE) {
+    return "CUBLAS_STATUS_INVALID_VALUE";
+  }
+  if (error == CUBLAS_STATUS_ARCH_MISMATCH) {
+    return "CUBLAS_STATUS_ARCH_MISMATCH";
+  }
+  if (error == CUBLAS_STATUS_MAPPING_ERROR) {
+    return "CUBLAS_STATUS_MAPPING_ERROR";
+  }
+  if (error == CUBLAS_STATUS_EXECUTION_FAILED) {
+    return "CUBLAS_STATUS_EXECUTION_FAILED";
+  }
+  if (error == CUBLAS_STATUS_INTERNAL_ERROR) {
+    return "CUBLAS_STATUS_INTERNAL_ERROR";
+  }
+  if (error == CUBLAS_STATUS_NOT_SUPPORTED) {
+    return "CUBLAS_STATUS_NOT_SUPPORTED";
+  }
+}
 
-    int size = 1;
-    int num = 2;
-    
-    float *matrices = (float*)malloc(size * size * num * sizeof(float));
-    float *vectors = (float*)malloc(size * num * sizeof(float));
+// Copied in from https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/cuda/Exceptions.h 
+// since the underlying _cublasGetErrorEnum doesn't seem to be exported
+#define TORCH_CUDABLAS_CHECK2(EXPR)                             \
+  do {                                                          \
+    cublasStatus_t __err = EXPR;                                \
+    TORCH_CHECK(__err == CUBLAS_STATUS_SUCCESS,                 \
+                "CUDA error: ",                                 \
+                _cublasGetErrorEnum(__err),                     \
+                " when calling `" #EXPR "`");                   \
+  } while (0)
 
-    assert(matrices);
-    assert(vectors);
+TT test(TT W, TT x, TT b, TT idxs) {
+    int size = W.size(1);
+    int num = W.size(0);
 
-    for(int i = 0; i < num * size * size; i++)
-        matrices[i] = 3.f; 
+    float *devMatrices = W.data_ptr<float>();
+    float *devVectors = b.data_ptr<float>();
 
-    for(int i = 0; i < num * size; i++)
-        vectors[i] = 2.f;
+    size_t devMatricesPitch = W.stride(0)*sizeof(float);
+    size_t devVectorsPitch = x.stride(0)*sizeof(float);
 
-    // cublasStatus_t stat;
-    // cublasHandle_t handle;
-    // assert(!cublasCreate(&handle));
     auto handle = at::cuda::getCurrentCUDABlasHandle();
 
-    // allocate input space on device
-    float *devMatrices;
-    size_t devMatricesPitch;
-    assert(!cudaMallocPitch((void**)&devMatrices, &devMatricesPitch, size * sizeof(float), num * size));
-
-    float *devVectors = 0;
-    size_t devVectorsPitch;
-    assert(!cudaMallocPitch((void**)&devVectors, &devVectorsPitch, size * sizeof(float), num));
-
     // allocate result space on device
-    float *devResult = 0;
-    size_t devResultPitch;
-    assert(!cudaMallocPitch((void**)&devResult, &devResultPitch, size * sizeof(float), num));
-
-    // copy data to device
-    assert(!cudaMemcpy2D(devMatrices, devMatricesPitch, matrices, size * sizeof(float), size * sizeof(float), size * num, cudaMemcpyHostToDevice));
-    assert(!cudaMemcpy2D(devVectors, devVectorsPitch, vectors, size * sizeof(float), size * sizeof(float), num, cudaMemcpyHostToDevice));
+    auto y = b.index(idxs);
+    float *devResult = y.data_ptr<float>();
+    size_t devResultPitch = y.stride(0)*sizeof(float);
 
     // create lists of device pointers to inputs and outputs
     float **AList = 0, **BList = 0, **CList = 0;
@@ -76,9 +93,9 @@ int main() {
     int ldc = devResultPitch / sizeof(float);
     const float alpha = 1.0f, beta = 0.0f;
 
-    assert(!cublasSgemmBatched(handle,
-                CUBLAS_OP_N,
-                CUBLAS_OP_N,
+    TORCH_CUDABLAS_CHECK2(cublasSgemmBatched(handle,
+                CUBLAS_OP_T,
+                CUBLAS_OP_T,
                 size,
                 1,
                 size,
@@ -92,24 +109,27 @@ int main() {
                 ldc,
                 num));
 
-    // copy data to host
-    float *result = (float*)malloc(devResultPitch);
-    assert(!cudaMemcpy2D(result, sizeof(float), devResult, devResultPitch, sizeof(float), num, cudaMemcpyDeviceToHost));
-
-    for(int i = 0; i < num * size; i++)
-        cout << result[i] << endl;
-
-    free(matrices);
-    free(vectors);
-    free(result);
+    cout << y << endl;
 
     free(AList);
     free(BList);
     free(CList);
 
-    cudaFree(devVectors);
-    cudaFree(devMatrices);
-    cudaFree(devResult);
-        
-  return 0;
+    return y;
+}
+
+int main() {
+    for (int i=0; i<100; i++) {
+        auto options = at::TensorOptions().dtype(at::kFloat).device(at::kCUDA);
+        // [1 2] [7] + [5] = [28]
+        // [3 4] [8]   [6]   [59]
+        auto W = at::tensor({1, 2, 3, 4}, options).view({1, 2, 2});
+        auto x = at::tensor({7, 8}, options).view({1, 2});
+        auto b = at::tensor({5, 6}, options).view({1, 2});
+
+        auto idxs = at::tensor({0}).toType(at::kLong).cuda();
+
+        test(W, x, b, idxs);
+    }
+    return 0;
 }
