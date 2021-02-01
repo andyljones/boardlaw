@@ -13,7 +13,7 @@ def test_dims():
     U, V = 2, 3
 
     W = torch.zeros((1, U, V)).cuda()
-    x = torch.zeros((B, V)).cuda()
+    x = torch.zeros((1, V)).cuda()
     b = torch.zeros((1, U)).cuda()
 
     idxs = torch.zeros((B,)).long().cuda()
@@ -26,9 +26,9 @@ def test_one_batch():
     B = 5
     U, V = 2, 3
 
-    W = torch.as_tensor([[[2.]]]).cuda()
-    x = torch.as_tensor([[2.]]).cuda()
-    b = torch.as_tensor([[1.]]).cuda()
+    W = torch.as_tensor([[[2.]]]).float().cuda()
+    x = torch.as_tensor([[2.]]).float().cuda()
+    b = torch.as_tensor([[1.]]).float().cuda()
 
     idxs = torch.as_tensor([0]).long().cuda()
 

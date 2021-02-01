@@ -2,6 +2,7 @@
 #include <variant>
 #include <exception>
 #include <pybind11/pybind11.h>
+#include <torch/extension.h>
 
 namespace py = pybind11;
 using namespace pybind11::literals;
