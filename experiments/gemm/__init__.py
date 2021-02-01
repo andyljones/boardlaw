@@ -1,6 +1,7 @@
 import time
 import torch
 from boardlaw import cuda
+from rebar import profiling
 
 _cache = None
 def module():
@@ -37,6 +38,7 @@ def test_one_batch():
 
     torch.testing.assert_allclose(y.cpu(), [[5]])
 
+@profiling.profilable
 def benchmark():
     M = 16
     B = 16*1024
@@ -49,10 +51,12 @@ def benchmark():
     b = torch.zeros((M, U)).cuda()
     idxs = torch.arange(B).cuda() % M
 
+    f = profiling.nvtx(module().linear)
+
     torch.cuda.synchronize()
     start = time.time()
     for _ in range(T):
-        module().linear(W, x, b, idxs)
+        f(W, x, b, idxs)
 
     torch.cuda.synchronize()
     end = time.time()
