@@ -3,7 +3,7 @@ import torch.cuda
 import sysconfig
 from pkg_resources import resource_filename
 
-DEBUG = False
+DEBUG = True
 
 def load(pkg, files=('wrappers.cpp', 'kernels.cu')):
     # This import is pretty slow, so let's defer it

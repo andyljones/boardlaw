@@ -4,7 +4,7 @@ from rebar import dotdict
 import pandas as pd
 from . import database, analysis
 import matplotlib.pyplot as plt
-from pavlov import runs
+from pavlov import runs, stats
 import copy
 
 def snapshots(run=-1, target=None, filter=''):
@@ -85,6 +85,9 @@ def errors(run=-1, filter='.*'):
     resid_var = np.nanmean((actual - expected)**2)/np.nanmean(actual**2)
     corr = np.corrcoef(actual[~np.isnan(actual)], expected[~np.isnan(actual)])[0, 1]
 
+    mohex = stats.pandas(run, 'elo-mohex', 'μ').pipe(lambda df: df.ffill().where(df.bfill().notnull()))
+    mohex.index = (mohex.index - mohex.index[0]).total_seconds()/900 #TODO: Generalise this to non-15-min snapshots
+
     fig = plt.figure()
     gs = plt.GridSpec(4, 3, fig, height_ratios=[20, 1, 20, 1])
     fig.set_size_inches(18, 12)
@@ -122,7 +125,7 @@ def errors(run=-1, filter='.*'):
     plt.colorbar(im, cax=ax, orientation='horizontal')
     # ax.annotate(f'resid var: {resid_var:.0%}, corr: {corr:.0%}', (.5, -1.2), ha='center', xycoords='axes fraction')
 
-    # Bottom right
+    # Bottom middle
     ax = plt.subplot(gs[2, 1])
     se = (expected*(1-expected)/games)**.5
     im = ax.imshow((actual - expected)/se, vmin=-3, vmax=+3, aspect=1, cmap='RdBu')
@@ -131,6 +134,12 @@ def errors(run=-1, filter='.*'):
     ax = plt.subplot(gs[3, 1])
     plt.colorbar(im, cax=ax, orientation='horizontal')
     # ax.annotate(f'resid var: {resid_var:.0%}, corr: {corr:.0%}', (.5, -1.2), ha='center', xycoords='axes fraction')
+
+    # Bottom right
+    ax = plt.subplot(gs[2, 2])
+    im = mohex.plot(ax=ax, grid=True)
+    ax.set_title('elos v. mohex')
+    ax.set_xlabel('')
 
 
 

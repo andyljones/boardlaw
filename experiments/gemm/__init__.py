@@ -8,7 +8,7 @@ def module():
         _cache = cuda.load(__package__, files=('wrappers.cpp',))
     return _cache 
 
-def test():
+def test_dims():
     B = 5
     U, V = 2, 3
 
@@ -19,3 +19,19 @@ def test():
     idxs = torch.zeros((B,)).long().cuda()
 
     y = module().linear(W, x, b, idxs)
+
+    y.cpu()
+
+def test_one_batch():
+    B = 5
+    U, V = 2, 3
+
+    W = torch.as_tensor([[[2.]]]).cuda()
+    x = torch.as_tensor([[2.]]).cuda()
+    b = torch.as_tensor([[1.]]).cuda()
+
+    idxs = torch.as_tensor([0]).long().cuda()
+
+    y = module().linear(W, x, b, idxs)
+
+    torch.testing.assert_allclose(y.cpu(), [[5]])

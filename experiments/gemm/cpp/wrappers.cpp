@@ -101,16 +101,31 @@ TT linear(TT& W, const TT& x, const TT& b, const TT& idxs) {
     float alpha = 1.f;
     float beta = 1.f;
 
+    int size = sizeof(float);
     auto range = at::arange(l, idxs.options());
-    auto A = (long)W.data_ptr() + idxs*(m*k);
-    auto B = (long)x.data_ptr() + range*k;
-    auto C = (long)y.data_ptr() + range*m;
+    auto A = (long)W.data_ptr<float>() + idxs*(m*k)*size;
+    auto B = (long)x.data_ptr<float>() + range*k*size;
+    auto C = (long)y.data_ptr<float>() + range*m*size;
+
+    printf("l %d; m %d; n %d; k %d; lda %d; ldb %d; ldc %d\n", l, m, n, k, lda, ldb, ldc);
+
+    // float tmp;
+    // cudaMemcpy(&tmp, (void*)(C[0].item<long>()), sizeof(float), cudaMemcpyDeviceToHost);
+    // C10_CUDA_CHECK(cudaGetLastError());
+
+    // printf("C[0][0]: %f\n", tmp);
+    printf("A: %p\n", A.data_ptr());
+    printf("B: %p\n", B.data_ptr());
+    printf("C: %p\n", C.data_ptr());
+    printf("W: %p\n", W.data_ptr());
+    printf("x: %p\n", x.data_ptr());
+    printf("y: %p\n", y.data_ptr());
 
     // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemmbatched
     TORCH_CUDABLAS_CHECK(cublasSgemmBatched(
         handle, 
-        CUBLAS_OP_N, 
-        CUBLAS_OP_N, 
+        CUBLAS_OP_T, 
+        CUBLAS_OP_T, 
         m, n, k,
         &alpha, 
         (float**)A.data_ptr(), lda, 
