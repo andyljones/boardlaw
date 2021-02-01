@@ -2,15 +2,14 @@
 #include <iostream>
 #include <stdlib.h>
 #include <assert.h>
-#include <cuda_runtime.h>
-#include <cublas_v2.h>
+#include <ATen/cuda/CUDABlas.h>
 
 using namespace std;
 
-int main(int argc, char ** argv){
+int main() {
 
     int size = 1;
-    int num = 1;
+    int num = 2;
     
     float *matrices = (float*)malloc(size * size * num * sizeof(float));
     float *vectors = (float*)malloc(size * num * sizeof(float));
@@ -24,23 +23,24 @@ int main(int argc, char ** argv){
     for(int i = 0; i < num * size; i++)
         vectors[i] = 2.f;
 
-    cublasStatus_t stat;
-    cublasHandle_t handle;
-    assert(!cublasCreate(&handle));
+    // cublasStatus_t stat;
+    // cublasHandle_t handle;
+    // assert(!cublasCreate(&handle));
+    auto handle = at::cuda::getCurrentCUDABlasHandle();
 
     // allocate input space on device
     float *devMatrices;
     size_t devMatricesPitch;
-    assert(!cudaMallocPitch(&devMatrices, &devMatricesPitch, size * sizeof(float), num * size));
+    assert(!cudaMallocPitch((void**)&devMatrices, &devMatricesPitch, size * sizeof(float), num * size));
 
     float *devVectors = 0;
     size_t devVectorsPitch;
-    assert(!cudaMallocPitch(&devVectors, &devVectorsPitch, size * sizeof(float), num));
+    assert(!cudaMallocPitch((void**)&devVectors, &devVectorsPitch, size * sizeof(float), num));
 
     // allocate result space on device
     float *devResult = 0;
     size_t devResultPitch;
-    assert(!cudaMallocPitch(&devResult, &devResultPitch, size * sizeof(float), num));
+    assert(!cudaMallocPitch((void**)&devResult, &devResultPitch, size * sizeof(float), num));
 
     // copy data to device
     assert(!cudaMemcpy2D(devMatrices, devMatricesPitch, matrices, size * sizeof(float), size * sizeof(float), size * num, cudaMemcpyHostToDevice));
@@ -60,9 +60,9 @@ int main(int argc, char ** argv){
 
     // copy pointer lists to device
     float **devAList = 0, **devBList = 0, **devCList = 0;
-    assert(!cudaMalloc(&devAList, num * sizeof(float*)));
-    assert(!cudaMalloc(&devBList, num * sizeof(float*)));
-    assert(!cudaMalloc(&devCList, num * sizeof(float*)));
+    assert(!cudaMalloc((void**)&devAList, num * sizeof(float*)));
+    assert(!cudaMalloc((void**)&devBList, num * sizeof(float*)));
+    assert(!cudaMalloc((void**)&devCList, num * sizeof(float*)));
     assert(!cudaMemcpy(devAList, AList, num * sizeof(float*), cudaMemcpyHostToDevice));
     assert(!cudaMemcpy(devBList, BList, num * sizeof(float*), cudaMemcpyHostToDevice)); 
     assert(!cudaMemcpy(devCList, CList, num * sizeof(float*), cudaMemcpyHostToDevice));
@@ -72,8 +72,7 @@ int main(int argc, char ** argv){
     int ldc = devResultPitch / sizeof(float);
     const float alpha = 1.0f, beta = 0.0f;
 
-    double sum = 0.0;
-    stat = cublasSgemmBatched(handle,
+    assert(!cublasSgemmBatched(handle,
                 CUBLAS_OP_N,
                 CUBLAS_OP_N,
                 size,
@@ -87,12 +86,7 @@ int main(int argc, char ** argv){
                 &beta,
                 devCList,
                 ldc,
-                num);
-    if(stat != CUBLAS_STATUS_SUCCESS){
-        cerr << "cublasSgemmBatched failed" << endl;
-        exit(1);
-    }
-    assert(!cudaGetLastError());
+                num));
 
     // copy data to host
     float *result = (float*)malloc(devResultPitch);
