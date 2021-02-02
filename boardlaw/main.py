@@ -168,7 +168,7 @@ def set_devices():
     else:
         print('No devices set')
 
-def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='extremely wide network', timelimit=np.inf):
+def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='warm-started league run', timelimit=np.inf):
     set_devices()
     start = time.time()
 
@@ -180,9 +180,9 @@ def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='extremely wide netwo
     opt = torch.optim.Adam(network.parameters(), lr=1e-3, amsgrad=True)
     scaler = torch.cuda.amp.GradScaler()
 
-    league = leagues.League(agent, agentfunc, worlds.n_envs, device=worlds.device)
+    parent = warm_start(agent, opt, scaler, '*gross-steams')
 
-    parent = warm_start(agent, opt, scaler, '')
+    league = leagues.League(agent, agentfunc, worlds.n_envs, device=worlds.device)
 
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
