@@ -1,3 +1,4 @@
+import gc
 import time
 import numpy as np
 import torch
@@ -67,10 +68,10 @@ def rel_entropy(logits):
 
 def optimize(network, scaler, opt, batch):
     mask = batch.is_prime
+    w, d0, t = batch.worlds[mask], batch.decisions[mask], batch.transitions[mask]
 
     with torch.cuda.amp.autocast():
-        d0 = batch.decisions[mask]
-        d = network(batch.worlds[mask])
+        d = network(w)
 
         zeros = torch.zeros_like(d.logits)
         l = d.logits.where(d.logits > -np.inf, zeros)
@@ -99,8 +100,8 @@ def optimize(network, scaler, opt, batch):
         stats.mean('corr.resid-var', (target_value - d.v).pow(2).mean(), target_value.pow(2).mean())
 
         p0 = d0.prior.float().where(d0.prior > -np.inf, zeros)
-        stats.mean('kl-div.behaviour', (p0 - l0).mul(p0.exp()).sum(-1).mean())
-        stats.mean('kl-div.prior', (p0 - l).mul(p0.exp()).sum(-1).mean())
+        stats.mean('kl-div.prior', (l0 - l).mul(l0.exp()).sum(-1).mean())
+        stats.mean('kl-div.target', (p0 - l).mul(p0.exp()).sum(-1).mean())
 
         stats.mean('rel-entropy.policy', *rel_entropy(d.logits)) 
         stats.mean('rel-entropy.targets', *rel_entropy(d0.logits))
@@ -121,7 +122,7 @@ def optimize(network, scaler, opt, batch):
 
         stats.mean('policy-conc', l0.exp().max(-1).values.mean())
 
-        stats.rate('sample-rate.learner', batch.transitions.terminal[mask].nelement())
+        stats.rate('sample-rate.learner', t.terminal.nelement())
         stats.rate('step-rate.learner', 1)
         stats.cumsum('count.learner-steps', 1)
         # stats.rel_gradient_norm('rel-norm-grad', agent)
@@ -131,20 +132,19 @@ def optimize(network, scaler, opt, batch):
         stats.max('opt.step-max', (new - old).abs().max())
 
 def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=11, device=device)
+    return hex.Hex.initial(n_envs=n_envs, boardsize=3, device=device)
 
-def agentfunc(device='cuda', **kwargs):
+def agentfunc(device='cuda'):
     worlds = worldfunc(n_envs=1, device=device)
     network = networks.FCModel(worlds.obs_space, worlds.action_space).to(worlds.device)
-    return mcts.MCTSAgent(network, **kwargs)
+    return mcts.MCTSAgent(network, n_nodes=64)
 
-def warm_start(agent, opt, scaler, parent):
+def warm_start(agent, opt, parent):
     if parent:
         parent = runs.resolve(parent)
         sd = storage.load_latest(parent, device='cuda')
         agent.load_state_dict(sd['agent'])
         opt.load_state_dict(sd['opt'])
-        scaler.load_state_dict(sd['scaler'])
     return parent
 
 def mix(worlds, T=2500):
@@ -160,43 +160,36 @@ def half(x):
     else:
         return x
 
-def set_devices():
-    import os
-    if 'JITTENS_GPU' in os.environ:
-        os.environ['CUDA_VISIBLE_DEVICES'] = os.environ['JITTENS_GPU']
-        print(f'Devices set to "{os.environ["CUDA_VISIBLE_DEVICES"]}"')
-    else:
-        print('No devices set')
+def run(device='cuda'):
+    buffer_length = 16 
+    batch_size = 8*1024
+    n_envs = 8*1024
 
-def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='extremely wide network', timelimit=np.inf):
-    set_devices()
-    start = time.time()
-
-    #TODO: Restore league and sched when you go back to large boards
     worlds = mix(worldfunc(n_envs, device=device))
     agent = agentfunc(device)
     network = agent.network
 
-    opt = torch.optim.Adam(network.parameters(), lr=1e-3, amsgrad=True)
+    opt = torch.optim.Adam(network.parameters(), lr=1e-2, amsgrad=True)
     scaler = torch.cuda.amp.GradScaler()
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: min(e/100, 1))
 
     league = leagues.League(agent, agentfunc, worlds.n_envs, device=worlds.device)
 
-    parent = warm_start(agent, opt, scaler, '')
+    parent = warm_start(agent, opt, '')
 
+    desc = 'new 3x3 baseline'
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
     archive.archive(run)
 
     buffer = []
+    idxs = learning.batch_indices(buffer_length, n_envs, batch_size, worlds.device)
     with logs.to_run(run), stats.to_run(run), \
             arena.monitor(run, worldfunc, agentfunc, device=worlds.device):
-        #TODO: Upgrade this to handle batches that are some multiple of the env count
-        idxs = (torch.randint(buffer_len, (n_envs,), device=device), torch.arange(n_envs, device=device))
-        while time.time() < start + timelimit:
+        while True:
 
             # Collect experience
-            while len(buffer) < buffer_len:
+            while len(buffer) < buffer_length:
                 with torch.no_grad():
                     decisions = agent(worlds, value=True)
                 new_worlds, transition = worlds.step(decisions.actions)
@@ -211,17 +204,48 @@ def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='extremely wide netwo
 
                 worlds = new_worlds
 
-                log.info(f'({len(buffer)}/{buffer_len}) actor stepped')
+                log.info(f'({len(buffer)}/{buffer_length}) actor stepped')
 
             # Optimize
-            chunk, buffer = as_chunk(buffer, n_envs)
-            optimize(network, scaler, opt, chunk[idxs])
+            chunk, buffer = as_chunk(buffer, batch_size)
+            optimize(network, scaler, opt, chunk[next(idxs)])
+            sched.step()
+            
             log.info('learner stepped')
 
-            sd = storage.state_dicts(agent=agent, opt=opt, scaler=scaler)
+            sd = storage.state_dicts(agent=agent, opt=opt)
             storage.throttled_latest(run, sd, 60)
             storage.throttled_snapshot(run, sd, 900)
             storage.throttled_raw(run, 'model', lambda: pickle.dumps(network), 900)
             stats.gpu(worlds.device, 15)
 
-    log.info('Timelimit expired')
+@profiling.profilable
+def benchmark_experience_collection(n_envs=8192, T=4):
+    import pandas as pd
+
+    if n_envs is None:
+        ns = np.logspace(0, 15, 16, base=2, dtype=int)
+        return pd.Series({n: benchmark_experience_collection(n) for n in ns})
+
+    torch.manual_seed(0)
+    worlds = worldfunc(n_envs)
+    agent = agentfunc()
+
+    agent(worlds) # warmup
+
+    torch.cuda.synchronize()
+    start = time.time()
+    for _ in range(T):
+        decisions = agent(worlds)
+        new_worlds, transition = worlds.step(decisions.actions)
+        worlds = new_worlds
+        print('actor stepped')
+    torch.cuda.synchronize()
+    rate = (T*n_envs)/(time.time() - start)
+    print(f'{n_envs}: {rate}/sample')
+
+    return rate
+
+if __name__ == '__main__':
+    with torch.autograd.profiler.emit_nvtx():
+        benchmark_experience_collection()

@@ -152,7 +152,8 @@ def profile(reps=1, **kwargs):
     torch.cuda.synchronize()
     results = {}
     for _ in range(reps):
-        for cls in [Optimal, Naive, Streamed, Compiled, Hybrid]:
+        # Hybrid's just awful
+        for cls in [Streamed, Compiled]:
             results.setdefault(cls.__name__, []).append(benchmark(cls, **kwargs))
 
     s = pd.DataFrame(results).mean()
@@ -166,5 +167,5 @@ def curve(**kwargs):
         results[m] = profile(models=m, **kwargs)
     results = pd.concat(results, 1)
 
-    return results.div(results.loc['Optimal'], 1).T
+    return results.T
 

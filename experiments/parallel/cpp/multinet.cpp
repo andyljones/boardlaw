@@ -24,7 +24,7 @@ void worker(TT X, Weights Ws, Weights bs, Slices slices, int m, TT Y) {
     auto Xs = X.index({s});
     auto Ys = Y.index({s});
     for (int l=0; l<Ws[m].size(); l++) {
-        at::addmm_out(Ys, bs[m][l], Xs, Ws[m][l]);
+        at::addmm_out(Ys, bs[m][l], Xs, Ws[m][l].t());
         torch::relu_(Ys);
     }
 }
