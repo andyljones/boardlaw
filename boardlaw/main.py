@@ -167,7 +167,7 @@ def set_devices():
     else:
         print('No devices set')
 
-def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='extremely wide network', timelimit=np.inf):
+def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='deep network run', timelimit=np.inf):
     set_devices()
     start = time.time()
 
