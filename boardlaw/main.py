@@ -66,11 +66,10 @@ def rel_entropy(logits):
     return (-(logits*probs).sum(-1).mean(), torch.log(valid.sum(-1).float()).mean())
 
 def optimize(network, scaler, opt, batch):
-    mask = batch.is_prime
 
     with torch.cuda.amp.autocast():
-        d0 = batch.decisions[mask]
-        d = network(batch.worlds[mask])
+        d0 = batch.decisions
+        d = network(batch.worlds)
 
         zeros = torch.zeros_like(d.logits)
         l = d.logits.where(d.logits > -np.inf, zeros)
@@ -78,7 +77,7 @@ def optimize(network, scaler, opt, batch):
 
         policy_loss = -(l0.exp()*l).sum(axis=-1).mean()
 
-        target_value = batch.reward_to_go[mask]
+        target_value = batch.reward_to_go
         value_loss = (target_value - d.v).square().mean()
 
         loss = policy_loss + value_loss
@@ -121,7 +120,7 @@ def optimize(network, scaler, opt, batch):
 
         stats.mean('policy-conc', l0.exp().max(-1).values.mean())
 
-        stats.rate('sample-rate.learner', batch.transitions.terminal[mask].nelement())
+        stats.rate('sample-rate.learner', batch.transitions.terminal.nelement())
         stats.rate('step-rate.learner', 1)
         stats.cumsum('count.learner-steps', 1)
         # stats.rel_gradient_norm('rel-norm-grad', agent)
@@ -168,7 +167,7 @@ def set_devices():
     else:
         print('No devices set')
 
-def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='warm-started league run', timelimit=np.inf):
+def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='extremely wide network', timelimit=np.inf):
     set_devices()
     start = time.time()
 
@@ -180,9 +179,7 @@ def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='warm-started league 
     opt = torch.optim.Adam(network.parameters(), lr=1e-3, amsgrad=True)
     scaler = torch.cuda.amp.GradScaler()
 
-    parent = warm_start(agent, opt, scaler, '*gross-steams')
-
-    league = leagues.League(agent, agentfunc, worlds.n_envs, device=worlds.device)
+    parent = warm_start(agent, opt, scaler, '')
 
     run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
 
@@ -204,10 +201,7 @@ def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='warm-started league 
                 buffer.append(arrdict.arrdict(
                     worlds=worlds,
                     decisions=decisions.half(),
-                    transitions=half(transition),
-                    is_prime=league.is_prime).detach())
-
-                league.update(agent, worlds.seats, transition)
+                    transitions=half(transition)).detach())
 
                 worlds = new_worlds
 
