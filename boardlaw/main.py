@@ -164,7 +164,7 @@ def set_devices():
     else:
         print('No devices set')
 
-def run(desc='main sequence warmup', boardsize=3, width=1, depth=1, timelimit=np.inf):
+def run(desc='regularization test', boardsize=11, width=512, depth=16, timelimit=np.inf):
     set_devices()
 
     buffer_len = 64
@@ -178,7 +178,7 @@ def run(desc='main sequence warmup', boardsize=3, width=1, depth=1, timelimit=np
     agent = agentfunc()
     network = agent.network
 
-    opt = torch.optim.Adam(network.parameters(), lr=1e-3, amsgrad=True)
+    opt = torch.optim.Adam(network.parameters(), lr=1e-3, weight_decay=1e-4)
     scaler = torch.cuda.amp.GradScaler()
 
     parent = warm_start(agent, opt, scaler, '')
