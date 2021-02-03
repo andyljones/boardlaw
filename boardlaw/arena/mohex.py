@@ -101,8 +101,8 @@ def append(df, name):
 
 class Trialer:
 
-    def __init__(self, worldfunc, device='cuda', max_history=128):
-        self.worlds = worldfunc(4, device=device)
+    def __init__(self, worldfunc, max_history=128):
+        self.worlds = worldfunc(4)
         self.mohex = mohex.MoHexAgent()
         self.history = deque(maxlen=max_history//self.worlds.n_envs)
 

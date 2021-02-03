@@ -136,7 +136,7 @@ def pandas(pattern=None):
     df = pd.DataFrame.from_dict(df, orient='index')
     df['_created'] = pd.to_datetime(df['_created'])
     df.index.name = 'run'
-    return df
+    return df.sort_index(axis=1)
 
 def created(run):
     return pd.to_datetime(info(run)['_created'])

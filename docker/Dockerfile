@@ -52,7 +52,7 @@ RUN pip install  \
         # Core reqs
         numpy tqdm matplotlib beautifulsoup4 psutil ninja pytest b2sdk sympy portalocker fabric patchwork \ 
         # Things I find useful
-        pandas jupyter seaborn bokeh setproctitle wurlitzer ipython av flake8 gitpython networkx \ 
+        pandas jupyter seaborn bokeh setproctitle wurlitzer ipython av flake8 gitpython networkx einops \ 
         # Docs
         sphinx
 

@@ -129,13 +129,10 @@ def optimize(network, scaler, opt, batch):
         stats.mean('opt.step-std', (new - old).pow(2).mean().pow(.5))
         stats.max('opt.step-max', (new - old).abs().max())
 
-def worldfunc(n_envs, device='cuda'):
-    return hex.Hex.initial(n_envs=n_envs, boardsize=11, device=device)
-
-def agentfunc(device='cuda', **kwargs):
-    worlds = worldfunc(n_envs=1, device=device)
-    network = networks.FCModel(worlds.obs_space, worlds.action_space).to(worlds.device)
-    return mcts.MCTSAgent(network, **kwargs)
+def agent_factory(worldfunc, **kwargs):
+    worlds = worldfunc(n_envs=1)
+    network = networks.FCModel(worlds.obs_space, worlds.action_space, **kwargs).to(worlds.device)
+    return mcts.MCTSAgent(network)
 
 def warm_start(agent, opt, scaler, parent):
     if parent:
@@ -167,13 +164,18 @@ def set_devices():
     else:
         print('No devices set')
 
-def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='deep network run', timelimit=np.inf):
+def run(desc='main sequence warmup', boardsize=3, width=1, depth=1, timelimit=np.inf):
     set_devices()
+
+    buffer_len = 64
+    n_envs = 16*1024
     start = time.time()
 
     #TODO: Restore league and sched when you go back to large boards
-    worlds = mix(worldfunc(n_envs, device=device))
-    agent = agentfunc(device)
+    worldfunc = lambda n_envs: hex.Hex.initial(n_envs, boardsize) 
+    agentfunc = lambda: agent_factory(worldfunc, width=width, depth=depth)
+    worlds = mix(worldfunc(n_envs))
+    agent = agentfunc()
     network = agent.network
 
     opt = torch.optim.Adam(network.parameters(), lr=1e-3, amsgrad=True)
@@ -181,15 +183,17 @@ def run(buffer_len=64, n_envs=16*1024, device='cuda', desc='deep network run', t
 
     parent = warm_start(agent, opt, scaler, '')
 
-    run = runs.new_run(boardsize=worlds.boardsize, parent=parent, description=desc)
+    run = runs.new_run(
+            description=desc, 
+            params=dict(boardsize=worlds.boardsize, width=width, depth=depth, parent=parent))
 
     archive.archive(run)
 
     buffer = []
     with logs.to_run(run), stats.to_run(run), \
-            arena.monitor(run, worldfunc, agentfunc, device=worlds.device):
+            arena.monitor(run, worldfunc, agentfunc):
         #TODO: Upgrade this to handle batches that are some multiple of the env count
-        idxs = (torch.randint(buffer_len, (n_envs,), device=device), torch.arange(n_envs, device=device))
+        idxs = (torch.randint(buffer_len, (n_envs,), device='cuda'), torch.arange(n_envs, device='cuda'))
         while time.time() < start + timelimit:
 
             # Collect experience

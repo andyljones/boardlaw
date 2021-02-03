@@ -7,6 +7,7 @@ import time
 from logging import getLogger
 from contextlib import contextmanager
 from functools import wraps
+
 from multiprocessing import Process, set_start_method
 
 # Re-export
@@ -15,19 +16,19 @@ from .analysis import elos
 
 log = getLogger(__name__)
 
-def assemble_agent(agentfunc, sd, device='cpu'):
-    agent = agentfunc(device=device)
+def assemble_agent(agentfunc, sd):
+    agent = agentfunc()
     if 'agent' not in sd:
         # rebar legacy format
         sd = storage.expand(sd, 1)
     agent.load_state_dict(sd['agent'])
     return agent
 
-def snapshot_agents(run, agentfunc, device='cpu', **kwargs):
+def snapshot_agents(run, agentfunc, **kwargs):
     if not isinstance(run, (int, str)):
         agents = {}
         for r in run:
-            agents.update(snapshot_agents(r, agentfunc, device=device, **kwargs))
+            agents.update(snapshot_agents(r, agentfunc, **kwargs))
         return agents
 
     period = kwargs.get('period', 1)
@@ -41,14 +42,14 @@ def snapshot_agents(run, agentfunc, device='cpu', **kwargs):
         for idx, info in stored.iterrows():
             if idx % period == 0:
                 name = pd.Timestamp(info['_created']).strftime(r'%y%m%d-%H%M%S-snapshot')
-                sd = storage.load_path(info['path'], device)
-                agents[name] = assemble_agent(agentfunc, sd, device=device)
+                sd = storage.load_path(info['path'])
+                agents[name] = assemble_agent(agentfunc, sd)
         return agents
 
-def latest_agent(run_name, agentfunc, device='cpu', **kwargs):
+def latest_agent(run_name, agentfunc, device='cuda', **kwargs):
     try:
         sd = storage.load_latest(run_name, device=device)
-        return {'latest': assemble_agent(agentfunc, sd, device=device, **kwargs)}
+        return {'latest': assemble_agent(agentfunc, sd, **kwargs)}
     except FileNotFoundError:
         return {}
 
@@ -70,7 +71,8 @@ def snapshot_arena(run, worldfunc, agentfunc, device='cuda'):
                 trials.snapshot_trial(run, worlds, agents)
                 i += 1
 
-def mohex_arena(run, worldfunc, agentfunc, device='cuda'):
+def mohex_arena(run, worldfunc, agentfunc):
+    log.info('Arena launched')
     if isinstance(run, tuple):
         source_run = runs.resolve(run[0])
         stats_run = runs.resolve(run[1])
@@ -80,7 +82,7 @@ def mohex_arena(run, worldfunc, agentfunc, device='cuda'):
 
     log.info(f'Running arena for "{source_run}", storing in "{stats_run}"')
     with logs.to_run(stats_run), stats.to_run(stats_run):
-        trialer = mohex.Trialer(worldfunc, device)
+        trialer = mohex.Trialer(worldfunc)
         
         i = 0
         agent = None
@@ -88,7 +90,7 @@ def mohex_arena(run, worldfunc, agentfunc, device='cuda'):
         while True:
             if time.time() - last_load > 15:
                 last_load = time.time()
-                agents = latest_agent(source_run, agentfunc, device=device)
+                agents = latest_agent(source_run, agentfunc)
                 if agents:
                     agent = list(agents.values())[0]
                 else:
@@ -107,7 +109,7 @@ def monitor(*args, **kwargs):
     p = Process(target=mohex_arena, args=args, kwargs=kwargs, name='arena-monitor')
     try:
         p.start()
-        yield
+        yield p
     finally:
         for _ in range(50):
             if not p.is_alive():
