@@ -217,3 +217,33 @@ def mohex_benchmark(run):
     mhx = mohex.MoHexAgent()
 
     return evaluator.evaluate(worlds, {'boardlaw': agent, 'mohex': mhx})
+
+def snapshot_kl_divs(run):
+    import pandas as pd
+    from pavlov import runs, storage
+    from boardlaw import hex
+    from boardlaw.main import mix
+    import torch
+    from tqdm.auto import tqdm
+
+    m = storage.load_raw(run, 'model')
+    worlds = mix(hex.Hex.initial(n_envs=16*1024, boardsize=runs.info(run)['params']['boardsize']))
+
+    logits = {}
+    for idx in tqdm(storage.snapshots(run)):
+        sd = storage.load_snapshot(run, idx)['agent']
+        m.load_state_dict(storage.expand(sd)['network'])
+        logits[idx] = m(worlds).logits.detach()
+        
+    kldivs = {}
+    for i in logits:
+        for j in logits:
+            li = logits[i]
+            lj = logits[j]
+            terms = -li.exp().mul(lj - li)
+            mask = torch.isfinite(terms)
+            kldiv = terms.where(mask, torch.zeros_like(terms)).sum(-1)/mask.float().sum(-1)
+            kldivs[i, j] = kldiv.mean().item()
+    df = pd.Series(kldivs).unstack()
+
+    return df
