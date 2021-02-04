@@ -78,11 +78,15 @@ def new_info(run, val={}, res=True):
 
 @contextmanager
 def update(run):
+    global _cache
     with lock(run):
         path = infopath(run)
         i = json.loads(path.read_text())
         yield i
         path.write_text(json.dumps(i))
+
+        # Invalidate the cache
+        _cache = {}
 
 ### Run stuff
 

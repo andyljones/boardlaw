@@ -33,8 +33,17 @@ def upload(source, dest):
         local_file=source,
         file_name=path)
 
+def cleanup():
+    from tqdm.auto import tqdm
+    from pavlov import files, runs, storage
+    for run, _ in tqdm(runs.runs().items()):
+        for _, fi in storage.snapshots(run).items():
+            files.remove(run, fi['path'].name)
+
 def backup():
-    sync('./output/pavlov', 'output/pavlov')
+    cleanup()
+    sync('./output/pavlov', 'boardlaw:output/pavlov')
+    sync('./output/experiments/architecture/results', 'boardlaw:output/experiments/architecture/results')
 
 if __name__ == '__main__':
     backup()

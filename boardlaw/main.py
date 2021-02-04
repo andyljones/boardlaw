@@ -164,12 +164,16 @@ def set_devices():
     else:
         print('No devices set')
 
-def run(desc='regularization test', boardsize=11, width=512, depth=16, timelimit=np.inf):
+def terminate(run):
+    stats.pandas(run, 'elo-mohex')
+    pass
+
+
+def run(desc='main sequence', boardsize=11, width=512, depth=16):
     set_devices()
 
     buffer_len = 64
     n_envs = 16*1024
-    start = time.time()
 
     #TODO: Restore league and sched when you go back to large boards
     worldfunc = lambda n_envs: hex.Hex.initial(n_envs, boardsize) 
@@ -194,7 +198,7 @@ def run(desc='regularization test', boardsize=11, width=512, depth=16, timelimit
             arena.monitor(run, worldfunc, agentfunc):
         #TODO: Upgrade this to handle batches that are some multiple of the env count
         idxs = (torch.randint(buffer_len, (n_envs,), device='cuda'), torch.arange(n_envs, device='cuda'))
-        while time.time() < start + timelimit:
+        while True:
 
             # Collect experience
             while len(buffer) < buffer_len:
@@ -222,4 +226,7 @@ def run(desc='regularization test', boardsize=11, width=512, depth=16, timelimit
             storage.throttled_raw(run, 'model', lambda: pickle.dumps(network), 900)
             stats.gpu(worlds.device, 15)
 
-    log.info('Timelimit expired')
+            if terminate():
+                log.info('Terminating')
+                break
+
