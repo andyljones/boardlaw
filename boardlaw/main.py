@@ -178,7 +178,7 @@ def run(desc='regularization test', boardsize=11, width=512, depth=16, timelimit
     agent = agentfunc()
     network = agent.network
 
-    opt = torch.optim.Adam(network.parameters(), lr=1e-3, weight_decay=1e-4)
+    opt = torch.optim.Adam(network.parameters(), lr=1e-3)
     scaler = torch.cuda.amp.GradScaler()
 
     parent = warm_start(agent, opt, scaler, '')
