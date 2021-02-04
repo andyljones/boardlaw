@@ -242,7 +242,7 @@ def snapshot_kl_divs(run):
             lj = logits[j]
             terms = -li.exp().mul(lj - li)
             mask = torch.isfinite(terms)
-            kldiv = terms.where(mask, torch.zeros_like(terms)).sum(-1)/mask.float().sum(-1)
+            kldiv = terms.where(mask, torch.zeros_like(terms)).sum(-1)
             kldivs[i, j] = kldiv.mean().item()
     df = pd.Series(kldivs).unstack()
 
