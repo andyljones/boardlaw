@@ -169,7 +169,7 @@ class KLDivMonitor:
     def __init__(self, worlds, halflife=100):
         self.worlds = worlds
         self.old = None
-        self.lambda = np.log(2)/halflife
+        self.lambd = np.log(2)/halflife
         # self.estimate = 
 
     def __call__(self, network):
@@ -179,11 +179,10 @@ class KLDivMonitor:
         mask = torch.isfinite(self.old)
         terms = self.old.exp().mul(self.old - new)
         kldiv = terms.where(mask, torch.zeros_like(terms)).sum(-1)
-        self.stats('kl-div.step', kldiv)
+        stats.mean('kl-div.step', kldiv)
 
 
-
-def run(desc='main sequence', boardsize=11, width=512, depth=16):
+def run(desc='another pre-layer-ReLU test', boardsize=11, width=512, depth=16):
     set_devices()
 
     buffer_len = 64
@@ -195,6 +194,8 @@ def run(desc='main sequence', boardsize=11, width=512, depth=16):
     worlds = mix(worldfunc(n_envs))
     agent = agentfunc()
     network = agent.network
+
+    monitor = KLDivMonitor(worlds)
 
     opt = torch.optim.Adam(network.parameters(), lr=1e-3)
     scaler = torch.cuda.amp.GradScaler()
@@ -234,13 +235,11 @@ def run(desc='main sequence', boardsize=11, width=512, depth=16):
             optimize(network, scaler, opt, chunk[idxs])
             log.info('learner stepped')
 
+            monitor(network)
+
             sd = storage.state_dicts(agent=agent, opt=opt, scaler=scaler)
             storage.throttled_latest(run, sd, 60)
             storage.throttled_snapshot(run, sd, 900)
             storage.throttled_raw(run, 'model', lambda: pickle.dumps(network), 900)
             stats.gpu(worlds.device, 15)
-
-            if terminate():
-                log.info('Terminating')
-                break
 

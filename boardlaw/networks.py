@@ -15,7 +15,7 @@ class ReZeroResidual(nn.Linear):
         self.register_parameter('α', nn.Parameter(torch.zeros(())))
 
     def forward(self, x, *args, **kwargs):
-        return x + self.α*F.relu(super().forward(x))
+        return x + self.α*super().forward(F.relu(x))
 
 class FCModel(nn.Module):
 
