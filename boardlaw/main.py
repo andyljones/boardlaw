@@ -164,9 +164,23 @@ def set_devices():
     else:
         print('No devices set')
 
-def terminate(run):
-    stats.pandas(run, 'elo-mohex')
-    pass
+class KLDivMonitor:
+
+    def __init__(self, worlds, halflife=100):
+        self.worlds = worlds
+        self.old = None
+        self.lambda = np.log(2)/halflife
+        # self.estimate = 
+
+    def __call__(self, network):
+        new = network(self.worlds).logits.detach()
+        if self.old is None:
+            self.old = new
+        mask = torch.isfinite(self.old)
+        terms = self.old.exp().mul(self.old - new)
+        kldiv = terms.where(mask, torch.zeros_like(terms)).sum(-1)
+        self.stats('kl-div.step', kldiv)
+
 
 
 def run(desc='main sequence', boardsize=11, width=512, depth=16):
