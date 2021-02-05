@@ -169,8 +169,8 @@ class KLDivMonitor:
     def __init__(self, worlds, halflife=100):
         self.worlds = worlds
         self.old = None
-        self.lambd = -np.log(2)/np.log(halflife)
-        self.estimate = 1.
+        self.lambd = np.log(2)/halflife
+        # self.estimate = 
 
     def __call__(self, network):
         new = network(self.worlds).logits.detach()
@@ -178,18 +178,15 @@ class KLDivMonitor:
             self.old = new
         mask = torch.isfinite(self.old)
         terms = self.old.exp().mul(self.old - new)
-        kldiv = terms.where(mask, torch.zeros_like(terms)).sum(-1).mean()
+        kldiv = terms.where(mask, torch.zeros_like(terms)).sum(-1)
         stats.mean('kl-div.step', kldiv)
-        self.old = new
-
-        self.estimate = (1 - self.lambd)*self.estimate + self.lambd*kldiv
 
 
-def run(desc='four steps per batch, fewer envs', boardsize=11, width=512, depth=16):
+def run(desc='another pre-layer-ReLU test', boardsize=11, width=512, depth=16):
     set_devices()
 
-    buffer_len = 256
-    n_envs = 4*1024
+    buffer_len = 64
+    n_envs = 16*1024
 
     #TODO: Restore league and sched when you go back to large boards
     worldfunc = lambda n_envs: hex.Hex.initial(n_envs, boardsize) 
@@ -203,7 +200,7 @@ def run(desc='four steps per batch, fewer envs', boardsize=11, width=512, depth=
     opt = torch.optim.Adam(network.parameters(), lr=1e-3)
     scaler = torch.cuda.amp.GradScaler()
 
-    parent = warm_start(agent, opt, scaler, '*that-man')
+    parent = warm_start(agent, opt, scaler, '')
 
     run = runs.new_run(
             description=desc, 
@@ -215,7 +212,7 @@ def run(desc='four steps per batch, fewer envs', boardsize=11, width=512, depth=
     with logs.to_run(run), stats.to_run(run), \
             arena.monitor(run, worldfunc, agentfunc):
         #TODO: Upgrade this to handle batches that are some multiple of the env count
-        idxs = (torch.randint(buffer_len, (4*n_envs,), device='cuda'), torch.arange(4*n_envs, device='cuda') % n_envs)
+        idxs = (torch.randint(buffer_len, (n_envs,), device='cuda'), torch.arange(n_envs, device='cuda'))
         while True:
 
             # Collect experience
@@ -234,11 +231,11 @@ def run(desc='four steps per batch, fewer envs', boardsize=11, width=512, depth=
                 log.info(f'({len(buffer)}/{buffer_len}) actor stepped')
 
             # Optimize
-            chunk, buffer = as_chunk(buffer, 4*n_envs)
+            chunk, buffer = as_chunk(buffer, n_envs)
             optimize(network, scaler, opt, chunk[idxs])
             log.info('learner stepped')
 
-            kldiv = monitor(network)
+            monitor(network)
 
             sd = storage.state_dicts(agent=agent, opt=opt, scaler=scaler)
             storage.throttled_latest(run, sd, 60)
