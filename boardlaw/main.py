@@ -169,8 +169,8 @@ class KLDivMonitor:
     def __init__(self, worlds, halflife=100):
         self.worlds = worlds
         self.old = None
-        self.lambd = np.log(2)/halflife
-        # self.estimate = 
+        self.lambd = -np.log(2)/np.log(halflife)
+        self.estimate = 1.
 
     def __call__(self, network):
         new = network(self.worlds).logits.detach()
@@ -178,11 +178,13 @@ class KLDivMonitor:
             self.old = new
         mask = torch.isfinite(self.old)
         terms = self.old.exp().mul(self.old - new)
-        kldiv = terms.where(mask, torch.zeros_like(terms)).sum(-1)
+        kldiv = terms.where(mask, torch.zeros_like(terms)).sum(-1).mean()
         stats.mean('kl-div.step', kldiv)
+        self.old = new
 
+        self.estimate = (1 - self.lambd)*self.estimate + self.lambd*kldiv
 
-def run(desc='another pre-layer-ReLU test', boardsize=11, width=512, depth=16):
+def run(desc='testing kl div progress', boardsize=3, width=1, depth=1):
     set_devices()
 
     buffer_len = 64

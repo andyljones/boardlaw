@@ -120,16 +120,18 @@ def monitor(*args, **kwargs):
             log.info('Abruptly terminating arena monitor; it should have shut down naturally!')
             p.terminate()
 
-def fill_matchups(run=-1, device='cuda', count=1, **kwargs):
-    from boardlaw.main import worldfunc, agentfunc
+def matchups(run=-1, count=1, **kwargs):
+    from boardlaw.hex import Hex
+    from boardlaw import mcts
     from boardlaw.arena import evaluator, snapshot_agents, database, log
 
     run = runs.resolve(run)
-    agents = snapshot_agents(run, agentfunc, device=device, **kwargs)
-    worlds = worldfunc(device=device, n_envs=256)
+    agentfunc = lambda: mcts.MCTSAgent(storage.load_raw(run, 'model'))
+    agents = snapshot_agents(run, agentfunc, **kwargs)
+    worlds = Hex.initial(256, boardsize=runs.info(run)['params']['boardsize'])
 
     while True:
-        agents = snapshot_agents(run, agentfunc, device=device, **kwargs)
+        agents = snapshot_agents(run, agentfunc, **kwargs)
 
         n, w = database.symmetric(run, agents)
         zeros = (n
