@@ -104,7 +104,7 @@ def run(boardsize):
 
             moves[idx] = 0
 
-            refill(run_name, names, queue)
+            offdiag_refill(run_name, names, queue)
             log.info(f'Starting on {queue[0]}')
             active[idx] = torch.tensor(queue[0])
             queue = queue[1:]
@@ -215,4 +215,10 @@ def plot(run):
 
     ax = plt.subplot(gs[3, 1])
     plt.colorbar(im, cax=ax, orientation='horizontal')
-    # ax.annotate(f'resid var: {resid_var:.0%}, corr: {corr:.0%}', (.5, -1.2), ha='center', xycoords='axes fraction')
+
+    # Bottom right
+    ax = plt.subplot(gs[2, 2])
+    im = ax.imshow(games, aspect=1, cmap='Reds')
+    ax.set_title('counts')
+    ax = plt.subplot(gs[3, 2])
+    plt.colorbar(im, cax=ax, orientation='horizontal')

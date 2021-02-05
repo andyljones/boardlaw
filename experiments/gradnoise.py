@@ -1,9 +1,12 @@
+import pandas as pd
 import numpy as np
 import torch
-from boardlaw.main import agentfunc, worldfunc, mix, half, as_chunk
+from boardlaw.main import mix, half, as_chunk
 from pavlov import storage
 from rebar import arrdict
 from logging import getLogger
+from boardlaw.hex import Hex
+from boardlaw.mcts import MCTSAgent
 
 log = getLogger(__name__)
 
@@ -34,9 +37,9 @@ def optimize(network, scaler, opt, batch):
 def gradients(run, i, n_envs=16*1024, buffer_len=64, device='cuda'):
 
     #TODO: Restore league and sched when you go back to large boards
-    worlds = mix(worldfunc(n_envs, device=device))
-    agent = agentfunc(device)
-    network = agent.network
+    worlds = mix(Hex.initial(n_envs, device=device))
+    network = storage.load_raw(run, 'model')
+    agent = MCTSAgent(network)
 
     opt = torch.optim.Adam(network.parameters(), lr=0., amsgrad=True)
     scaler = torch.cuda.amp.GradScaler()
@@ -82,29 +85,43 @@ def official_way(gs, Bsmall):
     G2 = 1/(Bbig - Bsmall)*(Bbig*Gbig2 - Bsmall*Gsmall2)
     S = 1/(1/Bsmall - 1/Bbig)*(Gsmall2 - Gbig2)
 
-    return S/G2
+    return (S/G2).item()
 
 def sensible_way(gs, Bsmall):
-    return Bsmall*(gs - gs.mean(0, keepdims=True)).pow(2).mean()/gs.mean(0).pow(2).mean()
+    S = Bsmall*(gs - gs.mean(0, keepdims=True)).pow(2).mean()
+    G2 = gs.mean(0).pow(2).mean()
+    return (S/G2).item()
 
 def adam_way(run, i, Bsmall):
     # Doesn't work. Or at least it's wayyyy off from the 'official' estimates
     # Gets S pretty much right, but is 5x too small on G2.
-    sd = storage.load_snapshot(run, i)['opt']['state']
-    m0 = torch.cat([s['exp_avg'].flatten() for s in sd.values()])
-    v0 = torch.cat([s['exp_avg_sq'].flatten() for s in sd.values()])
+    sd = storage.load_snapshot(run, i)
+    beta1, beta2 = sd['opt']['param_groups'][0]['betas']
 
-    S = Bsmall*(v0.mean() - m0.pow(2).mean())
+    opt = sd['opt']['state']
+    m0 = torch.cat([s['exp_avg'].flatten() for s in opt.values()])
+    v0 = torch.cat([s['exp_avg_sq'].flatten() for s in opt.values()])
+
+    S = (1 - beta1)*Bsmall*(v0.mean() - m0.pow(2).mean())
     G2 = m0.pow(2).mean()
 
-    return S/G2
+    return (S/G2).item()
 
 def run():
-    gs = []
+    run, idx = '*that-man', -1
     B = 16*1024
-    for _, g in zip(range(128), gradients('*joyous-father', 37, B)):
+
+    gs = []
+    for _, g in zip(range(32), gradients(run, idx)):
         log.info(f'{len(gs)} gradients')
         gs.append(g)
     gs = torch.stack(gs).cpu()
 
-    Bnoise = official_way(gs, B)
+    # official    27668.0
+    # sensible    25460.0
+    # adam        31993.0
+    # dtype: float64
+    sizes = pd.Series(dict(
+        official=official_way(gs, B),
+        sensible=sensible_way(gs, B),
+        adam=adam_way(run, -1, B)))
