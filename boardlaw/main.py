@@ -187,11 +187,11 @@ def set_devices():
     else:
         print('No devices set')
 
-def run(desc='15x15 test run', boardsize=15, width=512, depth=16):
+def run(desc='13x13 test run', boardsize=13, width=512, depth=16):
     set_devices()
 
     buffer_len = 64
-    n_envs = 16*1024
+    n_envs = 32*1024
 
     #TODO: Restore league and sched when you go back to large boards
     worldfunc = lambda n_envs: hex.Hex.initial(n_envs, boardsize) 
