@@ -15,7 +15,7 @@ log = getLogger(__name__)
 BOARDSIZES = [3, 5, 7, 9, 11, 13]
 RUN_NAMES = [f'mohex-{s}' for s in BOARDSIZES]
 
-def refill(run_name, names, queue, count=1):
+def activelo_refill(run_name, names, queue, count=1):
     if len(queue) >= count:
         return 
 
@@ -42,6 +42,28 @@ def refill(run_name, names, queue, count=1):
         queue.append(pair)
         queue.append(pair[::-1])
 
+def offdiag_refill(run, names, queue, count=1):
+    n = (database.symmetric_games(run)
+            .reindex(index=names, columns=names)
+            .fillna(0))
+
+    for (i, j) in queue:
+        ni, nj = names[i], names[j]
+        n.loc[ni, nj] += 1
+
+    rs, cs = np.indices(n.shape)
+    mask = ((rs == cs + 1) | (rs == cs - 1))
+    excess = (n.values - n.values[mask].min())
+    excess[~mask] = np.inf
+    probs = np.exp(-excess)/np.exp(-excess).sum()
+    while len(queue) < count:
+        idx = np.random.choice(np.arange(n.size), p=probs.flatten())
+        pair = (idx // n.shape[0], idx % n.shape[0])
+
+        log.info(f'Adding {pair} to the list')
+        queue.append(pair)
+        queue.append(pair[::-1])
+
 def run(boardsize):
     run_name = f'mohex-{boardsize}'
     agent = mohex.MoHexAgent()
@@ -51,7 +73,7 @@ def run(boardsize):
     names = sorted([f'mohex-{r}' for r in universe])
 
     queue = []
-    refill(run_name, names, queue, worlds.n_envs)
+    offdiag_refill(run_name, names, queue, worlds.n_envs)
 
     active = torch.tensor(queue[:worlds.n_envs])
     queue = queue[worlds.n_envs:]
@@ -136,3 +158,61 @@ def judge(worldfunc, agent):
     trialer = Trialer(worldfunc)
     while True:
         trialer.trial(agent, record=False)
+
+def plot(run):
+    import matplotlib.pyplot as plt
+    import copy
+
+    games, wins = database.symmetric(run)
+    games, wins = analysis.mask(games, wins, '.*')
+    soln = activelo.solve(games.values, wins.values)
+
+    rates = wins/games
+
+    expected = 1/(1 + np.exp(-soln.μ[:, None] + soln.μ[None, :]))
+    actual = rates.where(games > 0, np.nan).values
+
+    fig = plt.figure()
+    gs = plt.GridSpec(4, 3, fig, height_ratios=[20, 1, 20, 1])
+    fig.set_size_inches(18, 12)
+
+    # Top row
+    cmap = copy.copy(plt.cm.RdBu)
+    cmap.set_bad('lightgrey')
+    kwargs = dict(cmap=cmap, vmin=0, vmax=1, aspect=1)
+
+    ax = plt.subplot(gs[0, 0])
+    ax.imshow(actual, **kwargs)
+    ax.set_title('actual')
+
+    ax = plt.subplot(gs[0, 1])
+    im = ax.imshow(expected, **kwargs)
+    ax.set_title('expected')
+
+    ax = plt.subplot(gs[1, :2])
+    plt.colorbar(im, cax=ax, orientation='horizontal')
+
+    # Top right
+    ax = plt.subplot(gs[0, 2])
+    ax.errorbar(np.arange(len(soln.μ)), soln.μd[0, :], yerr=soln.σd[0, :], marker='.', capsize=2, linestyle='')
+    ax.set_title('elos v. first')
+    ax.grid()
+
+    # Bottom left
+    ax = plt.subplot(gs[2, 0])
+    im = ax.imshow(actual - expected, vmin=-1, vmax=+1, aspect=1, cmap=cmap)
+    ax.set_title('error')
+
+    ax = plt.subplot(gs[3, 0])
+    plt.colorbar(im, cax=ax, orientation='horizontal')
+    # ax.annotate(f'resid var: {resid_var:.0%}, corr: {corr:.0%}', (.5, -1.2), ha='center', xycoords='axes fraction')
+
+    # Bottom middle
+    ax = plt.subplot(gs[2, 1])
+    se = (expected*(1-expected)/games)**.5
+    im = ax.imshow((actual - expected)/se, vmin=-3, vmax=+3, aspect=1, cmap='RdBu')
+    ax.set_title('standard error')
+
+    ax = plt.subplot(gs[3, 1])
+    plt.colorbar(im, cax=ax, orientation='horizontal')
+    # ax.annotate(f'resid var: {resid_var:.0%}, corr: {corr:.0%}', (.5, -1.2), ha='center', xycoords='axes fraction')
