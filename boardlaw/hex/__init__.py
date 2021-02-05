@@ -98,9 +98,21 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seats'))):
         self.obs_space = heads.Tensor((self.boardsize, self.boardsize, 2))
         self.action_space = heads.Masked(self.boardsize*self.boardsize)
 
-        self.obs = cuda.observe(self.board, self.seats)
-        shape = self.board.shape[:-2]
-        self.valid = (self.obs == 0).all(-1).reshape(*shape, -1)
+        self._obs = None
+        self._valid = None 
+
+    @property
+    def obs(self):
+        if self._obs is None:
+            self._obs = cuda.observe(self.board, self.seats)
+        return self._obs
+
+    @property
+    def valid(self):
+        if self._valid is None:
+            shape = self.board.shape[:-2]
+            self._valid = (self.obs == 0).all(-1).reshape(*shape, -1)
+        return self._valid
 
     @profiling.nvtx
     def step(self, actions):

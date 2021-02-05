@@ -184,7 +184,7 @@ class KLDivMonitor:
 
         self.estimate = (1 - self.lambd)*self.estimate + self.lambd*kldiv
 
-def run(desc='testing kl div progress', boardsize=3, width=1, depth=1):
+def run(desc='15x15 test run', boardsize=15, width=512, depth=16):
     set_devices()
 
     buffer_len = 64
