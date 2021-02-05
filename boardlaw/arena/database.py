@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 import pandas as pd
 from pkg_resources import resource_filename
 from pavlov import json, runs
@@ -15,14 +16,36 @@ def _to_dict(l):
 def _to_list(d):
     return [{**dict(zip(KEYS, k)), **v} for k, v in d.items()]
 
+def mohex_path(run):
+    return Path(resource_filename(__package__, f'data/{run}.json'))
+
+def assure(run):
+    if run.startswith('mohex'):
+        path = mohex_path(run)
+        if not path.exists():
+            path.write_text('[]')
+    else:
+        json.assure(run, PREFIX, [])
+
+@contextmanager
+def update(run):
+    if run.startswith('mohex'):
+        p = mohex_path(run)
+        contents = json_.loads(p.read_text())
+        yield contents
+        p.write_text(json_.dumps(contents))
+    else:
+        with json.update(run, PREFIX) as l:
+            yield l
+
 def save(run, result):
     if isinstance(result, list):
         for r in result:
             save(run, r)
         return
-
-    json.assure(run, PREFIX, [])
-    with json.update(run, PREFIX) as l:
+    
+    assure(run)
+    with update(run) as l:
         d = _to_dict(l)
         k = tuple(result.names)
         if k not in d:
@@ -37,7 +60,7 @@ def save(run, result):
 def pandas(run):
     # Need to come up with a better way of handling 'special' runs
     if isinstance(run, str) and run.startswith('mohex'):
-        path = Path(resource_filename(__package__, f'data/{run}.json'))
+        path = mohex_path(run)
         if path.exists():
             contents = json_.loads(path.read_text())
         else:
