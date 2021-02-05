@@ -65,6 +65,23 @@ def rel_entropy(logits):
     probs = logits.exp().where(valid, zeros)
     return (-(logits*probs).sum(-1).mean(), torch.log(valid.sum(-1).float()).mean())
 
+def noise_scale(B, opt):
+    step = opt.state[0]['step']
+    beta1, beta2 = opt.param_groups[0]['betas']
+    m_bias = 1 - beta1**step
+    v_bias = 1 - beta2**step
+
+    m = 1/m_bias*torch.cat([s['exp_avg'].flatten() for s in opt.state.values()])
+    v = 1/v_bias*torch.cat([s['exp_avg_sq'].flatten() for s in opt.state.values()])
+
+    # Follows from chasing the var through the defn of m
+    inflator = (1 - beta1**2)/(1 - beta1)**2
+
+    S = B*(v.mean() - m.pow(2).mean())
+    G2 = inflator*m.pow(2).mean()
+
+    return S/G2
+
 def optimize(network, scaler, opt, batch):
 
     with torch.cuda.amp.autocast():
@@ -125,9 +142,15 @@ def optimize(network, scaler, opt, batch):
         stats.cumsum('count.learner-steps', 1)
         # stats.rel_gradient_norm('rel-norm-grad', agent)
 
-        stats.mean('opt.lr', np.mean([p['lr'] for p in opt.param_groups]))
-        stats.mean('opt.step-std', (new - old).pow(2).mean().pow(.5))
-        stats.max('opt.step-max', (new - old).abs().max())
+        stats.mean('step.std', (new - old).pow(2).mean().pow(.5))
+        stats.max('step.max', (new - old).abs().max())
+
+        grad = torch.cat([p.grad.flatten() for p in network.parameters() if p.grad])
+        stats.max('grad.grad-max', grad.abs().max())
+        stats.max('grad.grad-std', grad.pow(2).mean().pow(.5))
+        
+        B = batch.transitions.terminal.nelement()
+        stats.mean('noise-scale', noise_scale(B, opt))
 
 def agent_factory(worldfunc, **kwargs):
     worlds = worldfunc(n_envs=1)

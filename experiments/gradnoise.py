@@ -85,28 +85,37 @@ def official_way(gs, Bsmall):
     G2 = 1/(Bbig - Bsmall)*(Bbig*Gbig2 - Bsmall*Gsmall2)
     S = 1/(1/Bsmall - 1/Bbig)*(Gsmall2 - Gbig2)
 
-    return (S/G2).item()
+    return arrdict.arrdict(S=S, G2=G2, B=(S/G2)).item()
 
 def sensible_way(gs, Bsmall):
     S = Bsmall*(gs - gs.mean(0, keepdims=True)).pow(2).mean()
     G2 = gs.mean(0).pow(2).mean()
-    return (S/G2).item()
+    return arrdict.arrdict(S=S, G2=G2, B=(S/G2)).item()
 
 def adam_way(run, i, Bsmall):
     sd = storage.load_snapshot(run, i)
-    beta, _ = sd['opt']['param_groups'][0]['betas']
+    beta1, beta2 = sd['opt']['param_groups'][0]['betas']
+    step = sd['opt']['state'][0]['step']
+
+    m_bias = 1 - beta1**step
+    v_bias = 1 - beta2**step
 
     opt = sd['opt']['state']
-    m = torch.cat([s['exp_avg'].flatten() for s in opt.values()])
-    v = torch.cat([s['exp_avg_sq'].flatten() for s in opt.values()])
+    m = 1/m_bias*torch.cat([s['exp_avg'].flatten() for s in opt.values()])
+    v = 1/v_bias*torch.cat([s['exp_avg_sq'].flatten() for s in opt.values()])
 
     # Follows from chasing the var through the defn of m
-    inflator = (1 - beta**2)/(1 - beta)**2
+    inflator = (1 - beta1**2)/(1 - beta1)**2
 
     S = Bsmall*(v.mean() - m.pow(2).mean())
     G2 = inflator*m.pow(2).mean()
 
-    return (S/G2).item()
+    return arrdict.arrdict(
+        S=S, G2=G2, B=(S/G2), 
+        v=v.mean(),
+        m=m.mean(),
+        m2=m.pow(2).mean(),
+        step=torch.as_tensor(step)).item()
 
 def run():
     run, idx = '*that-man', -1
@@ -121,7 +130,7 @@ def run():
     # official    27668.0
     # sensible    25460.0
     # adam        20961.0
-    sizes = pd.Series(dict(
+    stats = pd.DataFrame(dict(
         official=official_way(gs, B),
         sensible=sensible_way(gs, B),
         adam=adam_way(run, -1, B)))
@@ -129,7 +138,7 @@ def run():
 def adam_over_time(run, B):
     import matplotlib.pyplot as plt
     from tqdm.auto import tqdm
-    sizes = np.array([adam_way(run, idx, B) for idx in tqdm(storage.snapshots(run))])
+    sizes = arrdict.stack([adam_way(run, idx, B) for idx in tqdm(storage.snapshots(run))])
     plt.plot(sizes)
 
     
