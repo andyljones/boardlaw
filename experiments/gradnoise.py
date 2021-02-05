@@ -93,17 +93,18 @@ def sensible_way(gs, Bsmall):
     return (S/G2).item()
 
 def adam_way(run, i, Bsmall):
-    # Doesn't work. Or at least it's wayyyy off from the 'official' estimates
-    # Gets S pretty much right, but is 5x too small on G2.
     sd = storage.load_snapshot(run, i)
-    beta1, beta2 = sd['opt']['param_groups'][0]['betas']
+    beta, _ = sd['opt']['param_groups'][0]['betas']
 
     opt = sd['opt']['state']
-    m0 = torch.cat([s['exp_avg'].flatten() for s in opt.values()])
-    v0 = torch.cat([s['exp_avg_sq'].flatten() for s in opt.values()])
+    m = torch.cat([s['exp_avg'].flatten() for s in opt.values()])
+    v = torch.cat([s['exp_avg_sq'].flatten() for s in opt.values()])
 
-    S = (1 - beta1)*Bsmall*(v0.mean() - m0.pow(2).mean())
-    G2 = m0.pow(2).mean()
+    # Follows from chasing the var through the defn of m
+    inflator = (1 - beta**2)/(1 - beta)**2
+
+    S = Bsmall*(v.mean() - m.pow(2).mean())
+    G2 = inflator*m.pow(2).mean()
 
     return (S/G2).item()
 
@@ -119,9 +120,16 @@ def run():
 
     # official    27668.0
     # sensible    25460.0
-    # adam        31993.0
-    # dtype: float64
+    # adam        20961.0
     sizes = pd.Series(dict(
         official=official_way(gs, B),
         sensible=sensible_way(gs, B),
         adam=adam_way(run, -1, B)))
+
+def adam_over_time(run, B):
+    import matplotlib.pyplot as plt
+    from tqdm.auto import tqdm
+    sizes = np.array([adam_way(run, idx, B) for idx in tqdm(storage.snapshots(run))])
+    plt.plot(sizes)
+
+    
