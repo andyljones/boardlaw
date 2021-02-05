@@ -51,8 +51,9 @@ def as_sgf(obs, seat):
     """Example: https://github.com/cgao3/benzene-vanilla-cmake/blob/master/regression/sgf/opening/5x5a3.sgf
     Wiki: https://en.wikipedia.org/wiki/Smart_Game_Format
     """
-    assert obs.ndim == 3, 'Observations must be a (S, S, 2) stack of piece indicators'
     size = obs.size(0)
+    assert obs.ndim == 3, 'Observations must be a (S, S, 2) stack of piece indicators'
+    assert size <= 13, 'MoHex only supports up to 13x13 boards'
     obs = obs.transpose(0, 1).flip(2) if seat == 1 else obs
 
     positions = {'B': obs[..., 0].nonzero(as_tuple=False), 'W': obs[..., 1].nonzero(as_tuple=False)}

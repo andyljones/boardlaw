@@ -37,9 +37,14 @@ def save(run, result):
 def pandas(run):
     # Need to come up with a better way of handling 'special' runs
     if isinstance(run, str) and run.startswith('mohex'):
-        contents = json_.loads(Path(resource_filename(__package__, f'data/{run}.json')).read_text())
+        path = Path(resource_filename(__package__, f'data/{run}.json'))
+        if path.exists():
+            contents = json_.loads(path.read_text())
+        else:
+            contents = []
     else:
         contents = json.read(run, PREFIX, [])
+
     if contents:
         return pd.DataFrame(contents).set_index(KEYS)
     else:

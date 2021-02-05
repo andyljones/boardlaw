@@ -12,7 +12,7 @@ import pandas as pd
 
 log = getLogger(__name__)
 
-BOARDSIZES = [3, 5, 7, 9, 11, 13, 15, 17, 19]
+BOARDSIZES = [3, 5, 7, 9, 11, 13]
 RUN_NAMES = [f'mohex-{s}' for s in BOARDSIZES]
 
 def refill(run_name, names, queue, count=1):
