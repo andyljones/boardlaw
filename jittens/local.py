@@ -16,8 +16,10 @@ from shlex import quote
 # misery I've had in the past with subprocesses has been related to filehandles.
 DEAD = ('zombie',)
 
-def allocation_env(allocation):
+def worker_env(job, allocation):
     env = os.environ.copy()
+    env['JITTENS_PARAMS'] = str(job.params)
+
     for k, vs in allocation.items():
         vals = ",".join(map(str, vs))
         env[f'JITTENS_{k.upper()}'] = vals
@@ -53,7 +55,7 @@ class Machine(machines.Machine):
             cwd=path,
             start_new_session=True, 
             shell=True,
-            env=allocation_env(allocation))
+            env=worker_env(job, allocation))
 
         return proc.pid
 

@@ -103,7 +103,6 @@ def optimize(network, scaler, opt, batch):
 
     opt.zero_grad()
     scaler.scale(loss).backward()
-    scaler.unscale
     scaler.step(opt)
     scaler.update()
 
@@ -181,17 +180,15 @@ def half(x):
     else:
         return x
 
-def set_devices():
-    import os
-    if 'JITTENS_GPU' in os.environ:
-        os.environ['CUDA_VISIBLE_DEVICES'] = os.environ['JITTENS_GPU']
-        print(f'Devices set to "{os.environ["CUDA_VISIBLE_DEVICES"]}"')
-    else:
-        print('No devices set')
+def time_limited_loop(timelimit):
+    start = time.time()
+    while True:
+        if time.time() > start + timelimit:
+            break
 
-def run(desc='13x13 test run', boardsize=13, width=512, depth=16):
-    set_devices()
+        yield 
 
+def run(boardsize, width, depth, timelimit, desc='main'):
     buffer_len = 64
     n_envs = 32*1024
 
@@ -218,7 +215,7 @@ def run(desc='13x13 test run', boardsize=13, width=512, depth=16):
             arena.monitor(run, worldfunc, agentfunc):
         #TODO: Upgrade this to handle batches that are some multiple of the env count
         idxs = (torch.randint(buffer_len, (n_envs,), device='cuda'), torch.arange(n_envs, device='cuda'))
-        while True:
+        for _ in time_limited_loop(timelimit):
 
             # Collect experience
             while len(buffer) < buffer_len:
@@ -246,3 +243,16 @@ def run(desc='13x13 test run', boardsize=13, width=512, depth=16):
             storage.throttled_raw(run, 'model', lambda: pickle.dumps(network), 900)
             stats.gpu(worlds.device, 15)
 
+        log.info('Finished; saving final state dict')
+        sd = storage.state_dicts(agent=agent, opt=opt, scaler=scaler)
+        storage.save_latest(run, sd)
+
+def run_jittens():
+    import os
+    os.environ['CUDA_VISIBLE_DEVICES'] = os.environ['JITTENS_GPU']
+    print(f'Devices set to "{os.environ["CUDA_VISIBLE_DEVICES"]}"')
+
+    import ast
+    d = ast.literal_eval(os.environ['JITTENS_PARAMS'])
+    run(**d)
+     

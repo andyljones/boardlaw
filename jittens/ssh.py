@@ -9,8 +9,8 @@ from typing import Dict, Any, Optional, List
 
 getLogger('paramiko').setLevel('WARN')
 
-def resource_string(allocation):
-    s = []
+def worker_env(job, allocation):
+    s = [f'JITTENS_PARAMS={str(job.params)}']
     for k, vs in allocation.items():
         vals = ",".join(map(str, vs))
         s.append(f'JITTENS_{k.upper()}={vals}')
@@ -45,7 +45,7 @@ class Machine(machines.Machine):
         return self._processes
 
     def launch(self, job: jobs.Job, allocation={}):
-        env = resource_string(allocation)
+        env = worker_env(job, allocation)
         dir = str(Path(self.root) / job.name)
 
         if job.archive:
@@ -55,6 +55,7 @@ class Machine(machines.Machine):
         else:
             unarchive = ''
 
+        # Is there a better way to do this than string-bashing? Especially the env-passing
         setup = (
             f'mkdir -p {quote(dir)} && '
             f'cd {quote(dir)} && '
