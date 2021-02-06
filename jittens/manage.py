@@ -129,5 +129,32 @@ def fetch(source, target):
                 log.debug(f'Fetched "{name}"')
             del ps[name]
 
+def tails(path, jobglob='*', count=5):
+    from pathlib import Path
+    from shlex import quote
+    from fnmatch import fnmatch
+    from . import machines
 
+    ms = machines.machines()
+    promises = {}
+    for name, job in jobs.jobs().items():
+        if fnmatch(job.name, jobglob) and job.status in ('active', 'dead'):
+            if job.machine in ms:
+                machine = ms[job.machine]
+                dir = str(Path(machine.root) / name) + '/'
+                # Split the dir and the path so we can the path being a glob, which'll fail if it's quoted
+                promises[name] = machine.run(f'tail -n {count} {quote(dir)}/{path}', hide='both', asynchronous=True)
     
+    stdouts = {}
+    for name, promise in promises.items():
+        try:
+            stdouts[name] = promise.join().stdout.splitlines()[-count:]
+        except Exception as e:
+            stdouts[name] = ['Fabric error:'] + str(e).splitlines()[-count:]
+    
+    for name, stdout in stdouts.items():
+        print(f'{name}:')
+        for line in stdout:
+            print(f'\t{line}')
+
+         
