@@ -151,28 +151,32 @@ def compare(fst_run=-1, snd_run=-1, n_envs=256, device='cuda:1'):
 
     return pd.DataFrame(wins/n_envs, ['black', 'white'], ['fst', 'snd'])
 
-def demo_record(run_name=-1):
+def load(run):
+    from boardlaw import mohex, hex, mcts
+    boardsize = runs.info(run)['params']['boardsize']
+
+    worlds = hex.Hex.initial(9, boardsize=boardsize)
+
+    network = storage.load_raw(run, 'model')
+    agent = mcts.MCTSAgent(network)
+    agent.load_state_dict(storage.load_latest(run)['agent'])
+
+    return worlds, agent
+
+
+def demo_record(run=-1):
     from boardlaw import mohex, analysis
-    from .main import worldfunc, agentfunc
 
-    n_envs = 9
-    world = worldfunc(n_envs)
-    agent = agentfunc()
-    agent.load_state_dict(storage.load_latest(run_name)['agent'])
+    worlds, agent = load(run)
     mhx = mohex.MoHexAgent()
-    analysis.record(world, [agent, agent], n_reps=1, N=0).notebook()
+    analysis.record(worlds, [agent, agent], n_reps=1, N=0).notebook()
 
-def demo_rollout(run_name=-1):
-    from boardlaw import mohex
-    from .main import worldfunc, agentfunc
-
-    n_envs = 9
-    world = worldfunc(n_envs)
-    agent = agentfunc()
-    agent.load_state_dict(storage.load_latest(run_name)['agent'])
+def demo_rollout(run=-1):
+    from boardlaw import mohex, analysis
     mhx = mohex.MoHexAgent()
 
-    trace = rollout(world, [agent, mhx], n_reps=1)
+    worlds, agent = load(run)
+    trace = rollout(worlds, [agent, agent], n_reps=1)
 
     trace.transitions.rewards.sum(0).sum(0)
 

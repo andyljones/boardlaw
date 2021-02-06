@@ -66,13 +66,13 @@ def rel_entropy(logits):
     return (-(logits*probs).sum(-1).mean(), torch.log(valid.sum(-1).float()).mean())
 
 def noise_scale(B, opt):
-    step = opt.state[0]['step']
+    step = list(opt.state.values())[0]['step']
     beta1, beta2 = opt.param_groups[0]['betas']
     m_bias = 1 - beta1**step
     v_bias = 1 - beta2**step
 
-    m = 1/m_bias*torch.cat([s['exp_avg'].flatten() for s in opt.state.values()])
-    v = 1/v_bias*torch.cat([s['exp_avg_sq'].flatten() for s in opt.state.values()])
+    m = 1/m_bias*torch.cat([s['exp_avg'].flatten() for s in opt.state.values() if 'exp_avg' in s])
+    v = 1/v_bias*torch.cat([s['exp_avg_sq'].flatten() for s in opt.state.values() if 'exp_avg_sq' in s])
 
     # Follows from chasing the var through the defn of m
     inflator = (1 - beta1**2)/(1 - beta1)**2
@@ -103,6 +103,7 @@ def optimize(network, scaler, opt, batch):
 
     opt.zero_grad()
     scaler.scale(loss).backward()
+    scaler.unscale
     scaler.step(opt)
     scaler.update()
 
@@ -145,9 +146,10 @@ def optimize(network, scaler, opt, batch):
         stats.mean('step.std', (new - old).pow(2).mean().pow(.5))
         stats.max('step.max', (new - old).abs().max())
 
-        grad = torch.cat([p.grad.flatten() for p in network.parameters() if p.grad])
-        stats.max('grad.grad-max', grad.abs().max())
-        stats.max('grad.grad-std', grad.pow(2).mean().pow(.5))
+        grad = torch.cat([p.grad.flatten() for p in network.parameters() if p.grad is not None])
+        stats.max('grad.max', grad.abs().max())
+        stats.max('grad.std', grad.pow(2).mean().pow(.5))
+        stats.max('grad.norm', grad.pow(2).sum().pow(.5))
         
         B = batch.transitions.terminal.nelement()
         stats.mean('noise-scale', noise_scale(B, opt))
