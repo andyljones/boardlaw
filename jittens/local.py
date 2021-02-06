@@ -19,6 +19,7 @@ DEAD = ('zombie',)
 def worker_env(job, allocation):
     env = os.environ.copy()
     env['JITTENS_PARAMS'] = str(job.params)
+    env['JITTENS_NAME'] = job.name
 
     for k, vs in allocation.items():
         vals = ",".join(map(str, vs))
