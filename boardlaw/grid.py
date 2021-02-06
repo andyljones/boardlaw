@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import time
 import jittens
 import vast
@@ -11,19 +12,16 @@ log = getLogger(__name__)
 def launch():
     for width in [1, 2, 4, 8]:
         for depth in [1, 2, 4, 8]:
-            params = dict(width=width, depth=depth, boardsize=3, timelimit=15*60)
+            params = dict(width=width, depth=depth, boardsize=5, timelimit=45*60, desc="main/5")
             jittens.jobs.submit(
                 cmd='python -c "from boardlaw.main import *; run_jittens()" >logs.txt 2>&1',
                 dir='.',
                 resources={'gpu': 1},
                 params=params)
 
-
-def run():
     vast.jittenate(local=True)
-    launch()
     while not jittens.finished():
-        jittens.manage()
+        jittens.refresh()
         time.sleep(1)
 
 def load(desc, key=('width', 'depth')):
@@ -43,11 +41,14 @@ def load(desc, key=('width', 'depth')):
 
     return df
 
-def plot(desc):
+def plot(desc, ax=None):
     df = (load(desc)
             .tail(5).mean()
             .rename('elo').reset_index()
             .pivot_table('elo', 'depth', 'width', aggfunc='max'))
     
-    ax = df.plot(title=desc, marker='.', cmap='viridis', grid=True)
+    _, ax = plt.subplots() if ax is None else (None, ax)
+    df.plot(title=desc, marker='.', cmap='viridis', grid=True, ax=ax)
     ax.set_xscale('log', basex=2)
+
+    return ax
