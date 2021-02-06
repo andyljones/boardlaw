@@ -1,3 +1,4 @@
+from IPython import display
 import matplotlib.pyplot as plt
 import time
 import jittens
@@ -21,6 +22,7 @@ def launch():
 
     vast.jittenate(local=True)
     while not jittens.finished():
+        display.clear_output(wait=True)
         jittens.refresh()
         time.sleep(1)
 
@@ -40,6 +42,9 @@ def load(desc, key=('width', 'depth')):
     df.columns.names = key
 
     return df
+
+def fetch():
+    jittens.manage.fetch('output/pavlov/', 'output/pavlov/')
 
 def plot(desc, ax=None):
     df = (load(desc)
