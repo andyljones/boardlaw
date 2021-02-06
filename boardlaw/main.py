@@ -188,7 +188,7 @@ def time_limited_loop(timelimit):
 
         yield 
 
-def run(boardsize, width, depth, timelimit, desc='main'):
+def run(boardsize, width, depth, timelimit, desc):
     buffer_len = 64
     n_envs = 32*1024
 

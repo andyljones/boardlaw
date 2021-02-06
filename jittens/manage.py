@@ -96,6 +96,38 @@ def cleanup():
         with jobs.update() as js:
             del js[job.name]
 
-def kill(name):
-    pass
+def fetch(source, target):
+    from jittens.machines import machines
+    from jittens.jobs import jobs
+
+    machines = machines()
+    ps = {}
+    queue = iter(jobs().items())
+    while True:
+        # Anything more than 10 and default SSH configs start having trouble, throwing 235 & 255 errors.
+        # Need to up `MaxStartups` if you wanna go higher.
+        if len(ps) <= 8:
+            try:
+                name, job = next(queue)
+                if job.status in ('active', 'dead'):
+                    if job.machine in machines:
+                        ps[name] = machines[job.machine].fetch(job.name, source, target)
+                    else:
+                        log.info(f'Skipping "{name}" as the machine "{job.machine}" is no longer available')
+            except StopIteration:
+                pass
+
+        if not ps:
+            break
+
+        for name in list(ps):
+            try:
+                r = ps[name].join()
+            except Exception as e:
+                log.info(f'Failed to fetch {name}: {e}')
+            else:
+                log.debug(f'Fetched "{name}"')
+            del ps[name]
+
+
     

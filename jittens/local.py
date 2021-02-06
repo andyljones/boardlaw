@@ -66,6 +66,11 @@ class Machine(machines.Machine):
         path = Path(self.root) / job.name
         self.run(f'rm -rf {quote(str(path))} || true')
 
+    def fetch(self, name, source, target):
+        source = str(Path(self.root) / name / source)
+        command = f"""rsync -r "{source}/" "{target}" """
+        return self.run(command, asynchronous=True)
+
 def add(**kwargs):
     # Check that it's actually valid
     Machine.create(name='local', type='local', **kwargs)

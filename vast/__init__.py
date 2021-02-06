@@ -26,64 +26,10 @@ def jittenate(local=False):
     if local:
         jittens.local.add(root='.jittens/local', resources={'gpu': 2})
 
-def _fetch(name, machine, source, target):
-    from subprocess import Popen, PIPE
-    from pathlib import Path
-
-    source = str(Path(machine.root) / name / source)
-    if hasattr(machine, 'connection'):
-        conn = machine.connection
-        [keyfile] = conn.connect_kwargs['key_filename']
-        ssh = f"ssh -o StrictHostKeyChecking=no -i '{keyfile}' -p {conn.port}"
-
-        # https://unix.stackexchange.com/questions/104618/how-to-rsync-over-ssh-when-directory-names-have-spaces
-        command = f"""rsync -r -e "{ssh}" {conn.user}@{conn.host}:"'{source}/'" "{target}" """
-    else:
-        command = f"""rsync -r "{source}/" "{target}" """
-    return Popen(command, shell=True, stdout=PIPE, stderr=PIPE)
-
-def fetch(source, target):
-    from jittens.machines import machines
-    from jittens.jobs import jobs
-
-    machines = machines()
-    ps = {}
-    queue = iter(jobs().items())
-    while True:
-        # Anything more than 10 and default SSH configs start having trouble, throwing 235 & 255 errors.
-        # Need to up `MaxStartups` if you wanna go higher.
-        if len(ps) <= 8:
-            try:
-                name, job = next(queue)
-                if job.status in ('active', 'dead'):
-                    if job.machine in machines:
-                        ps[name] = _fetch(name, machines[job.machine], source, target)
-                    else:
-                        log.info(f'Skipping "{name}" as the machine "{job.machine}" is no longer available')
-            except StopIteration:
-                pass
-
-        if not ps:
-            break
-
-        for name in list(ps):
-            r = ps[name].poll()
-            if r is None:
-                pass
-            else:
-                if r == 0:
-                    log.debug(f'Fetched "{name}"')
-                elif r == 23:
-                    log.info(f'Skipped "{name}" as the requested dir doesn\'t exist')
-                else:
-                    s = ps[name].stderr.read().decode()
-                    lines = '\n'.join([f'\t{l}' for l in s.splitlines()])
-                    log.warn(f'Fetching "{name}" failed with retcode {r}. Stdout:\n{lines}')
-                del ps[name]
-
 def tails(path, jobglob='*', count=5):
     import jittens
     from pathlib import Path
+    from shlex import quote
     from fnmatch import fnmatch
 
     machines = jittens.machines.machines()
@@ -92,15 +38,16 @@ def tails(path, jobglob='*', count=5):
         if fnmatch(job.name, jobglob) and job.status in ('active', 'dead'):
             if job.machine in machines:
                 machine = machines[job.machine]
-                fullpath = Path(machine.root) / name / path
-                promises[name] = machine.run(f'tail -n {count} "{fullpath}"', hide='both', asynchronous=True)
+                dir = str(Path(machine.root) / name) + '/'
+                # Split the dir and the path so we can the path being a glob, which'll fail if it's quoted
+                promises[name] = machine.run(f'tail -n {count} {quote(dir)}/{path}', hide='both', asynchronous=True)
     
     stdouts = {}
     for name, promise in promises.items():
         try:
             stdouts[name] = promise.join().stdout.splitlines()[-count:]
         except Exception as e:
-            stdouts[name] = f'Fabric error: {e}'
+            stdouts[name] = ['Fabric error:'] + str(e).splitlines()[-count:]
     
     for name, stdout in stdouts.items():
         print(f'{name}:')
