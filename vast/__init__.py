@@ -26,7 +26,6 @@ def jittenate(local=False):
     if local:
         jittens.local.add(root='.jittens/local', resources={'gpu': 2})
 
-
 def ssh_command(label=-1):
     s = status(label)
     print(f'SSH_AUTH_SOCK="" ssh root@{s.ssh_host} -p {s.ssh_port} -o StrictHostKeyChecking=no -i /root/.ssh/vast_rsa')

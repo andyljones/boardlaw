@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional, List
 getLogger('paramiko').setLevel('WARN')
 
 def worker_env(job, allocation):
-    s = [f'JITTENS_PARAMS={quote(str(job.params))}', f'JITTENS_NAME={quote(job.name)}"']
+    s = [f'JITTENS_PARAMS={quote(str(job.params))}', f'JITTENS_NAME={quote(job.name)}']
     for k, vs in allocation.items():
         vals = ",".join(map(str, vs))
         s.append(f'JITTENS_{k.upper()}={vals}')
