@@ -26,16 +26,28 @@ def run():
         jittens.manage()
         time.sleep(1)
 
-def load(experiment):
-    rs = runs.pandas().loc[lambda df: df.description == experiment].index
+def load(desc, key=('width', 'depth')):
+    rs = runs.pandas().loc[lambda df: df.description.fillna('').str.startswith(desc)].index
 
-    ds = {}
+    head, tail = [], []
     for r in rs:
         try:
+            tail.append(stats.pandas(r, 'elo-mohex', 'μ'))
             d = ast.literal_eval(runs.info(r)['_env']['JITTENS_PARAMS'])
-            d['perf'] = stats.pandas(r, 'elo-mohex', 'μ').tail(5).mean()
-            ds[r] = d
-        except:
-            log.info(f'Failed to load {r}')
+            head.append(tuple(d[f] for f in key))
+        except Exception as e:
+            log.info(f'Failed to load {r}: {e}')
             
-    return pd.DataFrame.from_dict(ds, orient='index')
+    df = pd.DataFrame(tail, index=pd.MultiIndex.from_tuples(head)).T.sort_index(axis=1)
+    df.columns.names = key
+
+    return df
+
+def plot(desc):
+    df = (load(desc)
+            .tail(5).mean()
+            .rename('elo').reset_index()
+            .pivot_table('elo', 'depth', 'width', aggfunc='max'))
+    
+    ax = df.plot(title=desc, marker='.', cmap='viridis', grid=True)
+    ax.set_xscale('log', basex=2)
