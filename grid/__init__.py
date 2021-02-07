@@ -60,3 +60,9 @@ def refresh():
         except Exception as e:
             log.info(f'Failed with error {e}')
             time.sleep(60)
+
+def progress():
+    active_jobs = jittens.jobs.jobs('active')
+    active_runs = runs.pandas()._env.dropna().apply(lambda p: p.get('JITTENS_NAME', '') in active_jobs).pipe(lambda s: s.index[s])
+    keys = runs.pandas().loc[active_runs, 'params'].apply(lambda p: (p['boardsize'], p['width'], p['depth']))
+    return data.load_field('elo-mohex', 'μ').notnull().sum().reindex(keys.values)

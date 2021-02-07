@@ -5,13 +5,15 @@ from logging import getLogger
 
 log = getLogger(__name__)
 
-def load_board(desc, key=('width', 'depth')):
-    rs = runs.pandas().loc[lambda df: df.description.fillna('').str.startswith(desc)].index
+TAILS = {3: 5, 5: 15, 7: 30}
+
+def load_field(*args, key=('boardsize', 'width', 'depth')):
+    rs = runs.pandas().loc[lambda df: df.description.fillna('').str.startswith('main/')].index
 
     head, tail = [], []
     for r in rs:
         try:
-            tail.append(stats.pandas(r, 'elo-mohex', 'μ'))
+            tail.append(stats.pandas(r, *args))
             d = ast.literal_eval(runs.info(r)['_env']['JITTENS_PARAMS'])
             head.append(tuple(d[f] for f in key))
         except Exception as e:
@@ -20,14 +22,15 @@ def load_board(desc, key=('width', 'depth')):
     df = pd.DataFrame(tail, index=pd.MultiIndex.from_tuples(head)).T.sort_index(axis=1)
     df.columns.names = key
 
-    return df
+    return df.mean(axis=1, level=[0, 1, 2])
 
 def load():
-    return load_board('main/', key=('boardsize', 'width', 'depth'))
+    return pd.concat({
+        'elo': load_field('elo-mohex', 'μ'),
+        'samples': load_field('count.samples')}, 1)
 
 def tail_means(df):
-    tails = {3: 5, 5: 15, 7: 30}
-    tails = pd.concat({b: df[b].dropna(0, 'all').tail(t).mean().mean(level=[0, 1]) for b, t in tails.items()})
+    tails = pd.concat({b: df[b].dropna(0, 'all').tail(t).mean().mean(level=[0, 1]) for b, t in TAILS.items()})
     tails.index.names = ['boardsize', 'width', 'depth']
     return tails.rename('elo').reset_index()
 
