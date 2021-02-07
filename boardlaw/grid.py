@@ -56,6 +56,9 @@ def load(desc, key=('width', 'depth')):
 
     return df
 
+def load_all():
+    return load('main/', key=('boardsize', 'width', 'depth'))
+
 def fetch():
     return jittens.manage.fetch('output/pavlov/', 'output/pavlov/')
 
@@ -72,9 +75,9 @@ def refresh():
             jittens.manage.cleanup(fetched)
             last_fetch = time.time()
 
-def plot(desc, ax=None):
+def plot(desc, tail=5, ax=None):
     df = (load(desc)
-            .tail(30).mean()
+            .tail(tail).mean()
             .rename('elo').reset_index()
             .pivot_table('elo', 'depth', 'width', aggfunc='max'))
     
