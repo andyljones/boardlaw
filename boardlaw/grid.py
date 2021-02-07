@@ -59,6 +59,13 @@ def load(desc, key=('width', 'depth')):
 def load_all():
     return load('main/', key=('boardsize', 'width', 'depth'))
 
+def tail_means(df):
+    tails = {3: 5, 5: 15, 7: 30}
+    tails = pd.concat({t: df[b].dropna(0, 'all').tail(t).mean().mean(level=[0, 1]) for b, t in tails.items()})
+    tails.index.names = ['boardsize', 'width', 'depth']
+    return tails.rename('elo').reset_index()
+
+
 def fetch():
     return jittens.manage.fetch('output/pavlov/', 'output/pavlov/')
 
