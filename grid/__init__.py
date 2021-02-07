@@ -3,7 +3,7 @@ from IPython import display
 import matplotlib.pyplot as plt
 import time
 import jittens
-from . import vast
+from . import vast, data
 import pandas as pd
 from logging import getLogger
 from pavlov import runs, stats
