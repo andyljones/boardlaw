@@ -3,7 +3,7 @@ from IPython import display
 import matplotlib.pyplot as plt
 import time
 import jittens
-import vast
+from . import vast
 import pandas as pd
 from logging import getLogger
 from pavlov import runs, stats
@@ -40,32 +40,6 @@ def launch():
                     resources={'gpu': 1},
                     params=params)
 
-def load_board(desc, key=('width', 'depth')):
-    rs = runs.pandas().loc[lambda df: df.description.fillna('').str.startswith(desc)].index
-
-    head, tail = [], []
-    for r in rs:
-        try:
-            tail.append(stats.pandas(r, 'elo-mohex', 'μ'))
-            d = ast.literal_eval(runs.info(r)['_env']['JITTENS_PARAMS'])
-            head.append(tuple(d[f] for f in key))
-        except Exception as e:
-            log.info(f'Failed to load {r}: {e}')
-            
-    df = pd.DataFrame(tail, index=pd.MultiIndex.from_tuples(head)).T.sort_index(axis=1)
-    df.columns.names = key
-
-    return df
-
-def load_full():
-    return load_board('main/', key=('boardsize', 'width', 'depth'))
-
-def tail_means(df):
-    tails = {3: 5, 5: 15, 7: 30}
-    tails = pd.concat({b: df[b].dropna(0, 'all').tail(t).mean().mean(level=[0, 1]) for b, t in tails.items()})
-    tails.index.names = ['boardsize', 'width', 'depth']
-    return tails.rename('elo').reset_index()
-
 
 def fetch():
     return jittens.manage.fetch('output/pavlov/', 'output/pavlov/')
@@ -86,46 +60,3 @@ def refresh():
         except Exception as e:
             log.info(f'Failed with error {e}')
             time.sleep(60)
-
-def plot(desc, tail=5, ax=None):
-    df = (load_board(desc)
-            .tail(tail).mean()
-            .rename('elo').reset_index()
-            .pivot_table('elo', 'depth', 'width', aggfunc='max'))
-    
-    _, ax = plt.subplots() if ax is None else (None, ax)
-    df.plot(title=desc, marker='.', cmap='viridis', grid=True, ax=ax)
-    ax.set_xscale('log', basex=2)
-
-    return ax
-
-def min_elos():
-    # Values from running the code below
-    return pd.Series({3: -3.09, 5: -6.34, 7: -9.03, 9: -12.64, 11: -16.21})
-    from boardlaw.arena import mohex
-    return {b: mohex.elos(f'mohex-{b}').μd[-1, 0].round(2) for b in [3, 5, 7, 9, 11]}
-
-def plot_sigmoids(full):
-    data = tail_means(full)
-    data['state'] = data.depth*data.width
-    data['params'] = data.depth*data.width**2
-    data['flops'] = data.depth*data.width**3
-    data['rel_elo'] = 1 - data.elo / min_elos().reindex(data.boardsize.values).values
-
-    (ggplot(data=data, mapping=aes(x='flops', y='rel_elo', color='depth'))
-        + geom_line(mapping=aes(group='depth'))
-        + geom_point()
-        + facet_wrap('boardsize', nrow=1)
-        + scale_x_continuous(trans='log10')
-        + scale_color_continuous(trans='log2')
-        + coord_cartesian((-.1, None), (0, 1), expand=False)
-        + labs(
-            title='larger boards lead to slower scaling',
-            y='normalised elo (entirely random through to perfect play)')
-        + theme_matplotlib()
-        + guides(
-            color=guide_colorbar(ticks=False))
-        + theme(
-            figure_size=(18, 6), 
-            strip_background=element_rect(color='w', fill='w'),
-            panel_grid=element_line(color='k', alpha=.1)))
