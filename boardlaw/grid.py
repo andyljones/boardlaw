@@ -40,8 +40,8 @@ def launch():
                     resources={'gpu': 1},
                     params=params)
 
-def load_board(b, key=('width', 'depth')):
-    rs = runs.pandas().loc[lambda df: df.description == f'main/{b}'].index
+def load_board(desc, key=('width', 'depth')):
+    rs = runs.pandas().loc[lambda df: df.description.fillna('').str.startswith(desc)].index
 
     head, tail = [], []
     for r in rs:
@@ -71,17 +71,21 @@ def fetch():
     return jittens.manage.fetch('output/pavlov/', 'output/pavlov/')
 
 def refresh():
-    vast.jittenate(local=True)
+    vast.jittenate(local=True, ssh_accept=True)
     last_fetch = 0
     while not jittens.finished():
-        display.clear_output(wait=True)
-        jittens.refresh()
-        time.sleep(15)
-        
-        if time.time() > last_fetch + 600:
-            fetched = fetch()
-            jittens.manage.cleanup(fetched)
-            last_fetch = time.time()
+        try:
+            display.clear_output(wait=True)
+            jittens.refresh()
+            time.sleep(15)
+
+            if time.time() > last_fetch + 600:
+                fetched = fetch()
+                jittens.manage.cleanup(fetched)
+                last_fetch = time.time()
+        except Exception as e:
+            log.info(f'Failed with error {e}')
+            time.sleep(60)
 
 def plot(desc, tail=5, ax=None):
     df = (load_board(desc)
@@ -106,14 +110,21 @@ def plot_sigmoids(full):
     data['state'] = data.depth*data.width
     data['params'] = data.depth*data.width**2
     data['flops'] = data.depth*data.width**3
-
     data['rel_elo'] = 1 - data.elo / min_elos().reindex(data.boardsize.values).values
-    (ggplot(data=data)
-        + geom_point(mapping=aes(x='width', y='rel_elo', color='depth'))
+
+    (ggplot(data=data, mapping=aes(x='flops', y='rel_elo', color='depth'))
+        + geom_line(mapping=aes(group='depth'))
+        + geom_point()
         + facet_wrap('boardsize', nrow=1)
-        + scale_x_continuous(trans='log2')
+        + scale_x_continuous(trans='log10')
         + scale_color_continuous(trans='log2')
+        + coord_cartesian((-.1, None), (0, 1), expand=False)
+        + labs(
+            title='larger boards lead to slower scaling',
+            y='normalised elo (entirely random through to perfect play)')
         + theme_matplotlib()
+        + guides(
+            color=guide_colorbar(ticks=False))
         + theme(
             figure_size=(18, 6), 
             strip_background=element_rect(color='w', fill='w'),
