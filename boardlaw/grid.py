@@ -1,3 +1,4 @@
+from plotnine import *
 from IPython import display
 import matplotlib.pyplot as plt
 import time
@@ -20,7 +21,7 @@ def acknowledged(desc):
     return fresh + active + fetched
 
 def keystr(d):
-    return str({k: d[k] for k in sorted(d)})
+    return str({k: d[k] for k in ('boardsize', 'width', 'depth')})
 
 def is_missing(proposal, acks):
     return keystr(proposal) not in {keystr(a) for a in acks}
@@ -39,8 +40,8 @@ def launch():
                     resources={'gpu': 1},
                     params=params)
 
-def load(desc, key=('width', 'depth')):
-    rs = runs.pandas().loc[lambda df: df.description.fillna('').str.startswith(desc)].index
+def load_board(b, key=('width', 'depth')):
+    rs = runs.pandas().loc[lambda df: df.description == f'main/{b}'].index
 
     head, tail = [], []
     for r in rs:
@@ -56,12 +57,12 @@ def load(desc, key=('width', 'depth')):
 
     return df
 
-def load_all():
-    return load('main/', key=('boardsize', 'width', 'depth'))
+def load_full():
+    return load_board('main/', key=('boardsize', 'width', 'depth'))
 
 def tail_means(df):
     tails = {3: 5, 5: 15, 7: 30}
-    tails = pd.concat({t: df[b].dropna(0, 'all').tail(t).mean().mean(level=[0, 1]) for b, t in tails.items()})
+    tails = pd.concat({b: df[b].dropna(0, 'all').tail(t).mean().mean(level=[0, 1]) for b, t in tails.items()})
     tails.index.names = ['boardsize', 'width', 'depth']
     return tails.rename('elo').reset_index()
 
@@ -83,7 +84,7 @@ def refresh():
             last_fetch = time.time()
 
 def plot(desc, tail=5, ax=None):
-    df = (load(desc)
+    df = (load_board(desc)
             .tail(tail).mean()
             .rename('elo').reset_index()
             .pivot_table('elo', 'depth', 'width', aggfunc='max'))
@@ -93,3 +94,23 @@ def plot(desc, tail=5, ax=None):
     ax.set_xscale('log', basex=2)
 
     return ax
+
+def min_elos():
+    # Values from running the code below
+    return pd.Series({3: -3.09, 5: -6.34, 7: -9.03, 9: -12.64, 11: -16.21})
+    from boardlaw.arena import mohex
+    return {b: mohex.elos(f'mohex-{b}').μd[-1, 0].round(2) for b in [3, 5, 7, 9, 11]}
+
+def plot_sigmoids(full):
+
+    data = tail_means(full)
+    data['state'] = data.depth*data.width
+    data['params'] = data.depth*data.width**2
+    data['flops'] = data.depth*data.width**3
+
+    data['rel_elo'] = 1 - data.elo / min_elos().reindex(data.boardsize.values).values
+    (ggplot(data=data)
+        + geom_point(mapping=aes(x='width', y='rel_elo', color='depth'))
+        + facet_wrap('boardsize', ncol=1)
+        + scale_x_continuous(trans='log2')
+        + scale_color_continuous(trans='log2'))

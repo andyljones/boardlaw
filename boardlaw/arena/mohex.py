@@ -15,10 +15,7 @@ log = getLogger(__name__)
 BOARDSIZES = [3, 5, 7, 9, 11, 13]
 RUN_NAMES = [f'mohex-{s}' for s in BOARDSIZES]
 
-def activelo_refill(run_name, names, queue, count=1):
-    if len(queue) >= count:
-        return 
-
+def elos(run_name, names=None, queue=[]):
     n = (database.symmetric_games(run_name)
             .reindex(index=names, columns=names)
             .fillna(0))
@@ -31,7 +28,13 @@ def activelo_refill(run_name, names, queue, count=1):
         w.loc[ni, nj] += (w.loc[ni, nj] + 1)/(n.loc[ni, nj] + 2)
         n.loc[ni, nj] += 1
 
-    soln = activelo.solve(n.values, w.values)
+    return activelo.solve(n.values, w.values)
+
+def activelo_refill(run_name, names, queue, count=1):
+    if len(queue) >= count:
+        return 
+
+    soln = elos(run_name, names, queue)
     imp = activelo.improvement(soln)
     while len(queue) < count:
         probs = imp.flatten()/imp.sum()
