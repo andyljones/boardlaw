@@ -94,6 +94,11 @@ def pandas(run=-1):
     df['_origin'] = df.index.map(origin)
     return df.sort_index().sort_index(axis=1)
 
+def last_modified(run=-1):
+    default = int(pd.Timestamp(runs.info(run)['_created']).to_datetime64())/1e9
+    final = max([path(run, f).lstat().st_mtime for f in files(run)] + [default])
+    return pd.Timestamp(final, unit='s')
+
 @tests.mock_dir
 def test_new_file():
     run = runs.new_run()

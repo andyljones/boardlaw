@@ -6,6 +6,10 @@ log = getLogger(__name__)
 def jittenate(local=False):
     import jittens
     jittens.machines.clear()
+
+    if local:
+        jittens.local.add(root='.jittens/local', resources={'gpu': 2})
+
     for name, row in status().iterrows():
         if row.actual_status == 'running':
             jittens.ssh.add(name,
@@ -21,9 +25,6 @@ def jittenate(local=False):
                         'allow_agent': False,
                         'look_for_keys': False,
                         'key_filename': ['/root/.ssh/vast_rsa']}})
-
-    if local:
-        jittens.local.add(root='.jittens/local', resources={'gpu': 2})
 
 def ssh_command(label=-1):
     s = status(label)

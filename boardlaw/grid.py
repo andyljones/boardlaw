@@ -65,7 +65,7 @@ def refresh():
     while not jittens.finished():
         display.clear_output(wait=True)
         jittens.refresh()
-        time.sleep(1)
+        time.sleep(15)
         
         if time.time() > last_fetch + 600:
             fetched = fetch()
