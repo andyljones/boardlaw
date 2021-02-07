@@ -67,7 +67,7 @@ def fetch():
 
 def plot(desc, ax=None):
     df = (load(desc)
-            .tail(5).mean()
+            .tail(30).mean()
             .rename('elo').reset_index()
             .pivot_table('elo', 'depth', 'width', aggfunc='max'))
     

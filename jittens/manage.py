@@ -64,9 +64,9 @@ def check_stalled(ms):
 
 def refresh(ms=None):
     ms = machines.machines() if ms is None else ms
+    log.info(f'There are {len(jobs.jobs("active"))} active jobs and {len(jobs.jobs("fresh"))} fresh jobs.')
 
     # See if any of the active jobs are now dead
-    log.info(f'There are {len(jobs.jobs("active"))} active jobs.')
     for job in jobs.jobs('active').values():
         if dead(job, ms):
             job.status = 'dead'
@@ -74,7 +74,6 @@ def refresh(ms=None):
                 js[job.name] = asdict(job)
 
     # See if any fresh jobs can be submitted
-    log.info(f'There are {len(jobs.jobs("fresh"))} fresh jobs.')
     ms = machines.machines()
     for job in jobs.jobs('fresh').values():
         av = available(ms)

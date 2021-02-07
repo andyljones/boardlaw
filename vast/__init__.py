@@ -1,11 +1,10 @@
 from logging import getLogger
-import jittens
 from .api import launch, status, offers, wait, destroy
-import shutil
 
 log = getLogger(__name__)
 
 def jittenate(local=False):
+    import jittens
     jittens.machines.clear()
     for name, row in status().iterrows():
         if row.actual_status == 'running':
@@ -38,3 +37,18 @@ def push_command(label, source, target):
     [keyfile] = conn['connect_kwargs']['key_filename']
     ssh = f"ssh -o StrictHostKeyChecking=no -i '{keyfile}' -p {conn['port']}"
     print(f"""rsync -r -P -e "{ssh}" "{source}" {conn['user']}@{conn['host']}:"'{target}'" """)
+
+def gather_stats():
+    from datetime import datetime
+    from pathlib import Path
+    import json
+    count = offers('cuda_max_good >= 11.1 & gpu_name == "RTX 2080 Ti"').groupby('machine_id').num_gpus.max().sum()
+
+    log.info(f'Count: {count}')
+
+    path = Path('output/vast-stats.json')
+    if not path.exists():
+        path.write_text('[]')
+    db = json.loads(path.read_text())
+    db.append({'date': datetime.now().strftime(r'%Y-%m-%d %H%M%S'), 'count': count})
+
