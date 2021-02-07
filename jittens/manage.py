@@ -107,11 +107,12 @@ def fetch(source, target):
     while True:
         # Anything more than 10 and default SSH configs start having trouble, throwing 235 & 255 errors.
         # Need to up `MaxStartups` if you wanna go higher.
-        if len(ps) <= 8:
+        if len(ps) <= 1:
             try:
                 name, job = next(queue)
                 if job.status in ('active', 'dead'):
                     if job.machine in machines:
+                        log.info(f'Fetching "{name}" from "{job.machine}"')
                         ps[name] = machines[job.machine].fetch(job.name, source, target)
                     else:
                         log.info(f'Skipping "{name}" as the machine "{job.machine}" is no longer available')

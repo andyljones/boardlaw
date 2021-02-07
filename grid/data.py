@@ -30,9 +30,9 @@ def load():
         'samples': load_field('count.samples')}, 1)
 
 def tail_means(df):
-    tails = pd.concat({b: df[b].dropna(0, 'all').tail(t).mean().mean(level=[0, 1]) for b, t in TAILS.items()})
-    tails.index.names = ['boardsize', 'width', 'depth']
-    return tails.rename('elo').reset_index()
+    tails = pd.concat({b: df.xs(b, 1, 1).dropna(0, 'all').tail(t).mean(0) for b, t in TAILS.items()})
+    tails.index.names = ['boardsize', 'field', 'width', 'depth']
+    return tails.unstack('field').reset_index()
 
 def min_elos():
     # Values from running the code below
@@ -41,7 +41,7 @@ def min_elos():
     return {b: mohex.elos(f'mohex-{b}').μd[-1, 0].round(2) for b in [3, 5, 7, 9, 11]}
 
 def augmented():
-    df = load()
+    df = load()['elo']
     df = tail_means(df)
     df['state'] = df.depth*df.width
     df['params'] = df.depth*df.width**2
