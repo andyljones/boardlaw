@@ -39,12 +39,6 @@ def launch():
                     resources={'gpu': 1},
                     params=params)
 
-    vast.jittenate(local=True)
-    while not jittens.finished():
-        display.clear_output(wait=True)
-        jittens.refresh()
-        time.sleep(1)
-
 def load(desc, key=('width', 'depth')):
     rs = runs.pandas().loc[lambda df: df.description.fillna('').str.startswith(desc)].index
 
@@ -63,7 +57,20 @@ def load(desc, key=('width', 'depth')):
     return df
 
 def fetch():
-    jittens.manage.fetch('output/pavlov/', 'output/pavlov/')
+    return jittens.manage.fetch('output/pavlov/', 'output/pavlov/')
+
+def refresh():
+    vast.jittenate(local=True)
+    last_fetch = 0
+    while not jittens.finished():
+        display.clear_output(wait=True)
+        jittens.refresh()
+        time.sleep(1)
+        
+        if time.time() > last_fetch + 600:
+            fetched = fetch()
+            jittens.manage.cleanup(fetched)
+            last_fetch = time.time()
 
 def plot(desc, ax=None):
     df = (load(desc)

@@ -11,7 +11,7 @@ def jittenate(local=False):
             jittens.ssh.add(name,
                 resources={
                     'gpu': row.num_gpus,
-                    'memory': row.cpu_ram*row.gpu_frac},
+                    'memory': row.cpu_ram*row.gpu_frac/1e3},
                 root='/code',
                 connection_kwargs={
                     'host': row.ssh_host, 

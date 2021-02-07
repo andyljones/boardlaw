@@ -10,8 +10,8 @@ from logging import getLogger
 log = getLogger(__name__)
 
 DISK = 25
-MAX_DPH = 2
-MAX_INSTANCES = 3
+MAX_DPH = 4
+MAX_INSTANCES = 8
 
 OFFER_COLS = [
     'bundled_results',

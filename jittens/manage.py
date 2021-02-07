@@ -86,14 +86,15 @@ def refresh(ms=None):
 def finished():
     return all(j.status == 'dead' for j in jobs.jobs().values())
 
-def cleanup():
+def cleanup(names=None):
     for job in jobs.jobs('dead').values():
-        log.info(f'Cleaning up {job.name}')
-        machines.cleanup(job)
-        if job.archive:
-            Path(job.archive).unlink()
-        with jobs.update() as js:
-            del js[job.name]
+        if names is not None and job.name in names:
+            log.info(f'Cleaning up {job.name}')
+            machines.cleanup(job)
+            if job.archive:
+                Path(job.archive).unlink()
+            with jobs.update() as js:
+                del js[job.name]
 
 def fetch(source, target):
     from jittens.machines import machines
@@ -102,6 +103,7 @@ def fetch(source, target):
     machines = machines()
     ps = {}
     queue = iter(jobs().items())
+    fetched = []
     while True:
         # Anything more than 10 and default SSH configs start having trouble, throwing 235 & 255 errors.
         # Need to up `MaxStartups` if you wanna go higher.
@@ -126,7 +128,10 @@ def fetch(source, target):
                 log.info(f'Failed to fetch {name}: {e}')
             else:
                 log.debug(f'Fetched "{name}"')
+                fetched.append(name)
             del ps[name]
+
+    return fetched
 
 def tails(path, jobglob='*', count=5):
     from pathlib import Path
