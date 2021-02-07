@@ -102,7 +102,6 @@ def min_elos():
     return {b: mohex.elos(f'mohex-{b}').μd[-1, 0].round(2) for b in [3, 5, 7, 9, 11]}
 
 def plot_sigmoids(full):
-
     data = tail_means(full)
     data['state'] = data.depth*data.width
     data['params'] = data.depth*data.width**2
@@ -111,6 +110,11 @@ def plot_sigmoids(full):
     data['rel_elo'] = 1 - data.elo / min_elos().reindex(data.boardsize.values).values
     (ggplot(data=data)
         + geom_point(mapping=aes(x='width', y='rel_elo', color='depth'))
-        + facet_wrap('boardsize', ncol=1)
+        + facet_wrap('boardsize', nrow=1)
         + scale_x_continuous(trans='log2')
-        + scale_color_continuous(trans='log2'))
+        + scale_color_continuous(trans='log2')
+        + theme_matplotlib()
+        + theme(
+            figure_size=(18, 6), 
+            strip_background=element_rect(color='w', fill='w'),
+            panel_grid=element_line(color='k', alpha=.1)))
