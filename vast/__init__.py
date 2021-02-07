@@ -3,10 +3,9 @@ from .api import launch, status, offers, wait, destroy
 
 log = getLogger(__name__)
 
-def jittenate(local=False):
+def jittenate(local=False, ssh_accept=True):
     import jittens
     jittens.machines.clear()
-
     if local:
         jittens.local.add(root='.jittens/local', resources={'gpu': 2})
 
@@ -14,7 +13,7 @@ def jittenate(local=False):
         if row.actual_status == 'running':
             jittens.ssh.add(name,
                 resources={
-                    'gpu': row.num_gpus,
+                    'gpu': row.num_gpus if ssh_accept else 0,
                     'memory': row.cpu_ram*row.gpu_frac/1e3},
                 root='/code',
                 connection_kwargs={

@@ -38,7 +38,7 @@ def module(x):
     return importlib.import_module(module)
 
 def machines() -> Dict[str, Machine]:
-    machines = {'local': {}, 'ssh': {}}
+    machines = {}
     for path in jobs.ROOT.joinpath('machines').iterdir():
         if path.suffix in ('.json',):
             config = json.loads(path.read_text())
@@ -49,11 +49,7 @@ def machines() -> Dict[str, Machine]:
             
         name = path.with_suffix('').name
         machine = module(config).Machine.create(name=name, **config)
-        machines[config['type']][name] = machine
-
-    #TODO: Come up with a general way to do this. I want locals before SSH so jobs are 
-    # submitted locally before remotely.
-    machines = {**machines['local'], **machines['ssh']}
+        machines[name] = machine
 
     return machines
 
