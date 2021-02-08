@@ -25,11 +25,13 @@ def is_missing(proposal, acks):
     return keystr(proposal) not in {keystr(a) for a in acks}
 
 def launch():
-    desc = 'main/5'
+    boardsize = 9
+    limits = {3: 10, 5: 30, 7: 90, 9: 180}
+    desc = f'main/{boardsize}'
     acks = acknowledged(desc)
-    for width in [1, 2, 4, 8]:
-        for depth in [1, 2, 4, 8]:
-            params = dict(width=width, depth=depth, boardsize=5, timelimit=45*60, desc=desc)
+    for width in [64, 128, 256, 512, 1024]:
+        for depth in [1, 2, 4, 8, 16, 32]:
+            params = dict(width=width, depth=depth, boardsize=boardsize, timelimit=limits[boardsize]*60, desc=desc)
             if is_missing(params, acks):
                 log.info(f'Launching {params}')
                 jittens.jobs.submit(
@@ -37,6 +39,7 @@ def launch():
                     dir='.',
                     resources={'gpu': 1},
                     params=params)
+
 
 
 def fetch():
@@ -66,4 +69,4 @@ def progress():
     active_jobs = jittens.jobs.jobs('active')
     active_runs = runs.pandas()._env.dropna().apply(lambda p: p.get('JITTENS_NAME', '') in active_jobs).pipe(lambda s: s.index[s])
     keys = runs.pandas().loc[active_runs, 'params'].apply(lambda p: (p['boardsize'], p['width'], p['depth']))
-    return data.load_field('elo-mohex', 'μ').notnull().sum().reindex(keys.values)
+    return data.load_field('elo-mohex', 'μ').resample('1min').mean().bfill().notnull().sum().reindex(keys.values)

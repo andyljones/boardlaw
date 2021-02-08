@@ -1,3 +1,4 @@
+import time
 import invoke
 import re
 from fabric import Connection
@@ -21,6 +22,7 @@ def worker_env(job, allocation):
 class Machine(machines.Machine):
     connection_kwargs: Dict = field(default_factory=dict)
     _connection: Any = None
+    _connected: float = 0.
     _processes: Optional[List[int]] = None
 
     @staticmethod
@@ -34,8 +36,12 @@ class Machine(machines.Machine):
 
     @property
     def connection(self):
-        if self._connection is None:
+        # I think some of my problems with very slow rsync transfers comes from old SSH connections gumming 
+        # things up. Or at least, I've noticed them be much faster after a kernel restart, and this is the only
+        # state that's held call-to-call. Let's try evicting the cache periodically.
+        if self._connected + 900 < time.time():
             self._connection = Connection(**self.connection_kwargs) 
+            self._connected = time.time()
         return self._connection
 
     @property
