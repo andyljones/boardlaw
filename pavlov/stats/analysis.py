@@ -67,7 +67,7 @@ def periodic(*args, period=900, **kwargs):
         else:
             time.sleep(1)
 
-def purge(minlen=900, cutoff=300):
+def purge(minlen=300, cutoff=900):
     from tqdm.auto import tqdm
     for r in tqdm(runs.runs()):
         try:

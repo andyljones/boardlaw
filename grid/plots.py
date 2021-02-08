@@ -38,3 +38,27 @@ def plot_sample_eff(df):
         labs(title='sample efficiency forms a large part of the advantage of depth (7x7)') + 
         facet_wrap('width') +
         plots.mpl_theme(18, 12))
+
+def plot_convergence_rate(df):
+    diffs = {}
+    for b, t in data.TAILS.items():
+        live = df.elo[b].dropna(0, 'all')
+        diffs[b] = (live - live.iloc[-1])/data.min_elos().abs()[b]
+    diffs = pd.concat(diffs, 1)
+
+    (ggplot(
+        data=(
+            diffs
+                .unstack()
+                .rename('elo')
+                .reset_index()
+                .rename(columns={'level_0': 'boardsize'})
+                .dropna()
+                .assign(
+                    s=lambda df: df._time.astype(int)/1e9,
+                    g=lambda df: df.depth.astype(str) + df.width.astype(str)))) + 
+        geom_line(aes(x='_time', y='elo', group='g', color='np.log2(width)')) + 
+        facet_wrap('boardsize', scales='free') +
+        plots.mpl_theme() + 
+        labs(title='runs converge much faster than I thought') + 
+        theme(panel_spacing_y=.3, panel_spacing_x=.5))

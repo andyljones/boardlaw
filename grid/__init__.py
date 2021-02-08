@@ -61,6 +61,10 @@ def refresh():
             log.info(f'Failed with error {e}')
             time.sleep(60)
 
+    fetched = fetch()
+    jittens.manage.cleanup(fetched)
+
+
 def progress():
     active_jobs = jittens.jobs.jobs('active')
     active_runs = runs.pandas()._env.dropna().apply(lambda p: p.get('JITTENS_NAME', '') in active_jobs).pipe(lambda s: s.index[s])
