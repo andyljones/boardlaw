@@ -42,13 +42,17 @@ def gather_stats():
     from datetime import datetime
     from pathlib import Path
     import json
-    count = offers('cuda_max_good >= 11.1 & gpu_name == "RTX 2080 Ti"').groupby('machine_id').num_gpus.max().sum()
+    offered = offers('cuda_max_good >= 11.1 & gpu_name == "RTX 2080 Ti"').groupby('machine_id').num_gpus.max().sum()
 
-    log.info(f'Count: {count}')
+    s = status()
+    hired = s.num_gpus.sum() if len(s) else 0
+
+    log.info(f'Offered: {offered}; hired {hired}')
 
     path = Path('output/vast-stats.json')
     if not path.exists():
         path.write_text('[]')
     db = json.loads(path.read_text())
-    db.append({'date': datetime.now().strftime(r'%Y-%m-%d %H%M%S'), 'count': count})
+    db.append({'date': datetime.now().strftime(r'%Y-%m-%d %H%M%S'), 'offered': int(offered), 'hired': int(hired)})
+    path.write_text(json.dumps(db))
 
