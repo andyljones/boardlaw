@@ -126,6 +126,8 @@ RUN cd /usr/bin/ && \
     wget https://raw.githubusercontent.com/vast-ai/vast-python/master/vast.py -O vast && \
     chmod +x vast
 
+ADD rsyncd.conf /etc/
+
 # Set up the entrypoint script
 ADD dev.sh /usr/bin/
 
