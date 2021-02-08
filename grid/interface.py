@@ -19,7 +19,7 @@ def acknowledged(desc):
     return fresh + active + fetched
 
 def keystr(d):
-    return str({k: d[k] for k in ('boardsize', 'width', 'depth')})
+    return str({k: d[k] for k in ('boardsize', 'width', 'depth', 'timelimit')})
 
 def is_missing(proposal, acks):
     return keystr(proposal) not in {keystr(a) for a in acks}
@@ -39,8 +39,6 @@ def launch():
                     dir='.',
                     resources={'gpu': 1},
                     params=params)
-
-
 
 def fetch():
     return jittens.manage.fetch('output/pavlov/', 'output/pavlov/')
@@ -70,3 +68,6 @@ def progress():
     active_runs = runs.pandas()._env.dropna().apply(lambda p: p.get('JITTENS_NAME', '') in active_jobs).pipe(lambda s: s.index[s])
     keys = runs.pandas().loc[active_runs, 'params'].apply(lambda p: (p['boardsize'], p['width'], p['depth']))
     return data.load_field('elo-mohex', 'μ').resample('1min').mean().bfill().notnull().sum().reindex(keys.values)
+
+def offers():
+    vast.offers('cuda_max_good >= 11.1 & gpu_name == "RTX 2080 Ti"')

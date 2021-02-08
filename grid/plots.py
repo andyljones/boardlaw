@@ -25,7 +25,9 @@ def plot_sigmoids(aug):
             y='normalised elo (entirely random through to perfect play)')
         + mpl_theme(18, 6))
 
-def plot_sample_eff(df):
+def plot_sample_eff():
+    df = data.load()
+
     return (ggplot(
         data=df
             .iloc[5:]
@@ -37,9 +39,11 @@ def plot_sample_eff(df):
         geom_line(aes(x='np.log10(samples)', y='elo/9.03 + 1', group='depth', color='np.log2(depth)')) + 
         labs(title='sample efficiency forms a large part of the advantage of depth (7x7)') + 
         facet_wrap('width') +
-        plots.mpl_theme(18, 12))
+        mpl_theme(18, 12))
 
 def plot_convergence_rate(df):
+    df = data.load()
+
     diffs = {}
     for b, t in data.TAILS.items():
         live = df.elo[b].dropna(0, 'all')
@@ -62,3 +66,20 @@ def plot_convergence_rate(df):
         plots.mpl_theme() + 
         labs(title='runs converge much faster than I thought') + 
         theme(panel_spacing_y=.3, panel_spacing_x=.5))
+
+def plot_compute_frontier():
+    df = data.load()
+    (ggplot(
+            data=df
+                .iloc[5:]
+                .ewm(span=5).mean()
+                .unstack().unstack(0)
+                .reset_index()
+                .assign(g=lambda df: df.width.astype(str)+df.depth.astype(str))
+                .assign(norm_elo=data.normalised_elo)
+                .dropna()) + 
+            geom_line(aes(x='np.log10(flops)', y='norm_elo', color='depth', group='g')) + 
+            labs(title='compute-efficient frontier is dominated by the low-depth architectures') +
+            facet_wrap('boardsize') +
+            coord_cartesian(None, (0, 1)) +
+            mpl_theme(18, 12))

@@ -117,10 +117,9 @@ def fetch(source, target):
                     else:
                         log.info(f'Skipping "{name}" as the machine "{job.machine}" is no longer available')
             except StopIteration:
-                pass
+                if not ps:
+                    break
 
-        if not ps:
-            break
 
         for name in list(ps):
             try:

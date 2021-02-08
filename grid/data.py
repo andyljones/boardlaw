@@ -46,6 +46,9 @@ def min_elos():
     from boardlaw.arena import mohex
     return {b: mohex.elos(f'mohex-{b}').μd[-1, 0].round(2) for b in [3, 5, 7, 9, 11]}
 
+def normalised_elo(df):
+    return 1 - df.elo / df.boardsize.map(min_elos())
+
 def augmented():
     df = tail_means(load())
     df['state'] = df.depth*df.width
