@@ -19,10 +19,10 @@ def worker_env(job, allocation):
     return ' '.join(s)
 
 _cache = {}
-def connection_pool(name, **kwargs):
+def connection_pool(name, kwargs):
     global _cache
     if name not in _cache:
-        _cache = Connection(**kwargs)  
+        _cache[name] = Connection(**kwargs)  
     return _cache[name]
 
 @dataclass
@@ -41,7 +41,7 @@ class Machine(machines.Machine):
 
     @property
     def connection(self):
-        return connection_pool(self.name)
+        return connection_pool(self.name, self.connection_kwargs)
 
     @property
     def processes(self):

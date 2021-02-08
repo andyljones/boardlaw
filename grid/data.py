@@ -25,15 +25,10 @@ def load_field(*args, key=('boardsize', 'width', 'depth')):
     return df.mean(axis=1, level=[0, 1, 2])
 
 def load():
-    df = pd.concat({
+    return pd.concat({
         'elo': load_field('elo-mohex', 'μ'),
+        'elo_std': load_field('elo-mohex', 'σ'),
         'samples': load_field('count.samples')}, 1)
-    
-    flops = df['samples'].columns.to_frame().pipe(lambda df: df.width**3 * df.depth * 64)
-    aug = pd.concat([df, 
-        pd.concat({'flops': df['samples'].mul(flops, axis=1)}, 1)], 1)
-
-    return aug
 
 def tail_means(df):
     tails = pd.concat({b: df.xs(b, 1, 1).dropna(0, 'all').tail(t).mean(0) for b, t in TAILS.items()})

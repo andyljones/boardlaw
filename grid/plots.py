@@ -72,14 +72,18 @@ def plot_compute_frontier():
     (ggplot(
             data=df
                 .iloc[5:]
-                .ewm(span=5).mean()
+                .pipe(lambda df: df.ewm(span=10).mean().where(df.bfill().notnull()))
                 .unstack().unstack(0)
                 .reset_index()
+                .assign(params=lambda df: df.width**2 * df.depth)
+                .assign(flops=lambda df: 64*df.width**3 * df.depth * df.samples)
                 .assign(g=lambda df: df.width.astype(str)+df.depth.astype(str))
                 .assign(norm_elo=data.normalised_elo)
                 .dropna()) + 
-            geom_line(aes(x='np.log10(flops)', y='norm_elo', color='depth', group='g')) + 
-            labs(title='compute-efficient frontier is dominated by the low-depth architectures') +
+            geom_line(aes(x='flops', y='norm_elo', color='params', group='g')) + 
+            #labs(title='compute-efficient frontier is dominated by the low-depth architectures') +
+            scale_x_continuous(trans='log10') + 
+            scale_color_continuous(trans='log10') + 
             facet_wrap('boardsize') +
             coord_cartesian(None, (0, 1)) +
-            mpl_theme(18, 12))
+            mpl_theme(18, 15))
