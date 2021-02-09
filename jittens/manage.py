@@ -107,7 +107,7 @@ def fetch(source, target):
     while True:
         # Anything more than 10 and default SSH configs start having trouble, throwing 235 & 255 errors.
         # Need to up `MaxStartups` if you wanna go higher.
-        if len(ps) <= 1:
+        if len(ps) <= 4:
             try:
                 name, job = next(queue)
                 if job.status in ('active', 'dead'):

@@ -15,8 +15,6 @@ solve 9x9 `Hex <http://www.mseymour.ca/hex_book/hexstrat0.html>`_ to perfect pla
     :alt: A plot of time-till-perfect-play against board size
     :width: 640
 
-(FWIW this stalls out at 11x11, and figuring out why is on my to-do list)
-
 'Perfect play' is judged by 'being on-par with `MoHex <https://github.com/cgao3/benzene-vanilla-cmake>`_', which claims 
 perfect play on boards up to size 9x9.
 
@@ -29,10 +27,8 @@ Because of the low-resource constraint, this implementation does a few things un
 * It leverages :github:`Monte-Carlo Tree Search as Regularized Policy Optimization <https://arxiv.org/abs/2007.12509>` 
   to get away with doing ~64 sims compared to the usual ~800. It also subs out the bisection search recommended in the 
   paper for a Newton solver, which is much faster.
-* It disposes of the replay buffer since stale, repeated samples are bad for training speed 
+* It uses a minimal replay buffer of 64 steps, as repeated samples are bad for training speed 
   (`p55, 57 <https://arxiv.org/pdf/1912.06680.pdf>`_)
-* To suppress the cyclic behaviour that can show up in self-play without a replay buffer, for 20% of games it uses a 
-  league based on `OpenAI Five's (p59) <https://arxiv.org/pdf/1912.06680.pdf>`_.
 * It uses fully-connected resnets, as convnets seem to be overkill for boards this small.
 * It uses `ReZero <https://arxiv.org/abs/2003.04887>`_ initialization to skip out on (slow, annoying) layernorms 
   and batchnorms.
