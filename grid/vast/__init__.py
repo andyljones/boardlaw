@@ -56,3 +56,8 @@ def gather_stats():
     db.append({'date': datetime.now().strftime(r'%Y-%m-%d %H%M%S'), 'offered': int(offered), 'hired': int(hired)})
     path.write_text(json.dumps(db))
 
+def stats():
+    import pandas as pd
+    from pathlib import Path
+    return pd.read_json('output/vast-stats.json')
+
