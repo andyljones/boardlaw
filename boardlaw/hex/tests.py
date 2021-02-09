@@ -156,7 +156,7 @@ def test_open_spiel():
     import pyspiel
 
     e = 1
-    ours = Hex.initial(64, 11)
+    ours = Hex.initial(64, 11, device='cpu')
 
     theirs = pyspiel.load_game("hex")
     state = theirs.new_initial_state()
