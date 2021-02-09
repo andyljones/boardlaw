@@ -1,3 +1,4 @@
+import sys
 import torch
 import torch.cuda
 import sysconfig
@@ -5,7 +6,7 @@ from pkg_resources import resource_filename
 
 DEBUG = False
 
-def load(pkg, files=('wrappers.cpp', 'kernels.cu')):
+def load_cuda(pkg, files):
     # This import is pretty slow, so let's defer it
     import torch.utils.cpp_extension
 
@@ -24,6 +25,33 @@ def load(pkg, files=('wrappers.cpp', 'kernels.cu')):
             f'-lpython{libpython_ver}', '-ltorch', '-ltorch_python', '-lc10_cuda', '-lc10', 
             f'-L{torch_libdir}', f'-Wl,-rpath,{torch_libdir}',
             f'-L{python_libdir}', f'-Wl,-rpath,{python_libdir}'])
+
+def load_cpu(pkg, files):
+    # This import is pretty slow, so let's defer it
+    import torch.utils.cpp_extension
+
+    name = pkg.split('.')[-1] + 'cuda' 
+    [torch_libdir] = torch.utils.cpp_extension.library_paths()
+    python_libdir = sysconfig.get_config_var('LIBDIR')
+    libpython_ver = sysconfig.get_config_var('LDVERSION')
+    return torch.utils.cpp_extension.load(
+        name=name, 
+        sources=[resource_filename(pkg, f'cpp/{fn}') for fn in files], 
+        extra_cflags=['-std=c++17', '-DNOCUDA'] + (['-g'] if DEBUG else []), 
+        with_cuda=False,
+        extra_ldflags=[
+            f'-lpython{libpython_ver}', '-ltorch', '-ltorch_python', 
+            f'-L{torch_libdir}', f'-Wl,-rpath,{torch_libdir}',
+            f'-L{python_libdir}', f'-Wl,-rpath,{python_libdir}'])
+
+def load(pkg, files=('wrappers.cpp', 'kernels.cu')):
+    try:
+        torch.cuda.init()
+    except RuntimeError:
+        return load_cpu(pkg, [f for f in files if not f.endswith('.cu')])
+    else:
+        return load_cuda(pkg, files)
+
 
 def assert_shape(x, s):
     assert (x.ndim == len(s)) and x.shape == s, f'Expected {s}, got {x.shape}'

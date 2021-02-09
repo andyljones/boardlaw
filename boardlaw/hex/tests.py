@@ -183,8 +183,8 @@ def test_open_spiel():
             their_state = their_state.replace(o, n)
         assert our_state == their_state
 
-def benchmark_step(n_envs=4096, n_steps=1024):
-    worlds = Hex.initial(n_envs)
+def benchmark_step(n_envs=4096, n_steps=1024, device='cuda'):
+    worlds = Hex.initial(n_envs, device=device)
 
     for _ in range(n_steps):
         actions = torch.distributions.Categorical(probs=worlds.valid.float()).sample()
@@ -192,22 +192,26 @@ def benchmark_step(n_envs=4096, n_steps=1024):
 
     actions = torch.distributions.Categorical(probs=worlds.valid.float()).sample().int()
 
-    torch.cuda.synchronize()
+    if device == 'cuda':
+        torch.cuda.synchronize()
     start = time.time()
     for _ in range(n_steps):
         cuda.step(worlds.board, worlds.seats, actions)
-    torch.cuda.synchronize()
+    if device == 'cuda':
+        torch.cuda.synchronize()
     print(f'{n_envs*n_steps/(time.time() - start):.0f} samples/sec')
 
-def benchmark_obs(n_envs=4096, n_steps=1024):
-    worlds = Hex.initial(n_envs, boardsize=9)
+def benchmark_obs(n_envs=4096, n_steps=1024, device='cuda'):
+    worlds = Hex.initial(n_envs, device=device)
     worlds['seats'] = torch.arange(worlds.n_envs, device=worlds.device) % 2
 
-    torch.cuda.synchronize()
+    if device == 'cuda':
+        torch.cuda.synchronize()
     start = time.time()
     for _ in range(n_steps):
         cuda.observe(worlds.board, worlds.seats)
-    torch.cuda.synchronize()
+    if device == 'cuda':
+        torch.cuda.synchronize()
     print(f'{n_envs*n_steps/(time.time() - start):.0f} samples/sec')
 
 def obs_test():

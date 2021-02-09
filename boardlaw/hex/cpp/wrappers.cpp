@@ -8,6 +8,15 @@ namespace py = pybind11;
 using namespace pybind11::literals;
 using namespace std::string_literals;
 
+#ifdef NOCUDA
+TT step(TT board, TT seats, TT actions) {
+    return hexcpu::step(board, seats, actions);
+}
+
+TT observe(TT board, TT seats) {
+    return hexcpu::observe(board, seats);
+}
+#else
 TT step(TT board, TT seats, TT actions) {
     if (board.device().is_cuda()) {
         return hexcuda::step(board, seats, actions);
@@ -23,6 +32,7 @@ TT observe(TT board, TT seats) {
         return hexcpu::observe(board, seats);
     }
 }
+#endif
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 
