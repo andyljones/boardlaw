@@ -1,7 +1,6 @@
-#include "../../cpp/kernels.cu"
 #include "common.h"
 
-const uint BLOCK = 8;
+namespace hexcpu {
 
 enum {
     EMPTY,
@@ -13,18 +12,7 @@ enum {
     RIGHT
 };
 
-struct Aux {
-    uint8_t* colors;
-    uint b;
-    uint x;
-
-    static uint colors_size(int S) {
-        return S*S*3*sizeof(uint8_t);
-    }
-
-};
-
-__host__ __device__ void flood(C3D::PTA board, int row, int col, uint8_t new_val, Aux aux) {
+void flood(C3D::TA board, int row, int col, uint8_t new_val, uint b) {
     const uint S = board.size(1);
 
     const int neighbours[6][2] = {{-1, 0}, {-1, +1}, {0, -1}, {0, +1}, {+1, -1}, {+1, 0}};
@@ -32,17 +20,17 @@ __host__ __device__ void flood(C3D::PTA board, int row, int col, uint8_t new_val
     // If we don't need to flood the value, break
     if (new_val < TOP) { return; }
 
-    uint8_t old_val = board[aux.b][row][col];
+    uint8_t old_val = board[b][row][col];
 
     // Set up a queue to keep track of which cells need exploring
     int start = 0;
     int end = 1;
-    uint8_t *queue = (uint8_t*)&aux.colors[(3*aux.x+0)*S*S];
+    uint8_t *queue = (uint8_t*)malloc(S*S*2*sizeof(uint8_t));
     queue[0] = row;
     queue[1] = col;
 
     // Set up a mask to keep track of which cells we've already seen
-    uint8_t *seen = (uint8_t*)&aux.colors[(3*aux.x+2)*S*S];
+    uint8_t *seen = (uint8_t*)malloc(S*S*sizeof(uint8_t));
     for (int s=0; s<S*S; s++) { seen[s] = 0; }
 
     while (true) {
@@ -53,12 +41,12 @@ __host__ __device__ void flood(C3D::PTA board, int row, int col, uint8_t new_val
         int r0 = queue[2*start+0];
         int c0 = queue[2*start+1];        
         start += 1;
-        uint8_t cell_val = board[aux.b][r0][c0];
+        uint8_t cell_val = board[b][r0][c0];
 
         // If the old and new vals are the same, continue flooding!
         if (cell_val == old_val) {
             // Put the new value into place
-            board[aux.b][r0][c0] = new_val;
+            board[b][r0][c0] = new_val;
             // and add the neighbours to the queue
             for (int n=0; n<6; n++) {
                 int r = r0 + neighbours[n][0];
@@ -79,18 +67,18 @@ __host__ __device__ void flood(C3D::PTA board, int row, int col, uint8_t new_val
     }
 }
 
-__host__ __device__ void step_common(
-    C3D::PTA board, I1D::PTA seats, I1D::PTA actions, F2D::PTA results, Aux aux) {
+void step_kernel(
+    C3D::TA board, I1D::TA seats, I1D::TA actions, F2D::TA results, uint b) {
 
     const uint B = board.size(0);
     const uint S = board.size(1);
 
-    if (aux.b >= B) return;
+    if (b >= B) return;
 
-    const int seat = seats[aux.b]; 
+    const int seat = seats[b]; 
 
     // Swap rows and cols if we're playing white
-    const int action = actions[aux.b];
+    const int action = actions[b];
     int row, col;
     if (seat == 0) { row = action / S, col = action % S; }
     else           { row = action % S, col = action / S; }
@@ -111,15 +99,15 @@ __host__ __device__ void step_common(
         else if (r >= S) { adj[BOT] = true; }
         else if (c <  0) { adj[LEFT] = true; }
         else if (c >= S) { adj[RIGHT] = true; }
-        else { adj[board[aux.b][r][c]] = true; }
+        else { adj[board[b][r][c]] = true; }
     }
 
     // Use the adjacency to decide what the new cell should be
     char new_val;
     if (seat) {
         if (adj[LEFT] && adj[RIGHT]) { 
-            results[aux.b][0] = -1.f;
-            results[aux.b][1] = +1.f;
+            results[b][0] = -1.f;
+            results[b][1] = +1.f;
         } 
 
         if (adj[LEFT]) { new_val = LEFT; } 
@@ -127,8 +115,8 @@ __host__ __device__ void step_common(
         else { new_val = WHITE; }
     } else {
         if (adj[TOP] && adj[BOT]) {
-            results[aux.b][0] = +1.f;
-            results[aux.b][1] = -1.f;
+            results[b][0] = +1.f;
+            results[b][1] = -1.f;
         } 
 
         if (adj[TOP]) { new_val = TOP; } 
@@ -136,58 +124,31 @@ __host__ __device__ void step_common(
         else { new_val = BLACK; }
     }
 
-    board[aux.b][row][col] = seat? WHITE : BLACK;
+    board[b][row][col] = seat? WHITE : BLACK;
 
-    flood(board, row, col, new_val, aux);
+    flood(board, row, col, new_val, b);
 }
 
-__global__ void step_cuda(
-    C3D::PTA board, I1D::PTA seats, I1D::PTA actions, F2D::PTA results) {
-
-    const uint b = blockIdx.x*blockDim.x + threadIdx.x;
-    extern __shared__ uint8_t colors[];
-    step_common(board, seats, actions, results, Aux{colors, b, threadIdx.x});
-}
-
-__host__ void step_cpu(
-    C3D::PTA board, I1D::PTA seats, I1D::PTA actions, F2D::PTA results, uint b) {
-
-    const uint S = board.size(1);
-    uint8_t* colors = (uint8_t*)malloc(Aux::colors_size(S));
-    step_common(board, seats, actions, results, Aux{colors, b, 0});
-    free(colors);
-}
-
-__host__ TT step(TT board, TT seats, TT actions) {
+TT step(TT board, TT seats, TT actions) {
     const uint B = board.size(0);
     const uint S = board.size(1);
 
     TT results = board.new_zeros({B, 2}, at::kFloat);
-    if (board.device().is_cuda()) {
-        c10::cuda::CUDAGuard g(board.device());
-        const uint n_blocks = (B + BLOCK - 1)/BLOCK;
-        step_cuda<<<{n_blocks}, {BLOCK}, BLOCK*Aux::colors_size(S), stream()>>>(
-            C3D(board).pta(), I1D(seats).pta(), I1D(actions).pta(), F2D(results).pta());
-        C10_CUDA_CHECK(cudaGetLastError());
-    } else {
-        for (uint b=0; b<B; b++) {
-            step_cpu(
-                C3D(board).pta(), I1D(seats).pta(), I1D(actions).pta(), F2D(results).pta(), b);
-        }
+
+    for (uint b=0; b<B; b++) {
+        step_kernel(C3D(board).ta(), I1D(seats).ta(), I1D(actions).ta(), F2D(results).ta(), b);
     }
 
     return results;
 }
 
-__global__ void observe_kernel(C3D::PTA board, I1D::PTA seats, F4D::PTA obs) {
+void observe_kernel(C3D::TA board, I1D::TA seats, F4D::TA obs, uint b) {
     const uint B = board.size(0);
     const uint S = board.size(1);
-    const int b = blockIdx.x*blockDim.x + threadIdx.x;
 
     if (b >= B) return;
 
-    extern __shared__ uint8_t shared[];
-    uint8_t* colors = (uint8_t*)&shared[threadIdx.x*S*S];
+    uint8_t* colors = (uint8_t*)malloc(S*S*sizeof(uint8_t));
 
     // Copy the color into shared memory
     for (int i=0; i<S; i++) {
@@ -222,9 +183,7 @@ __global__ void observe_kernel(C3D::PTA board, I1D::PTA seats, F4D::PTA obs) {
     }
 }
 
-__host__ TT observe(TT board, TT seats) {
-    c10::cuda::CUDAGuard g(board.device());
-
+TT observe(TT board, TT seats) {
     auto flatboard = board.clone().view({-1, board.size(-1), board.size(-1)});
     auto flatseats = seats.clone().view({-1}).to(at::kInt);
 
@@ -233,13 +192,14 @@ __host__ TT observe(TT board, TT seats) {
 
     auto obs = flatboard.new_zeros({B, S, S, 2}, at::kFloat);
 
-    const uint n_blocks = (B + BLOCK - 1)/BLOCK;
-    observe_kernel<<<{n_blocks}, {BLOCK}, BLOCK*S*S*sizeof(uint8_t), stream()>>>(
-        C3D(flatboard).pta(), I1D(flatseats).pta(), F4D(obs).pta());
-    C10_CUDA_CHECK(cudaGetLastError());
+    for (uint b=0; b<B; b++) {
+        observe_kernel(C3D(flatboard).ta(), I1D(flatseats).ta(), F4D(obs).ta(), b);
+    }
 
     auto sizes = board.sizes().vec();
     sizes.push_back(2);
     return obs.view(sizes);
+
+}
 
 }

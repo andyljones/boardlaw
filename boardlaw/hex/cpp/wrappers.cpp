@@ -2,10 +2,27 @@
 #include <torch/csrc/autograd/variable.h>
 #include <pybind11/pybind11.h>
 #include "common.h"
+#include "cpu.cpp"
 
 namespace py = pybind11;
 using namespace pybind11::literals;
 using namespace std::string_literals;
+
+TT step(TT board, TT seats, TT actions) {
+    if (board.device().is_cuda()) {
+        return hexcuda::step(board, seats, actions);
+    } else {
+        return hexcpu::step(board, seats, actions);
+    }
+}
+
+TT observe(TT board, TT seats) {
+    if (board.device().is_cuda()) {
+        return hexcuda::observe(board, seats);
+    } else {
+        return hexcpu::observe(board, seats);
+    }
+}
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 

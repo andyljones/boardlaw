@@ -28,6 +28,7 @@ template <typename T, size_t D>
 struct TensorProxy {
 
     using PTA = at::PackedTensorAccessor32<T, D, RestrictPtrTraits>;
+    using TA = at::TensorAccessor<T, D>;
     TT t; 
 
     TensorProxy(const at::Tensor t) : t(t) {
@@ -37,6 +38,7 @@ struct TensorProxy {
     }
 
     PTA pta() const { return t.packed_accessor32<T, D, RestrictPtrTraits>(); }
+    TA ta() const { return t.accessor<T, D>(); }
 
     size_t size(const size_t i) const { return t.size(i); }
 };
