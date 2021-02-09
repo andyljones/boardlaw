@@ -67,6 +67,18 @@ def plot_convergence_rate(df):
         labs(title='runs converge much faster than I thought') + 
         theme(panel_spacing_y=.3, panel_spacing_x=.5))
 
+def flops(df):
+    intake = (df.boardsize**2 + 1)*df.width
+    body = (df.width**2 + df.width) * df.depth
+    output = df.boardsize**2 * (df.width + 1)
+    return 64*df.samples*(intake + body + output)
+
+def params(df):
+    intake = (df.boardsize**2 + 1)*df.width
+    body = (df.width**2 + df.width) * df.depth
+    output = df.boardsize**2 * (df.width + 1)
+    return intake + body + output
+
 def plot_compute_frontier():
     df = data.load()
     n_sims = 64
@@ -76,8 +88,8 @@ def plot_compute_frontier():
                 .pipe(lambda df: df.ewm(span=10).mean().where(df.bfill().notnull()))
                 .unstack().unstack(0)
                 .reset_index()
-                .assign(params=lambda df: (df.width**2 * df.depth + 2*df.boardsize**2*df.width))
-                .assign(flops=lambda df: n_sims*df.samples*(df.width**3 * df.depth + 2*df.boardsize**2*df.width))
+                .assign(params=params)
+                .assign(flops=flops)
                 .assign(g=lambda df: df.width.astype(str)+df.depth.astype(str))
                 .assign(norm_elo=data.normalised_elo)
                 .dropna()) + 
