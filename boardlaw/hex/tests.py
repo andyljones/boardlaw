@@ -155,8 +155,8 @@ def open_spiel_display_str(env, e):
 def test_open_spiel():
     import pyspiel
 
-    e = 1
-    ours = Hex.initial(64, 11)
+    e = 10
+    ours = Hex.initial(64, 11, 'cpu')
 
     theirs = pyspiel.load_game("hex")
     state = theirs.new_initial_state()
@@ -179,6 +179,8 @@ def test_open_spiel():
             
         our_state = open_spiel_display_str(ours, e)
         their_state = open_spiel_board(state)
+        for o, n in {'>': 'R', 'v': 'B', '<': 'L', '^': 'T'}.items():
+            their_state = their_state.replace(o, n)
         assert our_state == their_state
 
 def benchmark_step(n_envs=4096, n_steps=1024):

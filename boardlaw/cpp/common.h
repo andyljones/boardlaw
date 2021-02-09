@@ -11,7 +11,7 @@ using TT = at::Tensor;
 
 #define CHECK_CUDA(x) TORCH_CHECK(x.is_cuda(), #x " must be a CUDA tensor")
 #define CHECK_CONTIGUOUS(x) TORCH_CHECK(x.is_contiguous(), #x " must be contiguous")
-#define CHECK_INPUT(x) CHECK_CUDA(x); CHECK_CONTIGUOUS(x)
+#define CHECK_INPUT(x) CHECK_CONTIGUOUS(x)
 
 // Define our own copy of RestrictPtrTraits here, as the at::RestrictPtrTraits is 
 // only included during NVCC compilation, not plain C++. This would mess things up 
