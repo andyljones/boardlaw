@@ -213,19 +213,3 @@ __host__ TT observe(TT board, TT seats) {
     return obs.view(sizes);
 
 }
-
-__host__ TT observe_old(TT board, TT seats) {
-    c10::cuda::CUDAGuard g(board.device());
-    auto black = ((board == BLACK) | (board == TOP) | (board == BOT));
-    auto white = ((board == WHITE) | (board == LEFT) | (board == RIGHT));
-    auto black_obs = at::stack({black, white}, -1).toType(at::kFloat);
-
-    auto white_obs = black_obs.transpose(-3, -2).flip(-1);
-
-    //TODO: This is garbage, what's a better way?
-    auto dims = std::vector<int64_t>({});
-    for (int d=0; d<seats.ndimension(); d++) { dims.push_back(seats.size(d)); }
-    for (int d=0; d<3; d++) { dims.push_back(1); }
-
-    return black_obs.where(seats.reshape(dims) == 0, white_obs);
-}

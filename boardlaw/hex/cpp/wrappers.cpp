@@ -11,5 +11,4 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 
     m.def("step", &step, "board"_a, "seats"_a, "actions"_a, py::call_guard<py::gil_scoped_release>());
     m.def("observe", &observe, "board"_a, "seats"_a, py::call_guard<py::gil_scoped_release>());
-    m.def("observe_old", &observe_old, "board"_a, "seats"_a, py::call_guard<py::gil_scoped_release>());
 }

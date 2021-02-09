@@ -187,7 +187,6 @@ def benchmark_step(n_envs=4096, n_steps=1024):
     for _ in range(n_steps):
         actions = torch.distributions.Categorical(probs=worlds.valid.float()).sample()
         worlds, transitions = worlds.step(actions)
-        assert (cuda.observe(worlds.board, worlds.seats) == cuda.observe_old(worlds.board, worlds.seats)).all()
 
     actions = torch.distributions.Categorical(probs=worlds.valid.float()).sample().int()
 
