@@ -12,7 +12,7 @@ def archive(run=-1):
         # so that we can use it on remote machines we've rsync'd to. Hooray!
         try:
             # /dev/null fixes this bug: https://github.com/ggreer/the_silver_searcher/issues/943#issuecomment-426096765
-            check_output('cd /code && ag -g "" -l -0 . </dev/null | xargs -0 tar -czvf ' + f.name, shell=True, stderr=STDOUT)
+            check_output('ag -g "" -l -0 . </dev/null | xargs -0 tar -czvf ' + f.name, shell=True, stderr=STDOUT)
         except CalledProcessError as e:
             log.error(f'Archival failed with output "{e.stdout.decode()}"')
             raise 

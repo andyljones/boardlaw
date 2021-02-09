@@ -69,14 +69,15 @@ def plot_convergence_rate(df):
 
 def plot_compute_frontier():
     df = data.load()
+    n_sims = 64
     (ggplot(
             data=df
                 .iloc[5:]
                 .pipe(lambda df: df.ewm(span=10).mean().where(df.bfill().notnull()))
                 .unstack().unstack(0)
                 .reset_index()
-                .assign(params=lambda df: df.width**2 * df.depth)
-                .assign(flops=lambda df: 64*df.width**3 * df.depth * df.samples)
+                .assign(params=lambda df: (df.width**2 * df.depth + 2*df.boardsize**2*df.width))
+                .assign(flops=lambda df: n_sims*df.samples*(df.width**3 * df.depth + 2*df.boardsize**2*df.width))
                 .assign(g=lambda df: df.width.astype(str)+df.depth.astype(str))
                 .assign(norm_elo=data.normalised_elo)
                 .dropna()) + 
