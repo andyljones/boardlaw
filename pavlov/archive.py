@@ -37,6 +37,11 @@ def update():
         with runs.update(run) as i:
             del i['tag']
 
+def contents(run=-1):
+    tarpath = files.path(run, 'archive.tar.gz')
+    with tarfile.open(tarpath, 'r:gz') as f:
+        return f.getnames()
+
 def show(run=-1, path=''):
     from pygments import highlight
     from pygments.lexers import PythonLexer
