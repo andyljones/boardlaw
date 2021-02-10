@@ -127,9 +127,27 @@ def throttled_raw(run, name, f, throttle):
     if tests.timestamp() > last + pd.Timedelta(throttle, 's'):
         _save_raw(path, f())
 
-def load_raw(run, name):
+class MappedUnpickler(pickle.Unpickler):
+    # https://github.com/pytorch/pytorch/issues/16797#issuecomment-633423219
+
+    def __init__(self, *args, map_location='cpu', **kwargs):
+        self._map_location = map_location
+        super().__init__(*args, **kwargs)
+
+    def find_class(self, module, name):
+        if module == 'torch.storage' and name == '_load_from_bytes':
+            return lambda b: torch.load(BytesIO(b), map_location=self._map_location)
+        else: 
+            return super().find_class(module, name)
+
+def mapped_loads(s, device='cpu'):
+    bs = BytesIO(s)
+    unpickler = MappedUnpickler(bs, map_location=device)
+    return unpickler.load()
+
+def load_raw(run, name, device='cpu'):
     name = NAMED.format(name=name)
     path = files.path(run, name)
     if path.exists():
-        return pickle.loads(path.read_bytes())
+        return mapped_loads(path.read_bytes(), device)
     raise IOError(f'Couldn\'t find a file for "{run}" "{name}"')

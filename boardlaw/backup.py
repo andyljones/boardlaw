@@ -7,6 +7,7 @@ import b2sdk.v1 as b2
 import aljpy
 import multiprocessing
 from pavlov import runs, files, storage
+from tqdm.auto import tqdm
 
 @aljpy.memcache()
 def api(bucket):
@@ -45,21 +46,13 @@ def upload(local, remote):
         local_file=local,
         file_name=path)
 
-def cleanup():
-    from tqdm.auto import tqdm
-    from pavlov import files, runs, storage
-    for run, _ in tqdm(runs.runs().items()):
-        for _, fi in storage.snapshots(run).items():
-            files.remove(run, fi['path'].name)
-
-
 def ablate_run_snapshots(run):
-    for i, info in storage.snapshots(run).items():
+    for i, info in tqdm(storage.snapshots(run).items()):
         if (i == 0) or (np.log2(i) % 1 == 0):
             pass
         else:
             print(run, info['path'].name)
-            files.remove(run, info['path'].name)
+            files.remove('Removing', run, info['path'].name)
 
 def ablate_snapshots():
     for run, info in runs.runs().items():
@@ -67,7 +60,6 @@ def ablate_snapshots():
 
 
 def backup():
-    cleanup()
     sync_up('./output/pavlov', 'boardlaw:output/pavlov')
     sync_up('./output/experiments/architecture/results', 'boardlaw:output/experiments/architecture/results')
 
