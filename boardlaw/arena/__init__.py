@@ -1,7 +1,7 @@
 import pandas as pd
 import torch
 from rebar import dotdict
-from . import trials, mohex
+from . import trials, mohex, database
 from pavlov import storage, runs, logs, stats
 import time
 from logging import getLogger
