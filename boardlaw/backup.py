@@ -14,23 +14,34 @@ def api(bucket):
     api.authorize_account('production', **keys)
     return api
 
-def sync(source, dest):
-    bucket, path = dest.split(':')
+def sync_up(local, remote):
+    bucket, path = remote.split(':')
     workers = multiprocessing.cpu_count()
     syncer = b2.Synchronizer(workers)
     with b2.SyncReport(sys.stdout, False) as reporter:
         syncer.sync_folders(
-            source_folder=b2.parse_sync_folder(source, api(bucket)),
+            source_folder=b2.parse_sync_folder(local, api(bucket)),
             dest_folder=b2.parse_sync_folder(f'b2://{bucket}/{path}', api(bucket)),
             now_millis=int(round(time.time() * 1000)),
-            reporter=reporter
-        )
+            reporter=reporter)
 
-def upload(source, dest):
-    bucket, path = dest.split(':')
-    bucket = api(bucket).get_bucket_by_name(dest)
+def sync_down(local, remote, **kwargs):
+    bucket, path = remote.split(':')
+    workers = multiprocessing.cpu_count()
+    syncer = b2.Synchronizer(workers)
+    with b2.SyncReport(sys.stdout, False) as reporter:
+        syncer.sync_folders(
+            source_folder=b2.parse_sync_folder(f'b2://{bucket}/{path}', api(bucket)),
+            dest_folder=b2.parse_sync_folder(local, api(bucket)),
+            now_millis=int(round(time.time() * 1000)),
+            reporter=reporter
+            **kwargs)
+
+def upload(local, remote):
+    bucket, path = remote.split(':')
+    bucket = api(bucket).get_bucket_by_name(remote)
     bucket.upload_local_file(
-        local_file=source,
+        local_file=local,
         file_name=path)
 
 def cleanup():
@@ -42,8 +53,11 @@ def cleanup():
 
 def backup():
     cleanup()
-    sync('./output/pavlov', 'boardlaw:output/pavlov')
-    sync('./output/experiments/architecture/results', 'boardlaw:output/experiments/architecture/results')
+    sync_up('./output/pavlov', 'boardlaw:output/pavlov')
+    sync_up('./output/experiments/architecture/results', 'boardlaw:output/experiments/architecture/results')
+
+def fetch():
+    sync_down('./output/pavlov', 'boardlaw:output/pavlov')
 
 if __name__ == '__main__':
     backup()

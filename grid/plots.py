@@ -81,7 +81,6 @@ def params(df):
 
 def plot_compute_frontier():
     df = data.load()
-    n_sims = 64
     (ggplot(
             data=df
                 .iloc[5:]
