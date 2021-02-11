@@ -18,4 +18,4 @@ def evaluate(run, idx, max_games=1024, target_std=.05):
             break
 
         rate = (time.time() - start)/result.games
-        log.info(f'{rate:.0f}s per game; {rate*result.games:.0f}s so far, {rate*max_games}s expected')
+        log.info(f'{rate:.0f}s per game; {rate*result.games:.0f}s so far, {rate*max_games:0.f}s expected')

@@ -140,9 +140,10 @@ class MCTS:
 
     @profiling.nvtx
     def root(self):
-        #TODO: Bit of a hack this 
+        r = cuda.root(self._cuda())
         return arrdict.arrdict(
-            logits=cuda.root(self._cuda()).log(),
+            # This dumb thing is because log isn't implemented for half on CPU
+            logits=r.log() if (r.device.type == 'cuda') else r.float().log().half(),
             prior=self.decisions.logits[:, 0], # useful for monitoring KL div
             v=self.decisions.v[:, 0])
     
