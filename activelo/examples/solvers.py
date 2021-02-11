@@ -17,11 +17,15 @@ def generated_example():
 
     activelo.plot(trace)
 
-def saved_example(filename):
+def example(filename):
     raw = np.load(resource_filename(__package__, filename))
     n = torch.as_tensor(raw['n'])
     w = torch.as_tensor(raw['w'])
     torch.set_rng_state(torch.as_tensor(raw['rng']))
+    return n, w
+
+def saved_example(filename):
+    n, w = example(filename)
 
     soln = activelo.solve(n, w)
 

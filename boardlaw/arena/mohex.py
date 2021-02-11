@@ -153,7 +153,7 @@ class Arena:
         log.info(f'Agent played {challenger}, {int(results[0].wins[0] + results[1].wins[1])}-{int(results[0].wins[1] + results[1].wins[0])}')
         self.history.extend(results)
 
-        return arrdict.arrdict(games=games.loc['agent'].sum(), mean=μ, std=σ)
+        return arrdict.arrdict(games=games.loc['agent'].sum(), mean=μ, std=σ), arrdict.arrdict(games=games, wins=wins)
 
 def run_sync(run):
     log.info('Arena launched')

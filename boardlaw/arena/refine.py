@@ -13,7 +13,7 @@ def evaluate(run, idx, max_games=1024, target_std=.025):
     start = time.time()
     trace = []
     while True:
-        result = arena.play(agent)
+        result, args = arena.play(agent)
         trace.append(result)
         if result.std < target_std:
             break
@@ -23,4 +23,4 @@ def evaluate(run, idx, max_games=1024, target_std=.025):
         rate = (time.time() - start)/result.games
         log.info(f'{rate:.0f}s per game; {rate*result.games:.0f}s so far, {rate*max_games:.0f}s expected')
 
-    return arrdict.stack(trace)
+    return arrdict.stack(trace), args
