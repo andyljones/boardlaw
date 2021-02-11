@@ -140,7 +140,3 @@ def errors(run=-1, filter='.*'):
     im = mohex.plot(ax=ax, grid=True)
     ax.set_title('elos v. mohex')
     ax.set_xlabel('')
-
-
-
-

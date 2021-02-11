@@ -193,11 +193,9 @@ def run(boardsize, width, depth, timelimit, desc):
     n_envs = 32*1024
 
     #TODO: Restore league and sched when you go back to large boards
-    worldfunc = lambda n_envs: hex.Hex.initial(n_envs, boardsize) 
-    agentfunc = lambda: agent_factory(worldfunc, width=width, depth=depth)
-    worlds = mix(worldfunc(n_envs))
-    agent = agentfunc()
-    network = agent.network
+    worlds = mix(hex.Hex.initial(n_envs, boardsize))
+    network = networks.FCModel(worlds.obs_space, worlds.action_space, width=width, depth=depth).to(worlds.device)
+    agent = mcts.MCTSAgent(network)
 
     opt = torch.optim.Adam(network.parameters(), lr=1e-3)
     scaler = torch.cuda.amp.GradScaler()
@@ -212,7 +210,7 @@ def run(boardsize, width, depth, timelimit, desc):
 
     buffer = []
     with logs.to_run(run), stats.to_run(run), \
-            arena.monitor(run, worldfunc, agentfunc):
+            arena.monitor(run):
         #TODO: Upgrade this to handle batches that are some multiple of the env count
         idxs = (torch.randint(buffer_len, (n_envs,), device='cuda'), torch.arange(n_envs, device='cuda'))
         for _ in time_limited_loop(timelimit):

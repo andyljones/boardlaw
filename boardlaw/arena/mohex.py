@@ -1,14 +1,18 @@
+import time
 from collections import deque
 from boardlaw.arena import evaluator
 import torch
 import numpy as np
 from .. import mohex, hex
-from . import database, analysis
+from . import database, analysis, common
 from rebar import arrdict
-from pavlov import stats
+from pavlov import stats, runs, logs, storage
 from logging import getLogger
 import activelo
 import pandas as pd
+from functools import wraps
+from contextlib import contextmanager
+from multiprocessing import set_start_method, Process
 
 log = getLogger(__name__)
 
@@ -112,26 +116,19 @@ def run(boardsize):
             active[idx] = torch.tensor(queue[0])
             queue = queue[1:]
 
-def all_elos():
-    df = pd.concat({n: analysis.elos(n, target=-1) for n in RUN_NAMES}, 1)
-    ax = df.xs('μ', 1, 1).plot()
-    ax.invert_xaxis()
-
-def total_games():
-    return pd.Series({n: database.games(n).sum().sum() for n in RUN_NAMES})
-
 def append(df, name):
     names = list(df.index) + [name]
     return df.reindex(index=names, columns=names).fillna(0)
 
-class Trialer:
+class Arena:
 
-    def __init__(self, worldfunc, max_history=128):
-        self.worlds = worldfunc(4)
+    def __init__(self, worlds, max_history=128):
+        # Deferred import so the module can be imported from boardlaw
+        self.worlds = worlds
         self.mohex = mohex.MoHexAgent()
         self.history = deque(maxlen=max_history//self.worlds.n_envs)
 
-    def trial(self, agent, record=True):
+    def play(self, agent, record=True):
         size = self.worlds.boardsize
         games = database.symmetric_games(f'mohex-{size}').pipe(append, 'agent')
         wins = database.symmetric_wins(f'mohex-{size}').pipe(append, 'agent')
@@ -157,71 +154,44 @@ class Trialer:
         log.info(f'Agent played {challenger}, {int(results[0].wins[0] + results[1].wins[1])}-{int(results[0].wins[1] + results[1].wins[0])}')
         self.history.extend(results)
 
-def judge(worldfunc, agent):
-    trialer = Trialer(worldfunc)
-    while True:
-        trialer.trial(agent, record=False)
+def arena_sync(run):
+    log.info('Arena launched')
+    run = runs.resolve(run)
 
-def plot(run):
-    import matplotlib.pyplot as plt
-    import copy
+    log.info(f'Running arena for "{run}"')
+    with logs.to_run(run), stats.to_run(run):
+        worlds = common.worlds(run, 4)
+        arena = Arena(worlds)
+        
+        i = 0
+        agent = None
+        last_load, last_step = 0, 0
+        while True:
+            if time.time() - last_load > 15:
+                last_load = time.time()
+                agent = common.agent(run)
+            
+            if agent and (time.time() - last_step > 1):
+                last_step = time.time()
+                log.info('Running trial')
+                arena.play(agent)
+                i += 1
 
-    games, wins = database.symmetric(run)
-    games, wins = analysis.mask(games, wins, '.*')
-    soln = activelo.solve(games.values, wins.values)
+@wraps(arena_sync)
+@contextmanager
+def arena(*args, **kwargs):
+    set_start_method('spawn', True)
+    p = Process(target=arena_sync, args=args, kwargs=kwargs, name='mohex-arena')
+    try:
+        p.start()
+        yield p
+    finally:
+        for _ in range(50):
+            if not p.is_alive():
+                log.info('Arena monitor dead')
+                break
+            time.sleep(.1)
+        else:
+            log.info('Abruptly terminating arena monitor; it should have shut down naturally!')
+            p.terminate()
 
-    rates = wins/games
-
-    expected = 1/(1 + np.exp(-soln.μ[:, None] + soln.μ[None, :]))
-    actual = rates.where(games > 0, np.nan).values
-
-    fig = plt.figure()
-    gs = plt.GridSpec(4, 3, fig, height_ratios=[20, 1, 20, 1])
-    fig.set_size_inches(18, 12)
-
-    # Top row
-    cmap = copy.copy(plt.cm.RdBu)
-    cmap.set_bad('lightgrey')
-    kwargs = dict(cmap=cmap, vmin=0, vmax=1, aspect=1)
-
-    ax = plt.subplot(gs[0, 0])
-    ax.imshow(actual, **kwargs)
-    ax.set_title('actual')
-
-    ax = plt.subplot(gs[0, 1])
-    im = ax.imshow(expected, **kwargs)
-    ax.set_title('expected')
-
-    ax = plt.subplot(gs[1, :2])
-    plt.colorbar(im, cax=ax, orientation='horizontal')
-
-    # Top right
-    ax = plt.subplot(gs[0, 2])
-    ax.errorbar(np.arange(len(soln.μ)), soln.μd[0, :], yerr=soln.σd[0, :], marker='.', capsize=2, linestyle='')
-    ax.set_title('elos v. first')
-    ax.grid()
-
-    # Bottom left
-    ax = plt.subplot(gs[2, 0])
-    im = ax.imshow(actual - expected, vmin=-1, vmax=+1, aspect=1, cmap=cmap)
-    ax.set_title('error')
-
-    ax = plt.subplot(gs[3, 0])
-    plt.colorbar(im, cax=ax, orientation='horizontal')
-    # ax.annotate(f'resid var: {resid_var:.0%}, corr: {corr:.0%}', (.5, -1.2), ha='center', xycoords='axes fraction')
-
-    # Bottom middle
-    ax = plt.subplot(gs[2, 1])
-    se = (expected*(1-expected)/games)**.5
-    im = ax.imshow((actual - expected)/se, vmin=-3, vmax=+3, aspect=1, cmap='RdBu')
-    ax.set_title('standard error')
-
-    ax = plt.subplot(gs[3, 1])
-    plt.colorbar(im, cax=ax, orientation='horizontal')
-
-    # Bottom right
-    ax = plt.subplot(gs[2, 2])
-    im = ax.imshow(games, aspect=1, cmap='Reds')
-    ax.set_title('counts')
-    ax = plt.subplot(gs[3, 2])
-    plt.colorbar(im, cax=ax, orientation='horizontal')

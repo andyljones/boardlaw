@@ -29,13 +29,13 @@ def sync_up(local, remote):
             reporter=reporter)
 
 def sync_down(local, remote, **kwargs):
-    bucket, path = remote.split(':')
+    bucket, path = str(remote).split(':')
     workers = multiprocessing.cpu_count()
     syncer = b2.Synchronizer(workers, **kwargs)
     with b2.SyncReport(sys.stdout, False) as reporter:
         syncer.sync_folders(
             source_folder=b2.parse_sync_folder(f'b2://{bucket}/{path}', api(bucket)),
-            dest_folder=b2.parse_sync_folder(local, api(bucket)),
+            dest_folder=b2.parse_sync_folder(str(local), api(bucket)),
             now_millis=int(round(time.time() * 1000)),
             reporter=reporter)
 
@@ -51,8 +51,8 @@ def ablate_run_snapshots(run):
         if (i == 0) or (np.log2(i) % 1 == 0):
             pass
         else:
-            print(run, info['path'].name)
-            files.remove('Removing', run, info['path'].name)
+            print('Removing', run, info['path'].name)
+            files.remove(run, info['path'].name)
 
 def ablate_snapshots():
     for run, info in runs.runs().items():

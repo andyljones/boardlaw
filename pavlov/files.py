@@ -21,6 +21,7 @@ def _filename(pattern, extant_files):
 def new_file(run, pattern, **kwargs):
     with runs.update(run) as info:
         filename = _filename(pattern, info['_files'])
+        assert filename not in info['_files']
         assert re.fullmatch(r'[\w\.-]+', filename), 'Filename contains invalid characters'
 
         process = multiprocessing.current_process()
