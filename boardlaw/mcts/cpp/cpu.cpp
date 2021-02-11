@@ -19,8 +19,10 @@ struct Policy {
     }
 
     ~Policy() {
-        // free(pi);
-        // free(q);
+        // This is bad practice - if the obj is ever passed by value accidentally, you'll get a double free.
+        // But frankly I've no idea what I'm doing here anyway. Any rewrite is going to involve gas and a lighter.
+        free(pi);
+        free(q);
     }
 
     float prob(int a) {
@@ -35,7 +37,7 @@ struct Policy {
 
 };
 
-float newton_search(Policy p) {
+float newton_search(Policy& p) {
     // Find the initial alpha
     float alpha = 0.f;
     for (int a = 0; a<p.A; a++) {
