@@ -128,7 +128,8 @@ class MCTS:
         self.transitions.rewards[self.envs, leaves] = transition.rewards.half()
         self.transitions.terminal[self.envs, leaves] = transition.terminal
 
-        with torch.no_grad(), torch.cuda.amp.autocast():
+        autocast = (world.device.type == 'cuda')
+        with torch.no_grad(), torch.cuda.amp.autocast(autocast):
             decisions = network(world)
             assert (decisions.logits > -np.inf).any(-1).all(), 'Some row of logits are all neginf or nan'
         self.decisions.logits[self.envs, leaves] = decisions.logits.half()

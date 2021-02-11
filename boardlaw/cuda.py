@@ -47,6 +47,7 @@ def load_cpu(pkg, files):
 _has_cuda = None
 def load(pkg, files=('wrappers.cpp', 'kernels.cu')):
 
+    # This bit of madness is because of this bug: https://github.com/pytorch/pytorch/issues/52145
     global _has_cuda
     if _has_cuda is None:
         try:
