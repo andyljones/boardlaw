@@ -70,7 +70,7 @@ def offdiag_refill(run, names, queue, count=1):
         queue.append(pair)
         queue.append(pair[::-1])
 
-def accumulate(boardsize):
+def reference_ladder(boardsize):
     """Run this to generate the `mohex-{boardsize}.json` files"""
     run_name = f'mohex-{boardsize}'
     agent = mohex.MoHexAgent()
@@ -120,10 +120,9 @@ def append(df, name):
     names = list(df.index) + [name]
     return df.reindex(index=names, columns=names).fillna(0)
 
-class Arena:
+class RollingArena:
 
     def __init__(self, worlds, max_history):
-        # Deferred import so the module can be imported from boardlaw
         self.worlds = worlds
         self.mohex = mohex.MoHexAgent()
         self.history = deque(maxlen=worlds.n_seats*max_history//self.worlds.n_envs)
@@ -155,7 +154,42 @@ class Arena:
         log.info(f'Agent played {challenger}, {int(results[0].wins[0] + results[1].wins[1])}-{int(results[0].wins[1] + results[1].wins[0])}')
         self.history.extend(results)
 
-        return arrdict.arrdict(games=games.loc['agent'].sum(), mean=μ, std=σ), arrdict.arrdict(games=games, wins=wins)
+        return arrdict.arrdict(games=games.loc['agent'].sum(), mean=μ, std=σ)
+
+class CumulativeArena:
+
+    def __init__(self, worlds):
+        # Deferred import so the module can be imported from boardlaw
+        self.worlds = worlds
+        self.mohex = mohex.MoHexAgent()
+        self.soln = None
+
+        size = worlds.boardsize
+        self.games = database.symmetric_games(f'mohex-{size}').pipe(append, 'agent')
+        self.wins = database.symmetric_wins(f'mohex-{size}').pipe(append, 'agent')
+
+    def play(self, name, agent):
+        self.soln = activelo.solve(games, wins, soln=self.soln)
+        μ, σ = analysis.difference(self.soln, 'mohex-0.00', 'agent')
+        log.info(f'Agent elo is {μ:.2f}±{σ:.2f} based on {int(games.loc["agent"].sum())} games')
+        stats.mean_std('elo-mohex', μ, σ)
+
+        imp = activelo.improvement(self.soln)
+        imp = pd.DataFrame(imp, games.index, games.index)
+
+        challenger = imp['agent'].idxmax()
+        randomness = float(challenger.split('-')[1])
+        self.mohex.random = randomness
+        results = common.evaluate(self.worlds, {'agent': agent, challenger: self.mohex})
+        log.info(f'Agent played {challenger}, {int(results[0].wins[0] + results[1].wins[1])}-{int(results[0].wins[1] + results[1].wins[0])}')
+
+        for result in results:
+            self.games.loc[result.names[0], result.names[1]] += result.games
+            self.games.loc[result.names[1], result.names[0]] += result.games
+            self.wins.loc[result.names[0], result.names[1]] += result.wins[0]
+            self.wins.loc[result.names[1], result.names[0]] += result.wins[1]
+
+        return arrdict.arrdict(games=games.loc['agent'].sum(), mean=μ, std=σ)
 
 def run_sync(run):
     log.info('Arena launched')
@@ -164,7 +198,7 @@ def run_sync(run):
     log.info(f'Running arena for "{run}"')
     with logs.to_run(run), stats.to_run(run):
         worlds = common.worlds(run, 4)
-        arena = Arena(worlds, 128)
+        arena = RollingArena(worlds, 128)
         
         i = 0
         agent = None
