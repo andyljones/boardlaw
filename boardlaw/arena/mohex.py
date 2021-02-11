@@ -9,7 +9,6 @@ from pavlov import stats, runs, logs, storage
 from logging import getLogger
 import activelo
 import pandas as pd
-from aljpy import dotdict
 from functools import wraps
 from contextlib import contextmanager
 from multiprocessing import set_start_method, Process
@@ -127,7 +126,7 @@ class Arena:
         # Deferred import so the module can be imported from boardlaw
         self.worlds = worlds
         self.mohex = mohex.MoHexAgent()
-        self.history = deque(maxlen=max_history//self.worlds.n_envs)
+        self.history = deque(maxlen=worlds.n_seats*max_history//self.worlds.n_envs)
 
     def play(self, agent):
         size = self.worlds.boardsize
@@ -141,7 +140,7 @@ class Arena:
 
         soln = activelo.solve(games, wins)
         μ, σ = analysis.difference(soln, 'mohex-0.00', 'agent')
-        log.info(f'Agent elo is {μ:.2f}±{2*σ:.2f} based on {int(games.loc["agent"].sum())} games')
+        log.info(f'Agent elo is {μ:.2f}±{σ:.2f} based on {int(games.loc["agent"].sum())} games')
         stats.mean_std('elo-mohex', μ, σ)
 
         imp = activelo.improvement(soln)
@@ -154,7 +153,7 @@ class Arena:
         log.info(f'Agent played {challenger}, {int(results[0].wins[0] + results[1].wins[1])}-{int(results[0].wins[1] + results[1].wins[0])}')
         self.history.extend(results)
 
-        return dotdict(games=games.loc['agent'].sum(), mean=μ, std=σ)
+        return arrdict.arrdict(games=games.loc['agent'].sum(), mean=μ, std=σ)
 
 def run_sync(run):
     log.info('Arena launched')
