@@ -44,13 +44,22 @@ def load_cpu(pkg, files):
             f'-L{torch_libdir}', f'-Wl,-rpath,{torch_libdir}',
             f'-L{python_libdir}', f'-Wl,-rpath,{python_libdir}'])
 
+_has_cuda = None
 def load(pkg, files=('wrappers.cpp', 'kernels.cu')):
-    try:
-        torch.cuda.init()
-    except RuntimeError:
-        return load_cpu(pkg, [f for f in files if not f.endswith('.cu')])
-    else:
+
+    global _has_cuda
+    if _has_cuda is None:
+        try:
+            torch.cuda.init()
+        except RuntimeError:
+            _has_cuda = False
+        else:
+            _has_cuda = True
+
+    if _has_cuda:
         return load_cuda(pkg, files)
+    else:
+        return load_cpu(pkg, [f for f in files if not f.endswith('.cu')])
 
 
 def assert_shape(x, s):
