@@ -1,6 +1,6 @@
 from pathlib import Path
 import pickle
-from boardlaw.arena import evaluator
+from boardlaw import arena
 from pavlov import storage
 from boardlaw.main import worldfunc, agentfunc, mix, half, as_chunk, optimize
 import torch
@@ -72,7 +72,7 @@ def evaluate(pair, n_envs=64*1024, device='cuda'):
         agents[name] = agent
 
     worlds = mix(worldfunc(n_envs, device=device))
-    return evaluator.evaluate(worlds, agents)
+    return arena.evaluate(worlds, agents)
 
 def run():
     sds = generate_state_dicts('*muddy-make')

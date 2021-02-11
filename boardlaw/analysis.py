@@ -210,7 +210,7 @@ def board_runs(boardsize=9):
 def mohex_benchmark(run):
     from boardlaw import mohex
     from boardlaw.main import worldfunc, agentfunc
-    from boardlaw.arena import evaluator
+    from boardlaw.arena import evaluate
 
     n_envs = 8
     worlds = worldfunc(n_envs)
@@ -220,7 +220,7 @@ def mohex_benchmark(run):
     # agent.kwargs['noise_eps'] = 0.
     mhx = mohex.MoHexAgent()
 
-    return evaluator.evaluate(worlds, {'boardlaw': agent, 'mohex': mhx})
+    return evaluate(worlds, {'boardlaw': agent, 'mohex': mhx})
 
 def snapshot_kl_divs(run):
     import pandas as pd

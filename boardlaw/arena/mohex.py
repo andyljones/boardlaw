@@ -1,6 +1,5 @@
 import time
 from collections import deque
-from boardlaw.arena import evaluator
 import torch
 import numpy as np
 from .. import mohex, hex
@@ -71,7 +70,8 @@ def offdiag_refill(run, names, queue, count=1):
         queue.append(pair)
         queue.append(pair[::-1])
 
-def run(boardsize):
+def accumulate(boardsize):
+    """Run this to generate the `mohex-{boardsize}.json` files"""
     run_name = f'mohex-{boardsize}'
     agent = mohex.MoHexAgent()
     worlds = hex.Hex.initial(n_envs=8, boardsize=boardsize)
@@ -150,11 +150,11 @@ class Arena:
         challenger = imp['agent'].idxmax()
         randomness = float(challenger.split('-')[1])
         self.mohex.random = randomness
-        results = evaluator.evaluate(self.worlds, {'agent': agent, challenger: self.mohex})
+        results = evaluate(self.worlds, {'agent': agent, challenger: self.mohex})
         log.info(f'Agent played {challenger}, {int(results[0].wins[0] + results[1].wins[1])}-{int(results[0].wins[1] + results[1].wins[0])}')
         self.history.extend(results)
 
-def arena_sync(run):
+def run_sync(run):
     log.info('Arena launched')
     run = runs.resolve(run)
 
@@ -177,11 +177,11 @@ def arena_sync(run):
                 arena.play(agent)
                 i += 1
 
-@wraps(arena_sync)
+@wraps(run_sync)
 @contextmanager
-def arena(*args, **kwargs):
+def run(*args, **kwargs):
     set_start_method('spawn', True)
-    p = Process(target=arena_sync, args=args, kwargs=kwargs, name='mohex-arena')
+    p = Process(target=run_sync, args=args, kwargs=kwargs, name='mohex-arena')
     try:
         p.start()
         yield p

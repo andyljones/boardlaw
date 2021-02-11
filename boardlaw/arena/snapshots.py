@@ -1,7 +1,7 @@
 import time
 import pandas as pd
 from pavlov import storage, runs
-from . import common, evaluator, database
+from . import common, database
 from .. import mcts
 from logging import getLogger
 
@@ -28,7 +28,7 @@ def snapshot_agents(run, agentfunc, **kwargs):
                 agents[name] = common.agent(run, idx, device='cuda')
         return agents
 
-def matchups(run=-1, count=1, **kwargs):
+def run(run=-1, count=1, **kwargs):
 
     run = runs.resolve(run)
     agentfunc = lambda: mcts.MCTSAgent(storage.load_raw(run, 'model'))
@@ -57,7 +57,7 @@ def matchups(run=-1, count=1, **kwargs):
 
         log.info(f'Playing {matchup}')
         matchup = {m: agents[m] for m in matchup}
-        results = evaluator.evaluate(worlds, matchup)
+        results = common.evaluate(worlds, matchup)
 
         wins, games = int(results[0].wins[0] + results[1].wins[1]), int(sum(r.games for r in results))
         log.info(f'Storing. {wins} wins in {games} games for {list(matchup)[0]} ')
