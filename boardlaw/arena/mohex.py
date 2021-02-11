@@ -141,7 +141,7 @@ class Arena:
 
         soln = activelo.solve(games, wins)
         μ, σ = analysis.difference(soln, 'mohex-0.00', 'agent')
-        log.info(f'Agent elo is {μ:.2f}±{2*σ:.2f} based on {2*int(games.loc["agent"].sum())} games')
+        log.info(f'Agent elo is {μ:.2f}±{2*σ:.2f} based on {int(games.loc["agent"].sum())} games')
         stats.mean_std('elo-mohex', μ, σ)
 
         imp = activelo.improvement(soln)
