@@ -90,10 +90,14 @@ class Solver:
         self.N = N
         self.kwargs = {'max_iter': 100, **kwargs}
 
-    def __call__(self, n, w):
+    def __call__(self, n, w, soln=None):
         n = torch.as_tensor(n)
         w = torch.as_tensor(w)
-        elbo = ELBO(self.N)
+        elbo = ELBO(self.N, soln)
+
+        if soln is not None:
+            elbo.μ.data[:] = torch.as_tensor(soln.μ)
+            elbo.Σ = torch.as_tensor(soln.Σ)
 
         # The gradients around here can be a little explode-y; a line search is a bit slow but 
         # keeps us falling up any cliffs.
@@ -140,10 +144,10 @@ class Solver:
             σd=σ2d**.5,
             trace=arrdict.stack(trace)).detach().numpy()
 
-def solve(n, w):
+def solve(n, w, **kwargs):
     if isinstance(n, pd.DataFrame):
-        return arrdict.arrdict({k: common.pandify(v, n.index) for k, v in solve(n.values, w.values).items()})
-    return Solver(n.shape[0])(n, w)
+        return arrdict.arrdict({k: common.pandify(v, n.index) for k, v in solve(n.values, w.values, **common.numpyify(kwargs)).items()})
+    return Solver(n.shape[0])(n, w, **kwargs)
 
 def test_elbo():
     elbo = ELBO(2, constrain=False)
