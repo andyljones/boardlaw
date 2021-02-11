@@ -7,7 +7,7 @@ _cache = None
 def module():
     global _cache
     if _cache is None:
-        _cache = cuda.load(__package__)
+        _cache = cuda.load(__package__, ('wrappers.cpp', 'cuda.cu'))
     return _cache 
 
 @profiling.nvtx

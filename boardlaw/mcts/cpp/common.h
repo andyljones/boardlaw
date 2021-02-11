@@ -1,5 +1,5 @@
+#pragma once
 #include "../../cpp/common.h"
-
 
 //TODO: Can I template-ize these classes?
 struct MCTSPTA {
@@ -10,6 +10,16 @@ struct MCTSPTA {
   S2D::PTA seats; 
   B2D::PTA terminal; 
   S3D::PTA children;
+};
+
+struct MCTSTA {
+  H3D::TA logits;
+  H3D::TA w; 
+  S2D::TA n; 
+  H1D::TA c_puct;
+  S2D::TA seats; 
+  B2D::TA terminal; 
+  S3D::TA children;
 };
 
 struct MCTS {
@@ -31,11 +41,27 @@ struct MCTS {
       terminal.pta(),
       children.pta()};
   }
+
+  MCTSTA ta() {
+    return MCTSTA{
+      logits.ta(), 
+      w.ta(),
+      n.ta(),
+      c_puct.ta(),
+      seats.ta(),
+      terminal.ta(),
+      children.ta()};
+  }
 };
 
 struct DescentPTA {
   S1D::PTA parents;
   S1D::PTA actions; 
+};
+
+struct DescentTA {
+  S1D::TA parents;
+  S1D::TA actions; 
 };
 
 struct Descent {
@@ -47,6 +73,13 @@ struct Descent {
       parents.pta(),
       actions.pta()};
   }
+
+  DescentTA ta() {
+    return DescentTA{
+      parents.ta(),
+      actions.ta()};
+  }
+
 };
 
 struct BackupPTA {
@@ -56,6 +89,15 @@ struct BackupPTA {
   H3D::PTA rewards;
   S2D::PTA parents;
   B2D::PTA terminal;
+};
+
+struct BackupTA {
+  H3D::TA v;
+  H3D::TA w;
+  S2D::TA n;
+  H3D::TA rewards;
+  S2D::TA parents;
+  B2D::TA terminal;
 };
 
 struct Backup {
@@ -75,8 +117,22 @@ struct Backup {
       parents.pta(),
       terminal.pta()};
   }
+
+  BackupTA ta() {
+    return BackupTA{
+      v.ta(),
+      w.ta(),
+      n.ta(),
+      rewards.ta(),
+      parents.ta(),
+      terminal.ta()};
+  }
 };
+
+namespace mctscuda {
 
 Descent descend(MCTS m);
 TT root(MCTS m);
-void backup(Backup m, TT leaves);
+void backup(Backup bk, TT leaves);
+
+}

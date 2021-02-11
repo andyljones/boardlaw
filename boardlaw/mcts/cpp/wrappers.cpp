@@ -2,10 +2,50 @@
 #include <torch/csrc/autograd/variable.h>
 #include <pybind11/pybind11.h>
 #include "common.h"
+#include "cpu.cpp"
 
 namespace py = pybind11;
 using namespace pybind11::literals;
 using namespace std::string_literals;
+
+#ifdef NOCUDA
+Descent descend(MCTS m) {
+    return mctscpu::descend(m);
+}
+
+TT root(MCTS m) {
+    return mctscpu::root(m);
+}
+
+void backup(Backup m, TT leaves) {
+    return mctscpu::backup(m, leaves);
+}
+#else
+Descent descend(MCTS m) {
+    if (m.logits.t.device().is_cuda()) {
+        return mctscuda::descend(m);
+    } else {
+        return mctscpu::descend(m);
+    }
+}
+
+TT root(MCTS m) {
+    if (m.logits.t.device().is_cuda()) {
+        return mctscuda::root(m);
+    } else {
+        return mctscpu::root(m);
+    }
+}
+
+void backup(Backup bk, TT leaves) {
+    if (bk.terminal.t.device().is_cuda()) {
+        return mctscuda::backup(bk, leaves);
+    } else {
+        return mctscpu::backup(bk, leaves);
+    }
+}
+#endif
+
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 
@@ -30,5 +70,5 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 
     m.def("descend", &descend, "m"_a, py::call_guard<py::gil_scoped_release>());
     m.def("root", &root, "m"_a, py::call_guard<py::gil_scoped_release>());
-    m.def("backup", &backup, "b"_a, "leaves"_a, py::call_guard<py::gil_scoped_release>());
+    m.def("backup", &backup, "bk"_a, "leaves"_a, py::call_guard<py::gil_scoped_release>());
 }

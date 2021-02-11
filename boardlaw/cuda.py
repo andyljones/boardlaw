@@ -55,5 +55,4 @@ def load(pkg, files=('wrappers.cpp', 'kernels.cu')):
 
 def assert_shape(x, s):
     assert (x.ndim == len(s)) and x.shape == s, f'Expected {s}, got {x.shape}'
-    assert x.device.type == 'cuda', f'Expected CUDA tensor, got {x.device.type}'
 

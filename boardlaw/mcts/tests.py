@@ -8,18 +8,18 @@ import aljpy
 
 ### ROOT TESTS
 
-def test_root_one_node():
+def test_root_one_node(device='cuda'):
     data = arrdict.arrdict(
-        logits=torch.tensor([[1/3, 2/3]]).log(),
-        w=torch.tensor([[0.]]),
-        n=torch.tensor([0]),
-        c_puct=torch.tensor(1.),
-        seats=torch.tensor([0]),
+        logits=torch.tensor([[1/3, 2/3]]).log().half(),
+        w=torch.tensor([[0.]]).half(),
+        n=torch.tensor([0]).short(),
+        c_puct=torch.tensor(1.).half(),
+        seats=torch.tensor([0]).short(),
         terminal=torch.tensor([False]),
-        children=torch.tensor([[-1, -1]]))
+        children=torch.tensor([[-1, -1]]).short())
     
-    expected = torch.tensor([[1/3, 2/3]]).cuda() 
-    m = cuda.mcts(**data.cuda()[None])
+    expected = torch.tensor([[1/3, 2/3]]).half().to(device)
+    m = cuda.mcts(**data.to(device)[None])
     actual = cuda.root(m)
     torch.testing.assert_allclose(expected, actual, rtol=1e-3, atol=1e-3)
 

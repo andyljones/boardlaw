@@ -1,6 +1,7 @@
-#include "../../cpp/kernels.cu"
 #include "common.h"
+#include <math.h>
 
+namespace mctscpu {
 const uint BLOCK = 8;
 
 struct Policy {
@@ -10,19 +11,23 @@ struct Policy {
     float lambda_n;
     float alpha;
 
-    __device__ Policy(int A) :
+    Policy(int A):
         A(A)
     {
-        extern __shared__ float shared[];
-        pi = (float*)&shared[(2*threadIdx.x+0)*A];
-        q  = (float*)&shared[(2*threadIdx.x+1)*A];
+        pi = (float*)malloc(A*sizeof(float));
+        q  = (float*)malloc(A*sizeof(float));
     }
 
-    __device__ float prob(int a) {
+    ~Policy() {
+        // free(pi);
+        // free(q);
+    }
+
+    float prob(int a) {
         return lambda_n*pi[a]/(alpha - q[a]);
     }
     
-    __host__ static uint memory(uint A) {
+    static uint memory(uint A) {
         uint mem = BLOCK*2*A*sizeof(float);
         TORCH_CHECK(mem < 64*1024, "Too much shared memory per block")
         return mem;
@@ -30,7 +35,7 @@ struct Policy {
 
 };
 
-__device__ float newton_search(Policy p) {
+float newton_search(Policy p) {
     // Find the initial alpha
     float alpha = 0.f;
     for (int a = 0; a<p.A; a++) {
@@ -38,8 +43,8 @@ __device__ float newton_search(Policy p) {
         alpha = fmaxf(alpha, p.q[a] + gap);
     }
 
-    float error = CUDART_INF_F;
-    float new_error = CUDART_INF_F;
+    float error = INFINITY;
+    float new_error = INFINITY;
     // Typical problems converge in 10 steps. Hypothetically 100 might be 
     // hit sometimes, but it's worth risking it for how utterly awful it'd 
     // be debugging an infinite loop in the kernel.
@@ -65,10 +70,9 @@ __device__ float newton_search(Policy p) {
     return alpha;
 }
 
-__device__ Policy policy(MCTSPTA m, H3D::PTA q, int t) {
+Policy policy(MCTSTA m, H3D::TA q, int t, int b) {
 
     const uint A = m.logits.size(2);
-    const int b = blockIdx.x*blockDim.x + threadIdx.x;
 
     Policy p(A);
 
@@ -88,7 +92,6 @@ __device__ Policy policy(MCTSPTA m, H3D::PTA q, int t) {
             N += 1;
         }
     }
-    __syncthreads(); // memory barrier
 
     p.lambda_n = m.c_puct[b]*float(N)/float(N +A);
     p.alpha = newton_search(p);
@@ -96,28 +99,25 @@ __device__ Policy policy(MCTSPTA m, H3D::PTA q, int t) {
     return p;
 }
 
-__host__ TT transition_q(MCTS m) {
+TT transition_q(MCTS m) {
     auto q = m.w.t/(m.n.t.unsqueeze(-1) + 1.e-4f);
     q = (q - q.min())/(q.max() - q.min() + 1.e-4f);
     return q.to(at::kHalf);
 }
 
-__global__ void root_kernel(MCTSPTA m, H3D::PTA q, H2D::PTA probs) {
+void root_kernel(MCTSTA m, H3D::TA q, H2D::TA probs, int b) {
     const uint B = m.logits.size(0);
     const uint A = m.logits.size(2);
-    const int b = blockIdx.x*blockDim.x + threadIdx.x;
     if (b >= B) return;
 
-    auto p = policy(m, q, 0);
+    auto p = policy(m, q, 0, b);
 
     for (int a=0; a<A; a++) {
         probs[b][a] = p.prob(a);
     }
 }
 
-__host__ TT root(MCTS m) {
-    c10::cuda::CUDAGuard g(m.logits.t.device());
-
+TT root(MCTS m) {
     const uint B = m.logits.size(0);
     const uint A = m.logits.size(2);
 
@@ -125,20 +125,18 @@ __host__ TT root(MCTS m) {
 
     auto probs = at::empty_like(m.logits.t.select(1, 0));
 
-    const uint n_blocks = (B + BLOCK - 1)/BLOCK;
-    root_kernel<<<{n_blocks}, {BLOCK}, Policy::memory(A), stream()>>>(
-        m.pta(), H3D(q).pta(), H2D(probs).pta());
-    C10_CUDA_CHECK(cudaGetLastError());
+    for (int b=0; b<B; b++) {
+        root_kernel(m.ta(), H3D(q).ta(), H2D(probs).ta(), b);
+    } 
 
     return probs;
 }
 
-__global__ void descend_kernel(
-    MCTSPTA m, H3D::PTA q, H2D::PTA rands, DescentPTA descent) {
+void descend_kernel(
+    MCTSTA m, H3D::TA q, H2D::TA rands, DescentTA descent, int b) {
 
     const uint B = m.logits.size(0);
     const uint A = m.logits.size(2);
-    const int b = blockIdx.x*blockDim.x + threadIdx.x;
 
     if (b >= B) return;
 
@@ -150,7 +148,7 @@ __global__ void descend_kernel(
         if (t == -1) break;
         if (m.terminal[b][t]) break;
 
-        auto p = policy(m, q, t);
+        auto p = policy(m, q, t, b);
 
         float rand = rands[b][t];
         float total = 0.f;
@@ -179,9 +177,7 @@ __global__ void descend_kernel(
     descent.actions[b] = action;
 }
 
-__host__ Descent descend(MCTS m) {
-    c10::cuda::CUDAGuard g(m.logits.t.device());
-
+Descent descend(MCTS m) {
     const uint B = m.logits.size(0);
     const uint A = m.logits.size(2);
 
@@ -192,23 +188,20 @@ __host__ Descent descend(MCTS m) {
         m.seats.t.new_empty({B}),
         m.seats.t.new_empty({B})};
 
-    const uint n_blocks = (B + BLOCK - 1)/BLOCK;
-    descend_kernel<<<{n_blocks}, {BLOCK}, Policy::memory(A), stream()>>>(
-        m.pta(), H3D(q).pta(), H2D(rands).pta(), descent.pta());
-    C10_CUDA_CHECK(cudaGetLastError());
+    for (int b=0; b<B; b++) {
+        descend_kernel(m.ta(), H3D(q).ta(), H2D(rands).ta(), descent.ta(), b);
+    }
 
     return descent;
 }
 
-__global__ void backup_kernel(BackupPTA bk, S1D::PTA leaves) {
+void backup_kernel(BackupTA bk, S1D::TA leaves, uint b) {
     const uint B = bk.v.size(0);
     const uint S = bk.v.size(2);
-    const int b = blockIdx.x*blockDim.x + threadIdx.x;
 
     if (b >= B) return;
 
-    extern __shared__ float shared[];
-    float* v = (float*)&shared[threadIdx.x*S];
+    float* v = (float*)malloc(S*sizeof(float));
 
     int current = leaves[b];
     for (int s=0; s<S; s++) {
@@ -231,16 +224,17 @@ __global__ void backup_kernel(BackupPTA bk, S1D::PTA leaves) {
 
         current = bk.parents[b][current]; 
     }
+
+    free(v);
 }
 
-__host__ void backup(Backup b, TT leaves) {
-    c10::cuda::CUDAGuard c(leaves.device());
+void backup(Backup bk, TT leaves) {
+    const uint B = bk.v.size(0);
+    const uint S = bk.v.size(2);
 
-    const uint B = b.v.size(0);
-    const uint S = b.v.size(2);
+    for (int b=0; b<B; b++) {
+        backup_kernel(bk.ta(), S1D(leaves).ta(), b);
+    }
+}
 
-    const uint n_blocks = (B + BLOCK - 1)/BLOCK;
-    backup_kernel<<<{n_blocks}, {BLOCK}, BLOCK*S*sizeof(float), stream()>>>(
-        b.pta(), S1D(leaves).pta());
-    C10_CUDA_CHECK(cudaGetLastError());
 }
