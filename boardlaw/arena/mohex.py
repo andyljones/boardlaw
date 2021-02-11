@@ -9,6 +9,7 @@ from pavlov import stats, runs, logs, storage
 from logging import getLogger
 import activelo
 import pandas as pd
+from aljpy import dotdict
 from functools import wraps
 from contextlib import contextmanager
 from multiprocessing import set_start_method, Process
@@ -122,13 +123,13 @@ def append(df, name):
 
 class Arena:
 
-    def __init__(self, worlds, max_history=128):
+    def __init__(self, worlds, max_history):
         # Deferred import so the module can be imported from boardlaw
         self.worlds = worlds
         self.mohex = mohex.MoHexAgent()
         self.history = deque(maxlen=max_history//self.worlds.n_envs)
 
-    def play(self, agent, record=True):
+    def play(self, agent):
         size = self.worlds.boardsize
         games = database.symmetric_games(f'mohex-{size}').pipe(append, 'agent')
         wins = database.symmetric_wins(f'mohex-{size}').pipe(append, 'agent')
@@ -141,8 +142,7 @@ class Arena:
         soln = activelo.solve(games, wins)
         μ, σ = analysis.difference(soln, 'mohex-0.00', 'agent')
         log.info(f'Agent elo is {μ:.2f}±{2*σ:.2f} based on {2*int(games.loc["agent"].sum())} games')
-        if record:
-            stats.mean_std('elo-mohex', μ, σ)
+        stats.mean_std('elo-mohex', μ, σ)
 
         imp = activelo.improvement(soln)
         imp = pd.DataFrame(imp, games.index, games.index)
@@ -150,9 +150,11 @@ class Arena:
         challenger = imp['agent'].idxmax()
         randomness = float(challenger.split('-')[1])
         self.mohex.random = randomness
-        results = evaluate(self.worlds, {'agent': agent, challenger: self.mohex})
+        results = common.evaluate(self.worlds, {'agent': agent, challenger: self.mohex})
         log.info(f'Agent played {challenger}, {int(results[0].wins[0] + results[1].wins[1])}-{int(results[0].wins[1] + results[1].wins[0])}')
         self.history.extend(results)
+
+        return dotdict(games=games.loc['agent'].sum(), mean=μ, std=σ)
 
 def run_sync(run):
     log.info('Arena launched')
@@ -161,7 +163,7 @@ def run_sync(run):
     log.info(f'Running arena for "{run}"')
     with logs.to_run(run), stats.to_run(run):
         worlds = common.worlds(run, 4)
-        arena = Arena(worlds)
+        arena = Arena(worlds, 128)
         
         i = 0
         agent = None
