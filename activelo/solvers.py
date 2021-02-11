@@ -93,7 +93,7 @@ class Solver:
     def __call__(self, n, w, soln=None):
         n = torch.as_tensor(n)
         w = torch.as_tensor(w)
-        elbo = ELBO(self.N, soln)
+        elbo = ELBO(self.N)
 
         if soln is not None:
             elbo.μ.data[:] = torch.as_tensor(soln.μ)

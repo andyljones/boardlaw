@@ -128,6 +128,8 @@ class Arena:
         self.mohex = mohex.MoHexAgent()
         self.history = deque(maxlen=worlds.n_seats*max_history//self.worlds.n_envs)
 
+        self.soln = None
+
     def play(self, agent):
         size = self.worlds.boardsize
         games = database.symmetric_games(f'mohex-{size}').pipe(append, 'agent')
@@ -138,12 +140,12 @@ class Arena:
             wins.loc[result.names[0], result.names[1]] += result.wins[0]
             wins.loc[result.names[1], result.names[0]] += result.wins[1]
 
-        soln = activelo.solve(games, wins)
-        μ, σ = analysis.difference(soln, 'mohex-0.00', 'agent')
+        self.soln = activelo.solve(games, wins, soln=self.soln)
+        μ, σ = analysis.difference(self.soln, 'mohex-0.00', 'agent')
         log.info(f'Agent elo is {μ:.2f}±{σ:.2f} based on {int(games.loc["agent"].sum())} games')
         stats.mean_std('elo-mohex', μ, σ)
 
-        imp = activelo.improvement(soln)
+        imp = activelo.improvement(self.soln)
         imp = pd.DataFrame(imp, games.index, games.index)
 
         challenger = imp['agent'].idxmax()
