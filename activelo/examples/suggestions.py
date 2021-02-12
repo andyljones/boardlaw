@@ -54,10 +54,9 @@ def simulate(truth, n_games=256, σresid_tol=.1):
     games = torch.zeros((n_agents, n_agents))
 
     trace = []
-    solver = activelo.Solver(n_agents)
     ranks = torch.full((n_agents,), 0.)
     while True:
-        soln = solver(games, wins)
+        soln = activelo.solve(games, wins)
         ranks = torch.as_tensor(soln.μ)
 
         black, white = activelo.suggest(soln)

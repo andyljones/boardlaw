@@ -168,14 +168,13 @@ class CumulativeArena:
         self.games = database.symmetric_games(f'mohex-{size}').pipe(append, 'agent')
         self.wins = database.symmetric_wins(f'mohex-{size}').pipe(append, 'agent')
 
-    def play(self, name, agent):
-        self.soln = activelo.solve(games, wins, soln=self.soln)
+    def play(self, agent):
+        self.soln = activelo.solve(self.games, self.wins, soln=self.soln)
         μ, σ = analysis.difference(self.soln, 'mohex-0.00', 'agent')
-        log.info(f'Agent elo is {μ:.2f}±{σ:.2f} based on {int(games.loc["agent"].sum())} games')
-        stats.mean_std('elo-mohex', μ, σ)
+        log.info(f'Agent elo is {μ:.2f}±{σ:.2f} based on {int(self.games.loc["agent"].sum())} games')
 
         imp = activelo.improvement(self.soln)
-        imp = pd.DataFrame(imp, games.index, games.index)
+        imp = pd.DataFrame(imp, self.games.index, self.games.index)
 
         challenger = imp['agent'].idxmax()
         randomness = float(challenger.split('-')[1])
@@ -189,7 +188,7 @@ class CumulativeArena:
             self.wins.loc[result.names[0], result.names[1]] += result.wins[0]
             self.wins.loc[result.names[1], result.names[0]] += result.wins[1]
 
-        return arrdict.arrdict(games=games.loc['agent'].sum(), mean=μ, std=σ)
+        return arrdict.arrdict(games=self.games.loc['agent'].sum(), mean=μ, std=σ), results
 
 def run_sync(run):
     log.info('Arena launched')

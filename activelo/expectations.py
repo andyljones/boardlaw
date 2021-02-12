@@ -12,7 +12,7 @@ from functools import wraps
 σ2_lims = [-4, +2]
 
 def evaluate(interp, μd, σd):
-    return torch.as_tensor(interp(μd.detach().numpy(), σd.detach().numpy(), grid=False)).float()
+    return torch.as_tensor(interp(μd.detach().numpy(), σd.detach().numpy(), grid=False)).double()
 
 class Normal(Function):
 

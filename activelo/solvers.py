@@ -31,9 +31,12 @@ def pairwise_diffs(μ, Σ):
 def as_square(xd, fill=0.):
     N = int((1 + (1 + 4*len(xd))**.5)/2)
     j, k = pairwise_indices(N)
-    y = torch.full((N, N), fill).float()
+    y = torch.full((N, N), fill).double()
     y[j, k] = xd
     return y
+
+# def to_double(m):
+#     for m in 
 
 _cache = None
 class ELBO(nn.Module):
@@ -41,8 +44,8 @@ class ELBO(nn.Module):
     def __init__(self, N, constrain=True):
         super().__init__()
         self.N = N
-        self.register_parameter('μ', nn.Parameter(torch.zeros((N,)).float()))
-        self.register_parameter('Σ', nn.Parameter(torch.eye(N).float()))
+        self.register_parameter('μ', nn.Parameter(torch.zeros((N,)).double()))
+        self.register_parameter('Σ', nn.Parameter(torch.eye(N).double()))
         # Useful to be able to turn this off for testing
         if constrain:
             geotorch.positive_definite(self, 'Σ')
@@ -61,7 +64,7 @@ class ELBO(nn.Module):
 
     def expected_log_likelihood(self, n, w):
         # Constant isn't strictly needed, but it does help with testing
-        const = torch.lgamma(n.float()+1) - torch.lgamma(w.float()+1) - torch.lgamma((n-w).float()+1)
+        const = torch.lgamma(n.double()+1) - torch.lgamma(w.double()+1) - torch.lgamma((n-w).double()+1)
 
         μd, σ2d = pairwise_diffs(self.μ, self.Σ)
 
@@ -84,73 +87,70 @@ class ELBO(nn.Module):
     def forward(self, n, w):
         return -self.cross_entropy(n, w) + self.entropy()
 
-class Solver:
+def _solve(n, w, soln=None, max_iter=100, tol=1e-9, **kwargs):
+    n = torch.as_tensor(n)
+    w = torch.as_tensor(w)
+    #TODO: Find a better way of converting everything to double
+    elbo = ELBO(n.size(0)).double()
 
-    def __init__(self, N, **kwargs):
-        self.N = N
-        self.kwargs = {'max_iter': 100, **kwargs}
+    if soln is not None:
+        elbo.μ.data[:] = torch.as_tensor(soln.μ)
+        elbo.Σ = torch.as_tensor(soln.Σ)
 
-    def __call__(self, n, w, soln=None):
-        n = torch.as_tensor(n)
-        w = torch.as_tensor(w)
-        elbo = ELBO(self.N)
+    # The gradients around here can be a little explode-y; a line search is a bit slow but 
+    # keeps us falling up any cliffs.
+    optim = torch.optim.LBFGS(
+        elbo.parameters(), 
+        line_search_fn='strong_wolfe', 
+        tolerance_change=tol,
+        max_iter=max_iter,
+        **kwargs)
 
-        if soln is not None:
-            elbo.μ.data[:] = torch.as_tensor(soln.μ)
-            elbo.Σ = torch.as_tensor(soln.Σ)
+    trace = []
 
-        # The gradients around here can be a little explode-y; a line search is a bit slow but 
-        # keeps us falling up any cliffs.
-        optim = torch.optim.LBFGS(
-            elbo.parameters(), 
-            line_search_fn='strong_wolfe', 
-            **self.kwargs)
+    def closure():
+        l = -elbo(n, w)
+        if torch.isnan(l):
+            raise ValueError('Hit a nan.')
+        optim.zero_grad()
+        l.backward()
 
-        trace = []
+        grads = [p.grad for p in elbo.parameters()]
+        paramnorm = torch.cat([p.data.flatten() for p in elbo.parameters()]).pow(2).mean().pow(.5)
+        gradnorm = torch.cat([g.flatten() for g in grads]).pow(2).mean().pow(.5)
+        relnorm = gradnorm/paramnorm
 
-        def closure():
-            l = -elbo(n, w)
-            if torch.isnan(l):
-                raise ValueError('Hit a nan.')
-            optim.zero_grad()
-            l.backward()
+        trace.append(arrdict.arrdict(
+            l=l,
+            gradnorm=gradnorm,
+            relnorm=relnorm,
+            Σ=elbo.Σ).detach().clone())
 
-            grads = [p.grad for p in elbo.parameters()]
-            paramnorm = torch.cat([p.data.flatten() for p in elbo.parameters()]).pow(2).mean().pow(.5)
-            gradnorm = torch.cat([g.flatten() for g in grads]).pow(2).mean().pow(.5)
-            relnorm = gradnorm/paramnorm
+        return l
 
-            trace.append(arrdict.arrdict(
-                l=l,
-                gradnorm=gradnorm,
-                relnorm=relnorm,
-                Σ=elbo.Σ).detach().clone())
+    try:
+        optim.step(closure)
+        closure()
+    except ValueError as e:
+        log.warn(f'activelo did not converge: "{str(e)}"')
 
-            return l
-
-        try:
-            optim.step(closure)
-            closure()
-        except ValueError as e:
-            log.warn(f'activelo did not converge: "{str(e)}"')
-
-        μd, σ2d = map(as_square, pairwise_diffs(elbo.μ, elbo.Σ))
-        return arrdict.arrdict(
-            n=n,
-            w=w,
-            μ=elbo.μ, 
-            Σ=elbo.Σ, 
-            μd=μd,
-            σd=σ2d**.5,
-            trace=arrdict.stack(trace)).detach().numpy()
+    μd, σ2d = map(as_square, pairwise_diffs(elbo.μ, elbo.Σ))
+    return arrdict.arrdict(
+        n=n,
+        w=w,
+        μ=elbo.μ, 
+        Σ=elbo.Σ, 
+        μd=μd,
+        σd=σ2d**.5,
+        trace=arrdict.stack(trace)).detach().numpy()
 
 def solve(n, w, **kwargs):
     if isinstance(n, pd.DataFrame):
         return arrdict.arrdict({k: common.pandify(v, n.index) for k, v in solve(n.values, w.values, **common.numpyify(kwargs)).items()})
-    return Solver(n.shape[0])(n, w, **kwargs)
+    return _solve(n, w, **kwargs)
 
 def test_elbo():
-    elbo = ELBO(2, constrain=False)
+    elbo = ELBO(2, constrain=False).double()
     elbo.μ[:] = torch.tensor([1., 2.])
     elbo.Σ[:] = torch.tensor([[1., .5], [.5, 2.]])
 
