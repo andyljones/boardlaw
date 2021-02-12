@@ -20,7 +20,7 @@ def mohex_path(run):
     return Path(resource_filename(__package__, f'data/{run}.json'))
 
 def assure(run):
-    if run.startswith('mohex'):
+    if isinstance(run, str) and run.startswith('mohex'):
         path = mohex_path(run)
         if not path.exists():
             path.write_text('[]')
@@ -29,7 +29,7 @@ def assure(run):
 
 @contextmanager
 def update(run):
-    if run.startswith('mohex'):
+    if isinstance(run, str) and run.startswith('mohex'):
         p = mohex_path(run)
         contents = json_.loads(p.read_text())
         yield contents

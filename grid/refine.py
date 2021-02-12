@@ -1,5 +1,5 @@
 import time
-from . import common, mohex, database
+from boardlaw.arena import common, mohex, database
 from logging import getLogger
 from rebar import arrdict
 
@@ -14,6 +14,11 @@ def rename(r, new):
     return r
 
 def evaluate(run, idx, max_games=1024, target_std=.025):
+    """
+    Memory usage:
+        * 3b1w2d: 1.9G
+        * 9b4096w1d: 2.5G
+    """
     worlds = common.worlds(run, 2)
     agent = common.agent(run, idx)
     arena = mohex.CumulativeArena(worlds)
