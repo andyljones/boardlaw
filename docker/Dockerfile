@@ -1,3 +1,7 @@
+# CUDA image is about 10GB 
+# torch install is another 4GB: 2.8GB for Torch itself, 1.2GB for the pip cache 
+# openspiel install is another 5GB: 1.4GB for the pip cache, 1.5GB for Tensorflow, 1.5GB for a torch reinstall?
+
 # Build image
 FROM nvidia/cuda:11.1-cudnn8-devel-ubuntu18.04 as build
 
@@ -47,17 +51,19 @@ RUN git config --global user.name "Andrew Jones" && \
 
 # Install the Python packages I usually use
 # Install Jupyter 7.5 because 7.6.1 has a bunch of lag with autoreload 
-RUN pip install torch==1.7.1+cu110 torchvision==0.8.2+cu110 torchaudio===0.7.2 -f https://download.pytorch.org/whl/torch_stable.html
-RUN pip install  \
+RUN pip install --no-cache-dir torch==1.7.1+cu110 torchvision==0.8.2+cu110 torchaudio===0.7.2 -f https://download.pytorch.org/whl/torch_stable.html
+RUN pip install --no-cache-dir \
         # Core reqs
         numpy tqdm matplotlib beautifulsoup4 psutil ninja pytest b2sdk sympy portalocker fabric patchwork \ 
         # Things I find useful
         pandas jupyter seaborn bokeh setproctitle wurlitzer ipython av flake8 gitpython networkx einops \ 
         # Docs
-        sphinx
+        sphinx \
+        # MoHex/OpenSpiel dep
+        cmake 
 
 # Geotorch
-RUN pip install git+https://github.com/Lezcano/geotorch/
+RUN pip install --no-cache-dir git+https://github.com/Lezcano/geotorch/
 
 # Copy the Jupyter config into place. 
 ADD .jupyter /root/.jupyter
@@ -65,14 +71,14 @@ ADD .ipython /root/.ipython
 
 # Install my backend Jupyter extensions
 # aljpy needs to be before noterminal
-RUN pip install git+https://github.com/andyljones/aljpy.git && \ 
-    pip install git+https://github.com/andyljones/snakeviz@custom && \
-    pip install git+https://github.com/andyljones/noterminal && \
-    pip install git+https://github.com/andyljones/pytorch_memlab && \
+RUN pip install --no-cache-dir git+https://github.com/andyljones/aljpy.git && \ 
+    pip install --no-cache-dir git+https://github.com/andyljones/snakeviz@custom && \
+    pip install --no-cache-dir git+https://github.com/andyljones/noterminal && \
+    pip install --no-cache-dir git+https://github.com/andyljones/pytorch_memlab && \
     rm -rf ~/.cache
 
 # Install my frontend Jupyter extensions 
-RUN pip install jupyter_contrib_nbextensions && \ 
+RUN pip install --no-cache-dir jupyter_contrib_nbextensions && \ 
     jupyter contrib nbextension install --user && \
     cd /root && mkdir nbextensions && cd nbextensions && \
     git clone https://github.com/andyljones/nosearch && \
@@ -91,13 +97,14 @@ RUN pip install jupyter_contrib_nbextensions && \
     jupyter nbextension enable stripcommon/main && \
     jupyter nbextension enable autoscroll/main 
 
-RUN pip install cmake && \
-    apt-get install clang-10 -y --no-install-recommends && \
-    ln -s $(which clang-10) /usr/bin/clang++ && \
-    cd / && \
-    git clone https://github.com/andyljones/open_spiel.git && \
-    # TODO: The install.sh bit will fail here after getting the subrepos we're after.
-    cd open_spiel && ./install.sh || true && pip install -e .
+# OpenSpiel setup. +5GB, so gonna comment it out for now
+# RUN pip install --no-cache-dir cmake && \
+#     apt-get install clang-10 -y --no-install-recommends && \
+#     ln -s $(which clang-10) /usr/bin/clang++ && \
+#     cd / && \
+#     git clone https://github.com/andyljones/open_spiel.git && \
+#     # TODO: The install.sh bit will fail here after getting the subrepos we're after.
+#     cd open_spiel && ./install.sh || true && pip install -e .
 
 # Set up MoHex
 RUN DEBIAN_FRONTEND=noninteractive TZ=Europe/London \
@@ -111,7 +118,7 @@ RUN DEBIAN_FRONTEND=noninteractive TZ=Europe/London \
     ln -s /mohex/build/src/mohex/mohex /bin/mohex
 
 # Something upstream of here breaks Jupyter. 
-RUN pip install --upgrade ipython
+RUN pip install --no-cache-dir --upgrade ipython
 
 # Only commit the input cells of notebooks
 # https://stackoverflow.com/questions/18734739/using-ipython-notebooks-under-version-control
