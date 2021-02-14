@@ -8,6 +8,7 @@ from subprocess import STDOUT, check_output, CalledProcessError
 from logging import getLogger
 from datetime import datetime
 from aljpy import humanhash
+from shlex import quote
 
 log = getLogger(__name__)
 
@@ -68,27 +69,29 @@ def jobs(status=None) -> Dict[str, Job]:
         return {name: job for name, job in jobs().items() if job.status == status}
     return {name: Job(**job) for name, job in raw_jobs().items()}
 
-def compress(source, target):
+def compress(source, target, extras):
     target = Path(target).absolute()
     target.parent.mkdir(exist_ok=True, parents=True)
     # ag ignores .gitignore automagically, and doesn't depend on a git repo existing
     # so that we can use it on remote machines we've rsync'd to. Hooray!
     try:
         # /dev/null fixes this bug: https://github.com/ggreer/the_silver_searcher/issues/943#issuecomment-426096765
-        check_output(f'cd "{source}" && ag -g "" -l -0 . </dev/null | xargs -0 tar -czvf "{target}"', shell=True, stderr=STDOUT)
+        check_output(f'cd {quote(source)} && ag -g "" -l -0 . </dev/null | xargs -0 tar -czvf {quote(str(target))}', shell=True, stderr=STDOUT)
+        for extra in extras:
+            check_output(f'cd {quote(source)} && tar rvf {quote(str(target))} {quote(extra)}')
         return str(target)
     except CalledProcessError as e:
         log.error(f'Archival failed with output "{e.stdout.decode()}"')
         raise 
 
-def submit(cmd, dir=None, **kwargs):
+def submit(cmd, dir=None, extras=[], **kwargs):
     now = datetime.utcnow()
     name = f'{now.strftime(r"%Y-%m-%d %H-%M-%S")} {humanhash(n=2)}'
 
     if dir is None:
         archive = ''
     else:
-        archive = compress(dir, ROOT / 'archives' / f'{name}.tar.gz')
+        archive = compress(dir, ROOT / 'archives' / f'{name}.tar.gz', extras)
     
     with update() as js:
         log.info(f'Submitting job "{name}"')

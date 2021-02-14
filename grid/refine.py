@@ -1,10 +1,10 @@
-import requests
 import time
 from boardlaw.arena import common, mohex, database
 from logging import getLogger
 from rebar import arrdict
 from boardlaw import backup
 from pavlov import runs
+import jittens
 
 log = getLogger(__name__)
 
