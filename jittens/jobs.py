@@ -78,7 +78,7 @@ def compress(source, target, extras):
     try:
         # /dev/null fixes this bug: https://github.com/ggreer/the_silver_searcher/issues/943#issuecomment-426096765
         files = check_output(f'cd {quote(source)} && ag -g "" -l . </dev/null', shell=True, stderr=STDOUT).decode().splitlines()
-        with tarfile.open(target, mode='w') as f:
+        with tarfile.open(target, mode='w:gz') as f:
             for file in files + extras:
                 f.add(file)
         return str(target)

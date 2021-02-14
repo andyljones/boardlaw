@@ -21,9 +21,9 @@ def assure(run, idx=None):
         p = runs.path(run, res=False)
         p.mkdir(exist_ok=True, parents=True)
 
-        name = 'storage.latest.pkl' if idx is None else f'storage.snapshot.{idx}.pkl'
-        backup.download(str(p / name), f'boardlaw:output/pavlov/{run}/{name}')
-        backup.download(str(p / '_info.json'), f'boardlaw:output/pavlov/{run}/_info.json')
+        state_file = 'storage.latest.pkl' if idx is None else f'storage.snapshot.{idx}.pkl'
+        for file in [state_file, 'storage.named.model.pkl', '_info.json']:
+            backup.download(str(p / file), f'boardlaw:output/pavlov/{run}/{file}')
 
 def evaluate(run, idx, max_games=1024, target_std=.025):
     """
@@ -55,3 +55,7 @@ def evaluate(run, idx, max_games=1024, target_std=.025):
         database.save(run, rename(results, name))
 
     return arrdict.stack(trace), results
+
+def launch():
+    from grid import gcp
+    jittens.jobs.submit('python -c "from grid.refine import *" >logs.txt 2>&1', dir='.', resources={}, extras=['credentials.json'])

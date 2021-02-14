@@ -12,17 +12,24 @@ log = getLogger(__name__)
 def agent(run, idx=None, device='cpu'):
     try:
         network = storage.load_raw(run, 'model', device)
-        agent = MCTSAgent(network)
+    except IOError:
+        log.warn(f'No model file for "{run}"')
+        return None
 
+    agent = MCTSAgent(network)
+
+    try:
         if idx is None:
             sd = storage.load_latest(run)
         else:
             sd = storage.load_snapshot(run, idx)
-        agent.load_state_dict(sd['agent'])
-
-        return agent
     except IOError:
+        log.warn(f'No state dict file for "{run}"')
         return None
+
+    agent.load_state_dict(sd['agent'])
+
+    return agent
 
 def worlds(run, n_envs, device='cpu'):
     boardsize = runs.info(run)['params']['boardsize']
