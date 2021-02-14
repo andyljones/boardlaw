@@ -132,12 +132,11 @@ def fetch(source, target):
             del ps[name]
 
     return fetched
-
+         
 def tails(path, jobglob='*', count=5):
     from pathlib import Path
     from shlex import quote
     from fnmatch import fnmatch
-    from . import machines
 
     ms = machines.machines()
     promises = {}

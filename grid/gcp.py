@@ -3,6 +3,7 @@ from fabric import Connection
 from pathlib import Path
 import json
 import googleapiclient.discovery
+import jittens
 
 PROJECT = 'andyljones'
 ZONE = 'us-west1-a'
@@ -55,3 +56,31 @@ def container_connection(name):
             'allow_agent': False, 
             'look_for_keys': False, 
             'key_filename': ['/root/.ssh/boardlaw_rsa']})
+
+def container_command(name):
+    info = instances()[name]
+    external_ip = info['networkInterfaces'][0]['accessConfigs'][0]['natIP']
+    print(f'SSH_AUTH_SOCK="" ssh root@{external_ip} -p 36022 -o StrictHostKeyChecking=no -i /root/.ssh/boardlaw_rsa')
+
+def resources(name):
+    machine = instances()[name]['machineType'].split('/')[-1]
+    res = api().machineTypes().get(project=PROJECT, zone=ZONE, machineType=machine).execute()
+    return {'cpu': res['guestCpus'], 'memory': res['memoryMb']/1024}
+
+def jittenate():
+    jittens.machines.clear()
+
+    for name, info in instances().items():
+        external_ip = info['networkInterfaces'][0]['accessConfigs'][0]['natIP']
+        jittens.ssh.add(name,
+            resources=resources(name),
+            root='/code',
+            connection_kwargs={
+                'host': external_ip, 
+                'user': 'root', 
+                'port': 36022, 
+                'connect_kwargs': {
+                    'allow_agent': False,
+                    'look_for_keys': False,
+                    'key_filename': ['/root/.ssh/boardlaw_rsa']}})
+
