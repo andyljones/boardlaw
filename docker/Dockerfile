@@ -12,7 +12,7 @@ RUN apt-get update && \
         # Needed for profiling
         nsight-compute-2020.2.1 nsight-systems-2020.3.4 \
         # Needed for vast work
-        openssh-server rsync
+        openssh-server rsync less
 
 # Set up conda
 RUN curl -o ~/miniconda.sh -O https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
