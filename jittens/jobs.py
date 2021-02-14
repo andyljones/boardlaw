@@ -9,6 +9,7 @@ from logging import getLogger
 from datetime import datetime
 from aljpy import humanhash
 from shlex import quote
+import tarfile
 
 log = getLogger(__name__)
 
@@ -76,9 +77,10 @@ def compress(source, target, extras):
     # so that we can use it on remote machines we've rsync'd to. Hooray!
     try:
         # /dev/null fixes this bug: https://github.com/ggreer/the_silver_searcher/issues/943#issuecomment-426096765
-        check_output(f'cd {quote(source)} && ag -g "" -l -0 . </dev/null | xargs -0 tar -czvf {quote(str(target))}', shell=True, stderr=STDOUT)
-        for extra in extras:
-            check_output(f'cd {quote(source)} && tar rvf {quote(str(target))} {quote(extra)}')
+        files = check_output(f'cd {quote(source)} && ag -g "" -l . </dev/null', shell=True, stderr=STDOUT).decode().splitlines()
+        with tarfile.open(target, mode='w') as f:
+            for file in files + extras:
+                f.add(file)
         return str(target)
     except CalledProcessError as e:
         log.error(f'Archival failed with output "{e.stdout.decode()}"')
