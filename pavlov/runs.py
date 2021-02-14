@@ -176,6 +176,9 @@ def describe(run, desc):
     with update(run) as i:
         i['description'] = desc
 
+def exists(run=-1):
+    return path(run).exists()
+
 ### Tests
 
 @tests.mock_dir

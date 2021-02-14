@@ -1,4 +1,5 @@
 # https://github.com/GoogleCloudPlatform/python-docs-samples/blob/master/compute/api/create_instance.py
+import logging
 from fabric import Connection
 from pathlib import Path
 import json
@@ -7,6 +8,9 @@ import jittens
 
 PROJECT = 'andyljones'
 ZONE = 'us-west1-a'
+
+# Hide the file_cache spam: https://github.com/googleapis/google-api-python-client/issues/299
+logging.getLogger('googleapicliet.discovery_cache').setLevel(logging.ERROR)
 
 _api = None
 def api():
