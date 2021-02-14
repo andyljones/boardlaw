@@ -3,6 +3,7 @@ import time
 from boardlaw.arena import common, mohex, database
 from logging import getLogger
 from rebar import arrdict
+from boardlaw import backup
 from pavlov import runs
 
 log = getLogger(__name__)
@@ -17,11 +18,12 @@ def rename(r, new):
 
 def assure(run, idx=None):
     if not runs.exists(run):
-        p = runs.path(run)
+        p = runs.path(run, res=False)
         p.mkdir(exist_ok=True, parents=True)
 
         name = 'storage.latest.pkl' if idx is None else f'storage.snapshot.{idx}.pkl'
-
+        backup.download(str(p / name), f'boardlaw:output/pavlov/{run}/{name}')
+        backup.download(str(p / '_info.json'), f'boardlaw:output/pavlov/{run}/_info.json')
 
 def evaluate(run, idx, max_games=1024, target_std=.025):
     """
@@ -30,6 +32,7 @@ def evaluate(run, idx, max_games=1024, target_std=.025):
         * 9b4096w1d: 2.5G
     """
 
+    assure(run)
     worlds = common.worlds(run, 2)
     agent = common.agent(run, idx)
     arena = mohex.CumulativeArena(worlds)

@@ -177,7 +177,7 @@ def describe(run, desc):
         i['description'] = desc
 
 def exists(run=-1):
-    return path(run).exists()
+    return path(run, res=False).exists()
 
 ### Tests
 

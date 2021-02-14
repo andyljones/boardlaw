@@ -60,9 +60,9 @@ def ablate_snapshots():
 
 def download(local, remote):
     bucket, path = remote.split(':')
-    b2.get_bucket_by_name()
-    download_dest = b2.DownloadDestLocalFile(local)
-    bucket.download_file_by_name(path, download_dest)
+    bucket = api(bucket).get_bucket_by_name(bucket)
+    dest = b2.DownloadDestLocalFile(local)
+    return bucket.download_file_by_name(path, dest)
 
 def backup():
     sync_up('./output/pavlov', 'boardlaw:output/pavlov')
