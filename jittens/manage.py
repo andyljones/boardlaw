@@ -88,7 +88,7 @@ def finished():
 
 def cleanup(names=None):
     for job in jobs.jobs('dead').values():
-        if names is not None and job.name in names:
+        if (names is None) or (names is not None and job.name in names):
             log.info(f'Cleaning up {job.name}')
             machines.cleanup(job)
             if job.archive:

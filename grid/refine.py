@@ -30,6 +30,10 @@ def evaluate(run, idx, max_games=1024, target_std=.025):
     Memory usage:
         * 3b1w2d: 1.9G
         * 9b4096w1d: 2.5G
+
+    OK, '2021-02-08 23-10-31 safe-tool' takes 
+        * 2.5GB of memory and 56s/game on a 2-CPU, 4GB Google Cloud machine. Seems to use both CPUs.
+        * 2.5GB of memory and 35s/game on my local server
     """
 
     assure(run)
