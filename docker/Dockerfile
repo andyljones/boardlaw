@@ -133,6 +133,18 @@ RUN cd /usr/bin/ && \
     wget https://raw.githubusercontent.com/vast-ai/vast-python/master/vast.py -O vast && \
     chmod +x vast
 
+# Set up GCP SDK. You'll need to run 
+# `gcloud init`
+# `gcloud auth application-default login`
+RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | \
+    tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
+    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | \
+    apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add - && \
+    apt-get update -y && \
+    apt-get install google-cloud-sdk -y
+    
+
+# Set up the rsync daemon
 ADD rsyncd.conf /etc/
 
 # Set up the entrypoint script
