@@ -81,10 +81,10 @@ def params(df):
 
 def plot_compute_frontier():
     df = data.load()
-    (ggplot(
+    return (ggplot(
             data=df
                 .iloc[5:]
-                .pipe(lambda df: df.ewm(span=10).mean().where(df.bfill().notnull()))
+                .pipe(lambda df: df.ewm(span=1).mean().where(df.bfill().notnull()))
                 .unstack().unstack(0)
                 .reset_index()
                 .assign(params=params)
@@ -96,6 +96,6 @@ def plot_compute_frontier():
             #labs(title='compute-efficient frontier is dominated by the low-depth architectures') +
             scale_x_continuous(trans='log10') + 
             scale_color_continuous(trans='log10') + 
-            facet_wrap('boardsize') +
+            facet_wrap('boardsize', labeller='label_both') +
             coord_cartesian(None, (0, 1)) +
             mpl_theme(18, 15))

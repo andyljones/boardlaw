@@ -92,8 +92,6 @@ def observed_rates():
     import pandas as pd
     from pathlib import Path
 
-    ended = pd.to_datetime('2021-02-15 17-10-50', format='%Y-%m-%d %H-%M-%S').tz_localize('UTC')
-
     df = []
     for p in Path('output/refine').glob('*'):
         try:
