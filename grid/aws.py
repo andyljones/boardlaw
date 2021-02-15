@@ -34,7 +34,7 @@ def instances(id=None):
     states = {}
     for r in resp['Reservations']:
         for i in r['Instances']:
-            if i['State']['Name'] in ('running',):
+            if i['State']['Name'] in ('pending', 'running',):
                 states[i['InstanceId']] = i
     return states
 
@@ -118,4 +118,3 @@ def jittenate():
                     'allow_agent': False,
                     'look_for_keys': False,
                     'key_filename': ['/root/.ssh/boardlaw_rsa']}})
-

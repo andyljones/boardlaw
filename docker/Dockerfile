@@ -54,7 +54,7 @@ RUN pip install --no-cache-dir \
         # Core reqs
         numpy tqdm matplotlib beautifulsoup4 psutil ninja pytest b2sdk sympy portalocker fabric patchwork cloudpickle boto3 \ 
         # Things I find useful
-        pandas jupyter seaborn bokeh setproctitle wurlitzer ipython av flake8 gitpython networkx einops \ 
+        pandas jupyter seaborn bokeh setproctitle wurlitzer ipython av flake8 gitpython networkx einops statsmodels \ 
         # Docs
         sphinx \
         # MoHex/OpenSpiel dep

@@ -28,7 +28,7 @@ def assure(run, idx=None):
         for file in [state_file, 'storage.named.model.pkl', '_info.json']:
             backup.download(str(p / file), f'boardlaw:output/pavlov/{run}/{file}')
 
-def evaluate(run, idx, max_games=1024, target_std=.025):
+def evaluate(run, idx, max_games=8, target_std=.025):
     """
     Memory usage:
         * 3b1w2d: 1.9G
@@ -51,15 +51,16 @@ def evaluate(run, idx, max_games=1024, target_std=.025):
     while True:
         soln, results = arena.play(agent)
         trace.append(soln)
-        if soln.std < target_std:
-            break
-        if soln.games >= max_games:
-            break
 
         rate = (time.time() - start)/(soln.games + 1e-6)
         log.info(f'{rate:.0f}s per game; {rate*soln.games:.0f}s so far, {rate*max_games:.0f}s expected')
 
         database.save(run, rename(results, name))
+
+        if soln.std < target_std:
+            break
+        if soln.games >= max_games:
+            break
 
     return arrdict.stack(trace), results
 
@@ -75,6 +76,7 @@ def launch():
     while True:
         jittens.manage.refresh()
         time.sleep(15)
+        fetch()
 
 def fetch():
     for id, machine in jittens.machines.machines().items(): 
@@ -84,3 +86,28 @@ def fetch():
         
         command = f"""rsync -Rr --port 12000 -e "{ssh}" {conn.user}@{conn.host}:"/code/*/output/pavlov/./*/*.json" "output/refine" """
         invoke.context.Context().run(command)
+
+def observed_rates():
+    import json
+    import pandas as pd
+    from pathlib import Path
+
+    ended = pd.to_datetime('2021-02-15 17-10-50', format='%Y-%m-%d %H-%M-%S').tz_localize('UTC')
+
+    df = []
+    for p in Path('output/refine').glob('*'):
+        try:
+            info = json.loads((p / '_info.json').read_text())
+            arena = json.loads((p / 'arena.json').read_text())
+            games = sum([a['black_wins'] + a['white_wins'] for a in arena])
+            
+            start = pd.Timestamp(info['_files']['arena.json']['_created'])
+            duration = (ended - start).total_seconds()
+            
+            df.append({**info['params'], 'games': games, 'duration': duration})
+        except FileNotFoundError:
+            pass
+    df = pd.DataFrame(df)
+    df['rate'] = df.duration/df.games
+
+    return df
