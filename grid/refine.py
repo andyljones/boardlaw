@@ -6,7 +6,7 @@ from boardlaw import backup
 from pavlov import runs
 from shlex import quote
 import jittens
-from . import gcp
+from . import aws
 
 log = getLogger(__name__)
 
