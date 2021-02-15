@@ -4,7 +4,9 @@ from logging import getLogger
 from rebar import arrdict
 from boardlaw import backup
 from pavlov import runs
+from shlex import quote
 import jittens
+from . import gcp
 
 log = getLogger(__name__)
 
@@ -32,8 +34,8 @@ def evaluate(run, idx, max_games=1024, target_std=.025):
         * 9b4096w1d: 2.5G
 
     OK, '2021-02-08 23-10-31 safe-tool' takes 
-        * 2.5GB of memory and 56s/game on a 2-CPU, 4GB Google Cloud machine. Seems to use both CPUs.
-        * 2.5GB of memory and 35s/game on my local server
+        * 40s/game on a 2-CPU, 4GB Google Cloud machine. Seems to use both CPUs.
+        * 30s/game on my local server
     """
 
     assure(run)
@@ -61,5 +63,14 @@ def evaluate(run, idx, max_games=1024, target_std=.025):
     return arrdict.stack(trace), results
 
 def launch():
-    from grid import gcp
-    jittens.jobs.submit('python -c "from grid.refine import *" >logs.txt 2>&1', dir='.', resources={}, extras=['credentials.json'])
+    for run, info in runs.runs().items():
+        if info.get('description', '').startswith('main/'):
+            jittens.jobs.submit(
+                cmd=f"""python -c "from grid.refine import *; evaluate({quote(run)}, None)" >logs.txt 2>&1""", 
+                dir='.', 
+                resources={'cpu': 1, 'memory': 4}, 
+                extras=['credentials.json'])
+        
+    while True:
+        jittens.manage.refresh()
+        time.sleep(15)

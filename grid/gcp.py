@@ -10,7 +10,7 @@ PROJECT = 'andyljones'
 ZONE = 'us-west1-a'
 
 # Hide the file_cache spam: https://github.com/googleapis/google-api-python-client/issues/299
-logging.getLogger('googleapicliet.discovery_cache').setLevel(logging.ERROR)
+logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR)
 
 _api = None
 def api():
@@ -21,7 +21,7 @@ def api():
         _api = googleapiclient.discovery.build('compute', 'v1')
     return _api
 
-def create(name='boardlaw', template='boardlaw-refine'):
+def create(name='boardlaw', template='boardlaw-refine-30'):
     # Templates: https://console.cloud.google.com/compute/instanceTemplates
     return (api().instances().insert(
         project=PROJECT, 
