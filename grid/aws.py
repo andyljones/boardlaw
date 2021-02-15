@@ -11,19 +11,27 @@
 # ```
 import json
 from pathlib import Path
-import boto3
 from IPython import display
+from fabric import Connection
+import jittens
 
 def client():
+    import boto3
     creds = json.loads(Path('credentials.json').read_text())['aws']
     return boto3.client('ec2', 'us-east-1', **creds)
-
-def states():
+    
+def instances(id=None):
+    if isinstance(id, str):
+        return instances()[id]
+    if isinstance(id, int):
+        i = instances()
+        return i[sorted(i)[id]]
+    assert id is None
     resp = client().describe_instances(Filters=[{'Name': 'tag:Name', 'Values': ['boardlaw']}])
     states = {}
     for r in resp['Reservations']:
         for i in r['Instances']:
-            states[i['InstanceId']] = i['State']['Name']
+            states[i['InstanceId']] = i
     return states
 
 def launch():
@@ -34,12 +42,51 @@ def launch():
 
 def wait():
     while True:
-        s = states()
+        states = {n: i['State']['Name'] for n, i in instances().items()}
         display.clear_output(wait=True)
-        for k, v in s.items():
+        for k, v in states.items():
             print(f'{k:15s}    {v}')
-        if all(v in ('running',) for v in s.values()):
+        if all(v in ('running',) for v in states.values()):
             break
+
+def container_connection(id=-1):
+    info = instances(id)
+    return Connection( 
+        host=info['PublicDnsName'], 
+        user='root', 
+        # Make sure to add a firewall rule permitting 36022
+        port=36022, 
+        connect_kwargs={
+            'allow_agent': False, 
+            'look_for_keys': False, 
+            'key_filename': ['/root/.ssh/boardlaw_rsa']})
+
+def container_command(id):
+    info = instances(id)
+    print(f'SSH_AUTH_SOCK="" ssh root@{info["PublicDnsName"]} -p 36022 -o StrictHostKeyChecking=no -i /root/.ssh/boardlaw_rsa')
+
+def resources(id):
+    itype = instances(id)['InstanceType']
+    [desc] = client().describe_instance_types(InstanceTypes=[itype])['InstanceTypes']
+    return {'cpu': desc['VCpuInfo']['DefaultVCpus'], 'memory': desc['MemoryInfo']['SizeInMiB']/1024}
+
+def jittenate():
+    jittens.machines.clear()
+
+    for id, info in instances().items():
+        jittens.ssh.add(id,
+            resources=resources(id),
+            root='/code',
+            connection_kwargs={
+                'host': info['PublicDnsName'], 
+                'user': 'root', 
+                'port': 36022, 
+                'connect_kwargs': {
+                    'allow_agent': False,
+                    'look_for_keys': False,
+                    'key_filename': ['/root/.ssh/boardlaw_rsa']}})
+
+
 
     
 
