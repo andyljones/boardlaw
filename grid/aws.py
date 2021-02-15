@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 from IPython import display
 from fabric import Connection
+from invoke.exceptions import UnexpectedExit
 import jittens
 
 def client():
@@ -31,7 +32,8 @@ def instances(id=None):
     states = {}
     for r in resp['Reservations']:
         for i in r['Instances']:
-            states[i['InstanceId']] = i
+            if i['State']['Name'] in ('running',):
+                states[i['InstanceId']] = i
     return states
 
 def launch():
@@ -40,13 +42,35 @@ def launch():
         MinCount=1,
         MaxCount=1)
 
+_connections = {}
+def machine_connection(id=-1):
+    if id not in _connections:
+        info = instances(id)
+        _connections[id] = Connection( 
+            host=info['PublicDnsName'], 
+            user='ec2-user', 
+            port=22, 
+            connect_kwargs={
+                'allow_agent': False, 
+                'look_for_keys': False, 
+                'key_filename': ['/root/.ssh/andyljones-useast.pem']})
+    return _connections[id]
+
 def wait():
     while True:
-        states = {n: i['State']['Name'] for n, i in instances().items()}
-        display.clear_output(wait=True)
-        for k, v in states.items():
-            print(f'{k:15s}    {v}')
-        if all(v in ('running',) for v in states.values()):
+        status = {}
+        for id in instances():
+            try:
+                machine_connection(id).run('ls /var/lib/cloud/instance/boot-finished', hide=True)
+                status[id] = 'ready'
+            except UnexpectedExit:
+                status[id] = 'initializing'
+                pass
+
+        for id, v in status.items():
+            print(f'{id:25} {v}')
+        
+        if all(v in ('ready',) for v in status.values()):
             break
 
 def container_connection(id=-1):
