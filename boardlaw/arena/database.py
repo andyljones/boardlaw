@@ -49,11 +49,12 @@ def save(run, result):
         d = _to_dict(l)
         k = tuple(result.names)
         if k not in d:
-            d[k] = {'black_wins': 0, 'white_wins': 0, 'moves': 0}
+            d[k] = {'black_wins': 0, 'white_wins': 0, 'moves': 0, 'times': 0.}
         v = d[k]
         v['black_wins'] += result.wins[0]
         v['white_wins'] += result.wins[1]
         v['moves'] += result.moves
+        v['times'] += result.times
 
         l[:] = _to_list(d)
 

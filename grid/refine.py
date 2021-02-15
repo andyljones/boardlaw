@@ -1,3 +1,4 @@
+import pandas as pd
 import invoke
 import time
 from boardlaw.arena import common, mohex, database
@@ -65,13 +66,21 @@ def evaluate(run, idx, max_games=8, target_std=.025):
     return arrdict.stack(trace), results
 
 def launch():
-    for run, info in runs.runs().items():
-        if info.get('description', '').startswith('main/'):
-            jittens.jobs.submit(
-                cmd=f"""python -c "from grid.refine import *; evaluate({quote(run)}, None)" >logs.txt 2>&1""", 
-                dir='.', 
-                resources={'cpu': 1, 'memory': 4}, 
-                extras=['credentials.json'])
+    df = runs.pandas().loc[lambda df: df.description.fillna("").str.startswith("main/")]
+    df = pd.concat([df, pd.DataFrame(df.params.values.tolist(), df.index)], 1)
+    df['n_snapshots'] = df._files.apply(lambda d: len([f for f in d if f.startswith('storage.snapshot')]))
+    df = (df
+        .reset_index()
+        .groupby(['boardsize', 'width', 'depth'])
+        .apply(lambda g: g[g.n_snapshots == g.n_snapshots.max()].iloc[-1])
+        .set_index('run'))
+
+    for run in df.index:
+        jittens.jobs.submit(
+            cmd=f"""python -c "from grid.refine import *; evaluate({quote(run)}, None)" >logs.txt 2>&1""", 
+            dir='.', 
+            resources={'cpu': 1, 'memory': 4}, 
+            extras=['credentials.json'])
         
     while True:
         jittens.manage.refresh()

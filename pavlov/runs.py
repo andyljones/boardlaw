@@ -136,7 +136,7 @@ def runs(pattern=None):
 def pandas(pattern=None):
     df = {}
     for run, info in runs(pattern).items():
-        df[run] = {k: v for k, v in info.items() if k != '_files'}
+        df[run] = {k: v for k, v in info.items()}
     df = pd.DataFrame.from_dict(df, orient='index')
     df['_created'] = pd.to_datetime(df['_created'])
     df.index.name = 'run'
