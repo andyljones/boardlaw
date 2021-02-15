@@ -44,6 +44,12 @@ def launch():
         MinCount=1,
         MaxCount=1)
 
+def terminate(id=None):
+    if id is None:
+        return [terminate(id) for id in instances()] 
+    return client().terminate_instances(InstanceIds=[id])
+
+
 _connections = {}
 def machine_connection(id=-1):
     if id not in _connections:
