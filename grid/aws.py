@@ -1,3 +1,4 @@
+
 # * Rent an EC2 instance
 # * Install docker: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/docker-basics.html
 # ```
@@ -10,6 +11,7 @@
 # docker run andyljones/boardlaw --network host --name boardlaw
 # ```
 import json
+import invoke
 from pathlib import Path
 from IPython import display
 from fabric import Connection
@@ -67,6 +69,7 @@ def wait():
                 status[id] = 'initializing'
                 pass
 
+        display.clear_output(wait=True)
         for id, v in status.items():
             print(f'{id:25} {v}')
         
@@ -109,8 +112,4 @@ def jittenate():
                     'allow_agent': False,
                     'look_for_keys': False,
                     'key_filename': ['/root/.ssh/boardlaw_rsa']}})
-
-
-
-    
 

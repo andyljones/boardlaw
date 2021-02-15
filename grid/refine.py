@@ -1,3 +1,4 @@
+import invoke
 import time
 from boardlaw.arena import common, mohex, database
 from logging import getLogger
@@ -74,3 +75,12 @@ def launch():
     while True:
         jittens.manage.refresh()
         time.sleep(15)
+
+def fetch():
+    for id, machine in jittens.machines.machines().items(): 
+        conn = machine.connection
+        [keyfile] = conn.connect_kwargs['key_filename']
+        ssh = f"ssh -o StrictHostKeyChecking=no -i '{keyfile}' -p {conn.port}"
+        
+        command = f"""rsync -Rr --port 12000 -e "{ssh}" {conn.user}@{conn.host}:"/code/*/output/pavlov/./*/*.json" "output/refine" """
+        invoke.context.Context().run(command)
