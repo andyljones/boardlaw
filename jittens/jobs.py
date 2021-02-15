@@ -29,6 +29,8 @@ class Job:
     allocation: Dict[str, List[int]] = field(default_factory=dict)
     machine: Optional[str] = None
     process: Optional[str] = None
+    launched: Optional[str] = None
+    died: Optional[str] = None
 
 def path():
     return ROOT / 'jobs.json'

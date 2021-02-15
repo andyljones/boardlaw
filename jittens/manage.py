@@ -2,6 +2,7 @@ from . import jobs, machines
 from dataclasses import asdict
 from logging import getLogger
 from pathlib import Path
+from datetime import datetime
 import copy
 
 log = getLogger(__name__)
@@ -40,6 +41,7 @@ def launch(job, machine):
     log.info(f'Launching job "{job.name}" on machine "{machine.name}"')
     allocation = allocate(job, machine)
     job.status = 'active'
+    job.launched = str(datetime.utcnow())
     job.machine = machine.name
     job.process = machine.launch(job, allocation)
     job.allocation = allocation
@@ -70,6 +72,7 @@ def refresh(ms=None):
     for job in jobs.jobs('active').values():
         if dead(job, ms):
             job.status = 'dead'
+            job.died = str(datetime.utcnow())
             with jobs.update() as js:
                 js[job.name] = asdict(job)
 

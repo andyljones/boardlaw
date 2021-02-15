@@ -101,13 +101,12 @@ def observed_rates():
             arena = json.loads((p / 'arena.json').read_text())
             games = sum([a['black_wins'] + a['white_wins'] for a in arena])
             
-            start = pd.Timestamp(info['_files']['arena.json']['_created'])
-            duration = (ended - start).total_seconds()
+            # start = pd.Timestamp(info['_files']['arena.json']['_created'])
+            # duration = (ended - start).total_seconds()
             
-            df.append({**info['params'], 'games': games, 'duration': duration})
+            df.append({**info['params'], 'games': games})
         except FileNotFoundError:
             pass
     df = pd.DataFrame(df)
-    df['rate'] = df.duration/df.games
 
     return df
