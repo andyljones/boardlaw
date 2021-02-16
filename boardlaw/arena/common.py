@@ -54,9 +54,9 @@ def gather(wins, moves, times, matchup_idxs, names, boardsize):
         results.append(dotdict.dotdict(
             names=tuple(names[p]),
             wins=tuple(map(float, ws)),
-            moves=float(ms[0]),
+            moves=float(ms),
             games=float(ws.sum()),
-            times=float(ts.sum()),
+            times=float(ts),
             boardsize=boardsize))
     return results
 
@@ -68,8 +68,8 @@ def evaluate(worlds, agents):
     envs = torch.arange(worlds.n_envs, device=worlds.device)
     terminal = torch.zeros((worlds.n_envs,), dtype=torch.bool, device=worlds.device)
     wins = torch.zeros((worlds.n_envs, worlds.n_seats), dtype=torch.int, device=worlds.device)
-    moves = torch.zeros((worlds.n_envs, worlds.n_seats), dtype=torch.int, device=worlds.device)
-    times = torch.zeros((worlds.n_envs, worlds.n_seats), dtype=torch.float, device=worlds.device)
+    moves = torch.zeros((worlds.n_envs,), dtype=torch.int, device=worlds.device)
+    times = torch.zeros((worlds.n_envs,), dtype=torch.float, device=worlds.device)
     matchup_idxs = matchup_indices(worlds.n_envs, worlds.n_seats).to(worlds.device)
     while True:
         for i, id in enumerate(agents):
