@@ -10,6 +10,7 @@ from pavlov import runs, storage
 from shlex import quote
 import jittens
 from . import aws
+from invoke.exceptions import UnexpectedExit
 
 log = getLogger(__name__)
 
@@ -30,7 +31,7 @@ def assure(run, idx=None):
         for file in [state_file, 'storage.named.model.pkl', '_info.json']:
             backup.download(str(p / file), f'boardlaw:output/pavlov/{run}/{file}')
 
-def evaluate(run, idx, max_games=32, target_std=.025):
+def evaluate(run, idx, max_games=128, target_std=.025):
     """
     Memory usage:
         * 3b1w2d: 1.9G
@@ -45,6 +46,10 @@ def evaluate(run, idx, max_games=32, target_std=.025):
     worlds = common.worlds(run, 2)
     agent = common.agent(run, idx)
     arena = mohex.CumulativeArena(worlds)
+
+    # Warm things up; get everything compiled
+    decisions = agent(worlds)
+    worlds.step(decisions.actions)
 
     name = 'latest' if idx is None else f'snapshot.{idx}'
 
@@ -77,7 +82,7 @@ def launch():
         .set_index('run'))
 
     invocations = []
-    for run in df.index:
+    for run in df.query('width <= 64').index:
         for snapshot in list(storage.snapshots(run)) + [None]:
             invocations.append((run, snapshot))
     invocations = np.random.permutation(invocations)
@@ -101,8 +106,12 @@ def fetch():
         [keyfile] = conn.connect_kwargs['key_filename']
         ssh = f"ssh -o StrictHostKeyChecking=no -i '{keyfile}' -p {conn.port}"
         
-        command = f"""rsync -Rr --port 12000 -e "{ssh}" {conn.user}@{conn.host}:"/code/*/output/pavlov/./*/*.json" "output/refine" """
-        invoke.context.Context().run(command)
+        command = f"""rsync -Rr --port 12000 -e "{ssh}" {conn.user}@{conn.host}:"/code/./*/output/pavlov/*/*.json" "output/refine" """
+        try:
+            invoke.context.Context().run(command)
+        except UnexpectedExit:
+            log.exception(f'Exception fetching from {id}')
+            pass
 
 def observed_rates():
     import json
@@ -115,11 +124,13 @@ def observed_rates():
             info = json.loads((p / '_info.json').read_text())
             arena = json.loads((p / 'arena.json').read_text())
             games = sum([a['black_wins'] + a['white_wins'] for a in arena])
+            moves = sum([a['moves'] for a in arena])
+            times = sum([a['times'] for a in arena])
             
             # start = pd.Timestamp(info['_files']['arena.json']['_created'])
             # duration = (ended - start).total_seconds()
             
-            df.append({**info['params'], 'games': games})
+            df.append({**info['params'], 'games': games, 'moves': moves, 'times': times})
         except FileNotFoundError:
             pass
     df = pd.DataFrame(df)
