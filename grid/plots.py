@@ -79,8 +79,8 @@ def params(df):
     output = df.boardsize**2 * (df.width + 1)
     return intake + body + output
 
-def plot_compute_frontier():
-    df = data.load()
+def plot_compute_frontier(df=None):
+    df = data.load() if df is None else df
     return (ggplot(
             data=df
                 .iloc[5:]
@@ -93,9 +93,16 @@ def plot_compute_frontier():
                 .assign(norm_elo=data.normalised_elo)
                 .dropna()) + 
             geom_line(aes(x='flops', y='norm_elo', color='params', group='g')) + 
-            #labs(title='compute-efficient frontier is dominated by the low-depth architectures') +
+            labs(
+                x='training FLOPS',
+                y='normalized elo; 0 is random, 1 is perfect play',
+                title='alphazero performance increases as a sigmoid in compute;\nincreasing boardsize by 2 means a ~100x increase in the compute needed for perfect play') +
             scale_x_continuous(trans='log10') + 
             scale_color_continuous(trans='log10') + 
             facet_wrap('boardsize', labeller='label_both') +
             coord_cartesian(None, (0, 1)) +
-            mpl_theme(18, 15))
+            mpl_theme(18, 15) +
+            theme(
+                text=element_text(size=18),
+                title=element_text(size=24),
+                legend_title=element_text(size=18)))
