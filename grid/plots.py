@@ -1,6 +1,7 @@
 import pandas as pd
 from plotnine import *
 from . import data
+import numpy as np
 
 def mpl_theme(width=12, height=8):
     return [
@@ -127,3 +128,35 @@ def plot_compute_perf_frontier():
         ax.set_ylabel('training FLOPS')
         ax.set_xlabel('boardsize')
         ax.set_title('FLOPS needed to hit 95% of perfect play is roughly linear')
+
+def plot_frontier_slopes():
+    df = data.load()
+
+    interp = df.interpolate().where(df.bfill().notnull())
+    stacked = interp.stack([1, 2, 3]).reset_index().dropna()
+    stacked['flops'] = flops(stacked)
+    stacked = stacked[stacked.elo_std < .5]
+
+    best = stacked.groupby(['_time', 'boardsize']).elo.idxmax()
+    best = stacked.loc[best]
+
+    index = 10**np.linspace(0, np.log10(stacked.flops.max()), 1001)
+    regular = pd.pivot_table(stacked, 'elo', ('flops',), ('boardsize', 'width', 'depth')).ffill().reindex(index, method='nearest')
+
+    frontier = regular.expanding().max().groupby(axis=1, level=0).max()
+
+    slope = frontier.div(-data.min_elos().drop(11), axis=1).add(1).gt(.95).idxmax()
+    x = slope.reset_index()
+    x.columns = ['boardsize', 'flops']
+
+    y = frontier.stack().rename('elo').reset_index()
+    y['shifted'] = y.flops.div(x.set_index('boardsize').flops[y.boardsize.values].values)
+
+    (ggplot(data=y)
+        + geom_line(aes(x='shifted', y='elo', color='boardsize', group='boardsize'), size=2)
+        + scale_x_continuous(trans='log10')
+        + coord_cartesian((-4, 1))
+        + labs(
+            x='FLOPS as a fraction of 95% of perfect play',
+            title='slope of the frontier seems the same across boardsizes?')
+        + mpl_theme())
