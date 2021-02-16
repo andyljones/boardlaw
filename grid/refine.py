@@ -71,20 +71,21 @@ def evaluate(run, idx, max_games=128, target_std=.025):
 
     return arrdict.stack(trace), results
 
-def launch():
+def submit(query='width <= 64', resources={'cpu': 2, 'memory': 4}):
     df = runs.pandas().loc[lambda df: df.description.fillna("").str.startswith("main/")]
     df = pd.concat([df, pd.DataFrame(df.params.values.tolist(), df.index)], 1)
     df['n_snapshots'] = df._files.apply(lambda d: len([f for f in d if f.startswith('storage.snapshot')]))
     df = (df
         .reset_index()
+        .query(query)
         .groupby(['boardsize', 'width', 'depth'])
         .apply(lambda g: g[g.n_snapshots == g.n_snapshots.max()].iloc[-1])
         .set_index('run'))
 
     invocations = []
-    for run in df.query('width <= 64').index:
+    for run in df.index:
         for snapshot in list(storage.snapshots(run)) + [None]:
-            invocations.append((run, snapshot))
+            invocations.append((run, df.width, snapshot))
     invocations = np.random.permutation(invocations)
     
     archive = jittens.jobs.compress('.', '.jittens/bulk.tar.gz', ['credentials.json'])
@@ -92,14 +93,8 @@ def launch():
         jittens.jobs.submit(
             cmd=f"""python -c "from grid.refine import *; evaluate({quote(run)}, {snapshot})" >logs.txt 2>&1""", 
             archive=archive, 
-            resources={'cpu': 2, 'memory': 4})
+            resources=resources)
         
-    aws.jittenate()
-    while True:
-        jittens.manage.refresh()
-        time.sleep(5)
-        fetch()
-
 def fetch():
     for id, machine in jittens.machines.machines().items(): 
         conn = machine.connection
@@ -112,6 +107,14 @@ def fetch():
         except UnexpectedExit:
             log.exception(f'Exception fetching from {id}')
             pass
+
+def refresh():
+    aws.jittenate()
+    while True:
+        jittens.manage.refresh()
+        time.sleep(5)
+        fetch()
+
 
 def observed_rates():
     import json
