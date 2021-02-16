@@ -89,8 +89,7 @@ def snapshot(run, objs, **kwargs):
 def snapshots(run=-1):
     return {files.idx(run, fn): {**info, 'path': files.path(run, fn)} for fn, info in files.seq(run, SNAPSHOT).items()}
 
-def load_snapshot(run=-1, n=-1, device='cpu'):
-    n = list(snapshots(run))[n]
+def load_snapshot(run=-1, n=0, device='cpu'):
     path = files.path(run, SNAPSHOT.format(n=n))
     return load_path(path, device)
 

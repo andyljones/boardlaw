@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import invoke
 import time
@@ -5,7 +6,7 @@ from boardlaw.arena import common, mohex, database
 from logging import getLogger
 from rebar import arrdict
 from boardlaw import backup
-from pavlov import runs
+from pavlov import runs, storage
 from shlex import quote
 import jittens
 from . import aws
@@ -29,7 +30,7 @@ def assure(run, idx=None):
         for file in [state_file, 'storage.named.model.pkl', '_info.json']:
             backup.download(str(p / file), f'boardlaw:output/pavlov/{run}/{file}')
 
-def evaluate(run, idx, max_games=8, target_std=.025):
+def evaluate(run, idx, max_games=32, target_std=.025):
     """
     Memory usage:
         * 3b1w2d: 1.9G
@@ -40,7 +41,7 @@ def evaluate(run, idx, max_games=8, target_std=.025):
         * 30s/game on my local server
     """
 
-    assure(run)
+    assure(run, idx)
     worlds = common.worlds(run, 2)
     agent = common.agent(run, idx)
     arena = mohex.CumulativeArena(worlds)
@@ -75,16 +76,23 @@ def launch():
         .apply(lambda g: g[g.n_snapshots == g.n_snapshots.max()].iloc[-1])
         .set_index('run'))
 
+    invocations = []
     for run in df.index:
+        for snapshot in list(storage.snapshots(run)) + [None]:
+            invocations.append((run, snapshot))
+    invocations = np.random.permutation(invocations)
+    
+    archive = jittens.jobs.compress('.', '.jittens/bulk.tar.gz', ['credentials.json'])
+    for run, snapshot in invocations:
         jittens.jobs.submit(
-            cmd=f"""python -c "from grid.refine import *; evaluate({quote(run)}, None)" >logs.txt 2>&1""", 
-            dir='.', 
-            resources={'cpu': 1, 'memory': 4}, 
-            extras=['credentials.json'])
+            cmd=f"""python -c "from grid.refine import *; evaluate({quote(run)}, {snapshot})" >logs.txt 2>&1""", 
+            archive=archive, 
+            resources={'cpu': 2, 'memory': 4})
         
+    aws.jittenate()
     while True:
         jittens.manage.refresh()
-        time.sleep(15)
+        time.sleep(5)
         fetch()
 
 def fetch():

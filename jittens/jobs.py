@@ -88,14 +88,18 @@ def compress(source, target, extras):
         log.error(f'Archival failed with output "{e.stdout.decode()}"')
         raise 
 
-def submit(cmd, dir=None, extras=[], **kwargs):
+def submit(cmd, dir=None, extras=[], archive=None, **kwargs):
     now = datetime.utcnow()
     name = f'{now.strftime(r"%Y-%m-%d %H-%M-%S")} {humanhash(n=2)}'
 
-    if dir is None:
-        archive = ''
+    if archive is None:
+        if dir is None:
+            archive = ''
+        else:
+            archive = compress(dir, ROOT / 'archives' / f'{name}.tar.gz', extras)
     else:
-        archive = compress(dir, ROOT / 'archives' / f'{name}.tar.gz', extras)
+        assert dir is None
+        assert extras == []
     
     with update() as js:
         log.info(f'Submitting job "{name}"')
