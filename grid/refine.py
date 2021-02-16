@@ -42,9 +42,17 @@ def evaluate(run, idx, max_games=128, target_std=.025):
         * 30s/game on my local server
     """
 
+    import os
+    if 'JITTENS_GPU' in os.environ:
+        os.environ['CUDA_VISIBLE_DEVICES'] = os.environ['JITTENS_GPU']
+        print(f'Devices set to "{os.environ["CUDA_VISIBLE_DEVICES"]}"')
+        device = 'cuda'
+    else:
+        device = 'cpu'
+
     assure(run, idx)
-    worlds = common.worlds(run, 2)
-    agent = common.agent(run, idx)
+    worlds = common.worlds(run, 2, device)
+    agent = common.agent(run, idx, device)
     arena = mohex.CumulativeArena(worlds)
 
     # Warm things up; get everything compiled
@@ -72,6 +80,10 @@ def evaluate(run, idx, max_games=128, target_std=.025):
     return arrdict.stack(trace), results
 
 def submit(query='width <= 64', resources={'cpu': 2, 'memory': 4}):
+    if query is None:
+        submit('width <= 64', {'cpu': 2, 'memory': 4})
+        submit('width > 64', {'gpu': 1})
+
     df = runs.pandas().loc[lambda df: df.description.fillna("").str.startswith("main/")]
     df = pd.concat([df, pd.DataFrame(df.params.values.tolist(), df.index)], 1)
     df['n_snapshots'] = df._files.apply(lambda d: len([f for f in d if f.startswith('storage.snapshot')]))
@@ -85,7 +97,7 @@ def submit(query='width <= 64', resources={'cpu': 2, 'memory': 4}):
     invocations = []
     for run in df.index:
         for snapshot in list(storage.snapshots(run)) + [None]:
-            invocations.append((run, df.width, snapshot))
+            invocations.append((run, snapshot))
     invocations = np.random.permutation(invocations)
     
     archive = jittens.jobs.compress('.', '.jittens/bulk.tar.gz', ['credentials.json'])
@@ -97,11 +109,14 @@ def submit(query='width <= 64', resources={'cpu': 2, 'memory': 4}):
         
 def fetch():
     for id, machine in jittens.machines.machines().items(): 
-        conn = machine.connection
-        [keyfile] = conn.connect_kwargs['key_filename']
-        ssh = f"ssh -o StrictHostKeyChecking=no -i '{keyfile}' -p {conn.port}"
+        if hasattr(machine, 'connection'):
+            conn = machine.connection
+            [keyfile] = conn.connect_kwargs['key_filename']
+            ssh = f"ssh -o StrictHostKeyChecking=no -i '{keyfile}' -p {conn.port}"
+            command = f"""rsync -Rr --port 12000 -e "{ssh}" {conn.user}@{conn.host}:"/code/./*/output/pavlov/*/*.json" "output/refine" """
+        else:
+            command = """rsync -Rr .jittens/local/./*/output/pavlov/*/*.json "output/refine" """
         
-        command = f"""rsync -Rr --port 12000 -e "{ssh}" {conn.user}@{conn.host}:"/code/./*/output/pavlov/*/*.json" "output/refine" """
         try:
             invoke.context.Context().run(command)
         except UnexpectedExit:
@@ -122,7 +137,7 @@ def observed_rates():
     from pathlib import Path
 
     df = []
-    for p in Path('output/refine').glob('*'):
+    for p in Path('output/refine').glob('*/output/pavlov/*'):
         try:
             info = json.loads((p / '_info.json').read_text())
             arena = json.loads((p / 'arena.json').read_text())

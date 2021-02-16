@@ -106,6 +106,7 @@ def resources(id):
 def jittenate():
     jittens.machines.clear()
 
+    jittens.local.add(root='.jittens/local', resources={'memory': 64, 'gpu': 2})
     for id, info in instances().items():
         jittens.ssh.add(id,
             resources=resources(id),
