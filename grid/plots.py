@@ -13,6 +13,11 @@ def mpl_theme(width=12, height=8):
             strip_background=element_rect(color='w', fill='w'),
             panel_grid=element_line(color='k', alpha=.1))]
 
+def poster_sizes():
+    return theme(text=element_text(size=18),
+                title=element_text(size=18),
+                legend_title=element_text(size=18))
+
 def plot_sigmoids(aug):
     return (ggplot(data=aug, mapping=aes(x='width', y='rel_elo', color='depth'))
         + geom_line(mapping=aes(group='depth'))
@@ -173,4 +178,5 @@ def plot_refine_results():
         + scale_color_continuous(trans='log10')
         + facet_wrap('boardsize')
         + labs(title='')
-        + plots.mpl_theme(12, 8))
+        + mpl_theme(12, 8)
+        + poster_sizes())
