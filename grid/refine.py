@@ -137,24 +137,14 @@ def refresh():
 
 
 def arena_results():
-    import json
     import pandas as pd
-    from pathlib import Path
 
     df = []
-    globs = (
-        list(Path('output/refine').glob('*/output/pavlov/*')) +
-        list(Path('output/refine-0').glob('*')) + 
-        list(Path('output/refine-1').glob('*')))
-    for p in globs:
-        try:
-            info = json.loads((p / '_info.json').read_text())
-            arena = json.loads((p / 'arena.json').read_text())
-            for a in arena:
-                df.append({'run': p.name, **info['params'], **a})
-            
-        except FileNotFoundError:
-            pass
+    for r, i in runs.runs().items():
+        if i.get('description', '').startswith('main/'):
+            arena = database.pandas(r)
+            for _, row in arena.reset_index().iterrows():
+                df.append({'run': r, **i['params'], **row.to_dict()})
     df = pd.DataFrame(df)
 
     return df
