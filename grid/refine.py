@@ -1,3 +1,4 @@
+import aljpy
 from tqdm.auto import tqdm 
 import activelo
 from boardlaw.arena import analysis
@@ -157,12 +158,22 @@ def observed_rates():
 
     return df
 
+def solve(t, games, wins):
+    b = t[0]
+
+    refs = list(set(games.index[games.index.str.startswith(f'{b}-mohex')]))
+    query = [t] + refs
+    soln = activelo.solve(games.loc[query, query], wins.loc[query, query])
+
+    μd, σd = analysis.difference(soln, f'{b}-mohex-0.00', t)
+    return {'μ': μd, 'σ': σd}
+
+
 def solutions():
     df = observed_rates()
 
     keys = {}
     for i, r in df.iterrows():
-        lead = f''
         ks = {}
         for color in ['black', 'white']:
             name = r[f'{color}_name']
@@ -191,13 +202,9 @@ def solutions():
     games = black_wins + white_wins + black_wins.T + white_wins.T
 
     targets = set(df.black_key.values) | set(df.white_key.values)
+    targets = [t for t in targets if 'mohex' not in t]
 
-    results = {}
-    for t in tqdm(targets):
-        b = t[0]
-        refs = list(set(df.black_key[df.black_key.str.startswith(f'{b}-mohex')]))
-        query = [t] + refs
-        soln = activelo.solve(games.loc[query, query], wins.loc[query, query])
+    with aljpy.parallel(solve) as p:
+        results = p.wait({t: p(t, games, wins) for t in targets})
 
-        μd, σd = analysis.difference(soln, f'{b}-mohex-0.00', t)
-        results[t] = {'μ': μd, 'σ': σd}
+    results = pd.DataFrame.from_dict(results, orient='index')
