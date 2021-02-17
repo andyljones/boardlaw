@@ -196,6 +196,8 @@ def keyed_samples():
 
     aux = pd.concat([aux, trans.set_index('black_key')['samples']], 1)
 
+    return aux
+
 def solve(t, games, wins):
     b = t[0]
 
