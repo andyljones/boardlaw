@@ -15,7 +15,7 @@ BOUNDS = {
     9: (1e11, 1e17)}
 
 def flops_per_sample(agent):
-    bound = inspect.signature(mcts.MCTS).bind(worlds=None, **agent.kwargs)
+    bound = inspect.signature(mcts.MCTS).bind(world=None, **agent.kwargs)
     bound.apply_defaults()
     n_nodes = bound.arguments['n_nodes']
 
@@ -37,7 +37,7 @@ class LogarithmicStorer:
 
         self._flops_per = flops_per_sample(agent)
 
-        boardsize = agent.network.obs_space.dims[0]
+        boardsize = agent.network.obs_space.dim[0]
         lower, upper = BOUNDS[boardsize]
 
         self._savepoints = 10**np.linspace(np.log10(lower), np.log10(upper), n_snapshots) 
@@ -45,16 +45,20 @@ class LogarithmicStorer:
         self._n_samples = 0
         self._n_flops = 0
 
-        storage.raw(run, 'model', lambda: pickle.dumps(agent.network))
+        storage.raw(run, 'model', pickle.dumps(agent.network))
 
     def step(self, agent, n_samples):
         self._n_samples += n_samples
         self._n_flops += self._flops_per*n_samples
+        sd = {'agent': agent.state_dict(), 'n_flops': self._n_flops, 'n_samples': self._n_samples}
         if self._n_flops >= self._savepoints[self._next]:
-            sd = {'agent': agent, 'n_flops': self._n_flops, 'n_samples': self._n_samples}
             log.info(f'Taking a snapshot at {self._n_flops:.1G} FLOPS')
             storage.snapshot(self._run, sd)
             self._next += 1
+        else:
+            log.info(f'{self._n_flops/self._savepoints[self._next]:.1%} of the way to the next snapshot')
+
+        storage.throttled_latest(self._run, sd, 60)
 
         # If there are no more snapshots to take, suggest a break
         return (self._next >= len(self._savepoints))

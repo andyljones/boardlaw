@@ -21,6 +21,9 @@ class FCModel(nn.Module):
 
     def __init__(self, obs_space, action_space, width=256, depth=64):
         super().__init__()
+        self.obs_space = obs_space
+        self.action_space = action_space
+
         self.policy = heads.output(action_space, width)
         self.sampler = self.policy.sample
 

@@ -180,7 +180,7 @@ def half(x):
     else:
         return x
 
-def run(boardsize, width, depth, timelimit, desc):
+def run(boardsize, width, depth, desc):
     buffer_len = 64
     n_envs = 32*1024
 
@@ -231,7 +231,7 @@ def run(boardsize, width, depth, timelimit, desc):
 
             stats.gpu(worlds.device, 15)
 
-            finish = storer.step(agent, len(idxs))
+            finish = storer.step(agent, len(idxs[0]))
             if finish:
                 break
 
