@@ -1,3 +1,6 @@
+from tqdm.auto import tqdm 
+import activelo
+from boardlaw.arena import analysis
 import numpy as np
 import pandas as pd
 import invoke
@@ -9,7 +12,7 @@ from boardlaw import backup
 from pavlov import runs, storage
 from shlex import quote
 import jittens
-from . import aws
+from . import aws, vast
 from invoke.exceptions import UnexpectedExit
 
 log = getLogger(__name__)
@@ -118,13 +121,13 @@ def fetch():
             command = """rsync -Rr .jittens/local/./*/output/pavlov/*/*.json "output/refine" """
         
         try:
-            invoke.context.Context().run(command)
+            invoke.context.Context().run(command, hide=True)
         except UnexpectedExit:
             log.exception(f'Exception fetching from {id}')
             pass
 
 def refresh():
-    aws.jittenate()
+    vast.jittenate(local=True)
     while True:
         jittens.manage.refresh()
         time.sleep(5)
@@ -137,20 +140,64 @@ def observed_rates():
     from pathlib import Path
 
     df = []
-    for p in Path('output/refine').glob('*/output/pavlov/*'):
+    globs = (
+        list(Path('output/refine').glob('*/output/pavlov/*')) +
+        list(Path('output/refine-0').glob('*')) + 
+        list(Path('output/refine-1').glob('*')))
+    for p in globs:
         try:
             info = json.loads((p / '_info.json').read_text())
             arena = json.loads((p / 'arena.json').read_text())
-            games = sum([a['black_wins'] + a['white_wins'] for a in arena])
-            moves = sum([a['moves'] for a in arena])
-            times = sum([a['times'] for a in arena])
+            for a in arena:
+                df.append({**info['params'], **a})
             
-            # start = pd.Timestamp(info['_files']['arena.json']['_created'])
-            # duration = (ended - start).total_seconds()
-            
-            df.append({**info['params'], 'games': games, 'moves': moves, 'times': times})
         except FileNotFoundError:
             pass
     df = pd.DataFrame(df)
 
     return df
+
+def solutions():
+    df = observed_rates()
+
+    keys = {}
+    for i, r in df.iterrows():
+        lead = f''
+        ks = {}
+        for color in ['black', 'white']:
+            name = r[f'{color}_name']
+            key = f'{color}_key'
+            if name.startswith('mohex'):
+                ks[key] = f'{r.boardsize}-{name}'
+            elif name == 'latest':
+                ks[key] = f'{r.boardsize}B{r.width}W{r.depth}D+S'
+            else:
+                idx = name.split('.')[1] 
+                ks[key] = f'{r.boardsize}B{r.width}W{r.depth}D{idx}S'
+        keys[i] = ks
+    df = pd.concat([df, pd.DataFrame.from_dict(keys, orient='index')], 1)
+    df = df[['black_key', 'white_key', 'black_wins', 'white_wins']]
+
+    for b in [3, 5, 7, 9]:
+        aux = database.pandas(f'mohex-{b}').reset_index()
+        aux['black_key'] = f'{b}-' + aux.black_name
+        aux['white_key'] = f'{b}-' + aux.white_name
+        df = pd.concat([df, aux.reindex(columns=df.columns)])
+
+    black_wins = pd.pivot_table(df, 'black_wins', 'black_key', 'white_key', aggfunc='sum').fillna(0)
+    white_wins = pd.pivot_table(df, 'white_wins', 'black_key', 'white_key', aggfunc='sum').fillna(0)
+
+    wins = black_wins + white_wins.T
+    games = black_wins + white_wins + black_wins.T + white_wins.T
+
+    targets = set(df.black_key.values) | set(df.white_key.values)
+
+    results = {}
+    for t in tqdm(targets):
+        b = t[0]
+        refs = list(set(df.black_key[df.black_key.str.startswith(f'{b}-mohex')]))
+        query = [t] + refs
+        soln = activelo.solve(games.loc[query, query], wins.loc[query, query])
+
+        μd, σd = analysis.difference(soln, f'{b}-mohex-0.00', t)
+        results[t] = {'μ': μd, 'σ': σd}
