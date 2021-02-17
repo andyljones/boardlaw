@@ -1,3 +1,4 @@
+import time
 import numpy as np
 from pavlov import storage
 import pickle
@@ -47,6 +48,23 @@ class LogarithmicStorer:
 
         storage.raw(run, 'model', pickle.dumps(agent.network))
 
+        self._start = time.time()
+        self._last_report = time.time()
+
+    def _report(self):
+        if time.time() > self._last_report + 60:
+            self._last_report = time.time()
+
+            log.info(f'{self._n_flops/self._savepoints[self._next]:.1%} of the way to snapshot #{self._next}') 
+
+            exp = (time.time() - self._start)/self._n_flops*self._savepoints[-1]
+            rem = exp - (time.time() - self._start)
+            secs = rem % 60
+            mins = ((rem - secs) // 60) % 60
+            hrs = ((rem - secs - 60*mins) // 3600)
+
+            log.info(f'Approx. {hrs:.0f}h{mins:.0f}m{secs:.0f}s remaining')
+
     def step(self, agent, n_samples):
         self._n_samples += n_samples
         self._n_flops += self._flops_per*n_samples
@@ -55,10 +73,12 @@ class LogarithmicStorer:
             log.info(f'Taking a snapshot at {self._n_flops:.1G} FLOPS')
             storage.snapshot(self._run, sd)
             self._next += 1
-        else:
-            log.info(f'{self._n_flops/self._savepoints[self._next]:.1%} of the way to the next snapshot')
 
+        # For the arena
+        #TODO: Swap arena to using snapshots
         storage.throttled_latest(self._run, sd, 60)
+
+        self._report()
 
         # If there are no more snapshots to take, suggest a break
         return (self._next >= len(self._savepoints))
