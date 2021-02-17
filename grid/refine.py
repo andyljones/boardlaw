@@ -198,7 +198,8 @@ def keyed_samples():
 
     return aux
 
-def solve(t, games, wins):
+@aljpy.autocache('{t}-{G}')
+def solve(t, G, games, wins):
     b = t[0]
 
     refs = list(set(games.index[games.index.str.startswith(f'{b}-mohex')]))
@@ -227,7 +228,8 @@ def solutions():
     targets = [t for t in targets if 'mohex' not in t]
 
     with aljpy.parallel(solve) as p:
-        solns = p.wait({t: p(t, games, wins) for t in targets})
+        G = games.sum().sum()
+        solns = p.wait({t: p(t, G, games, wins) for t in targets})
 
     solns = pd.DataFrame.from_dict(solns, orient='index')
 
