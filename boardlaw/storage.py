@@ -10,10 +10,17 @@ log = getLogger(__name__)
 
 # Found by inspecting the `main/` runs
 BOUNDS = {
-    3: (1e9, 1e12),
-    5: (1e10, 1e14),
+    3: (1e10, 5e11),
+    5: (1e11, 3e13),
     7: (1e11, 1e16),
-    9: (1e11, 1e17)}
+    9: (1e12, 1e17)}
+
+SAMPLES = {
+    3: 1e8,
+    5: 3e8,
+    7: 1e9,
+    9: 2e9,
+}
 
 def flops_per_sample(agent):
     bound = inspect.signature(mcts.MCTS).bind(world=None, **agent.kwargs)
@@ -46,6 +53,8 @@ class LogarithmicStorer:
         self._n_samples = 0
         self._n_flops = 0
 
+        self._samples_bound = SAMPLES[boardsize]
+
         storage.raw(run, 'model', pickle.dumps(agent.network))
 
         self._start = time.time()
@@ -55,10 +64,16 @@ class LogarithmicStorer:
         if time.time() > self._last_report + 60:
             self._last_report = time.time()
 
-            log.info(f'{self._n_flops/self._savepoints[self._next]:.1%} of the way to snapshot #{self._next}') 
+            log.info(f'FLOPS: {self._n_flops/self._savepoints[self._next]:.1%} of the way to snapshot #{self._next}') 
+            log.info(f'Samples: {self._n_samples/self._samples_bound:.1%} of the way to the end') 
 
-            exp = (time.time() - self._start)/self._n_flops*self._savepoints[-1]
-            rem = exp - (time.time() - self._start)
+            flops_exp = (time.time() - self._start)/self._n_flops*self._savepoints[-1]
+            flops_rem = flops_exp - (time.time() - self._start)
+
+            samples_exp = (time.time() - self._start)/self._n_samples*self._samples_bound
+            samples_rem = samples_exp - (time.time() - self._start)
+
+            rem = min(flops_rem, samples_rem)
             secs = rem % 60
             mins = ((rem - secs) // 60) % 60
             hrs = ((rem - secs - 60*mins) // 3600)
@@ -81,5 +96,7 @@ class LogarithmicStorer:
         self._report()
 
         # If there are no more snapshots to take, suggest a break
-        return (self._next >= len(self._savepoints))
+        flops_overflow = (self._next >= len(self._savepoints))
+        sample_overflow = (self._n_samples > self._samples_bound)
         
+        return flops_overflow or sample_overflow

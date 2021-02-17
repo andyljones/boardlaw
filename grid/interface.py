@@ -6,6 +6,7 @@ import pandas as pd
 from logging import getLogger
 from pavlov import runs, stats
 import ast
+from IPython import display
 
 log = getLogger(__name__)
 
@@ -19,17 +20,17 @@ def acknowledged(desc):
     return fresh + active + fetched
 
 def keystr(d):
-    return str({k: d[k] for k in ('boardsize', 'width', 'depth', 'timelimit')})
+    return str({k: d[k] for k in ('boardsize', 'width', 'depth')})
 
 def is_missing(proposal, acks):
     return keystr(proposal) not in {keystr(a) for a in acks}
 
 def launch():
-    boardsize = 3
+    boardsize = 5
     desc = f'frontier/{boardsize}'
     acks = acknowledged(desc)
-    for width in [1, 2]:
-        for depth in [1, 2, 4]:
+    for width in [1, 2, 4, 8, 16]:
+        for depth in [1, 2, 4, 8]:
             params = dict(width=width, depth=depth, boardsize=boardsize, desc=desc)
             if is_missing(params, acks):
                 log.info(f'Launching {params}')
@@ -53,14 +54,14 @@ def refresh():
 
             if time.time() > last_fetch + 600:
                 fetched = fetch()
-                jittens.manage.cleanup(fetched)
+                # jittens.manage.cleanup(fetched)
                 last_fetch = time.time()
         except Exception as e:
             log.info(f'Failed with error {e}')
             time.sleep(60)
 
     fetched = fetch()
-    jittens.manage.cleanup(fetched)
+    # jittens.manage.cleanup(fetched)
 
 def progress():
     active_jobs = jittens.jobs.jobs('active')
