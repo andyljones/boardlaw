@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from rebar import arrdict, profiling, pickle
 from pavlov import stats, logs, runs, storage, archive
-from . import hex, mcts, networks, learning, validation, analysis, arena, leagues
+from . import hex, mcts, networks, learning, validation, analysis, arena, storage
 from torch.nn import functional as F
 from logging import getLogger
 
@@ -180,14 +180,6 @@ def half(x):
     else:
         return x
 
-def time_limited_loop(timelimit):
-    start = time.time()
-    while True:
-        if time.time() > start + timelimit:
-            break
-
-        yield 
-
 def run(boardsize, width, depth, timelimit, desc):
     buffer_len = 64
     n_envs = 32*1024
@@ -208,12 +200,14 @@ def run(boardsize, width, depth, timelimit, desc):
 
     archive.archive(run)
 
+    storer = storage.LogarithmicStorer(run, agent)
+
     buffer = []
     with logs.to_run(run), stats.to_run(run), \
             arena.mohex.run(run):
         #TODO: Upgrade this to handle batches that are some multiple of the env count
         idxs = (torch.randint(buffer_len, (n_envs,), device='cuda'), torch.arange(n_envs, device='cuda'))
-        for _ in time_limited_loop(timelimit):
+        while True:
 
             # Collect experience
             while len(buffer) < buffer_len:
@@ -235,15 +229,13 @@ def run(boardsize, width, depth, timelimit, desc):
             optimize(network, scaler, opt, chunk[idxs])
             log.info('learner stepped')
 
-            sd = storage.state_dicts(agent=agent, opt=opt, scaler=scaler)
-            storage.throttled_latest(run, sd, 60)
-            storage.throttled_snapshot(run, sd, 900)
-            storage.throttled_raw(run, 'model', lambda: pickle.dumps(network), 900)
             stats.gpu(worlds.device, 15)
 
-        log.info('Finished; saving final state dict')
-        sd = storage.state_dicts(agent=agent, opt=opt, scaler=scaler)
-        storage.save_latest(run, sd)
+            finish = storer.step(agent, len(idxs))
+            if finish:
+                break
+
+        log.info('Finished')
 
 def run_jittens():
     import os
