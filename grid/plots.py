@@ -191,3 +191,19 @@ def plot_refine_superimposed():
         + pn.labs(title='slope is about the same in every board size')
         + mpl_theme(12, 8)
         + poster_sizes())
+
+def plot_refine_arch_annotations():
+    joint = refine.solutions()
+    joint['g'] = joint.index.str[:-2]
+    joint['flops'] = flops(joint)
+    joint['params'] = params(joint)
+    joint['arch'] = joint.depth.astype(str) + '/' + joint.depth.astype(str)
+    joint['idx'] = joint.index.str.extract('.*D(.*)S', expand=False)
+
+    (pn.ggplot(data=(joint
+                        .loc[lambda df: (df.boardsize == 9)]))
+        + pn.geom_text(pn.aes(x='flops', y='μ', label='idx'), size=8)
+        + pn.scale_x_continuous(trans='log10')
+        + pn.labs(title='')
+        + mpl_theme(12, 8)
+        + poster_sizes())
