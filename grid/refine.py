@@ -14,6 +14,7 @@ from pavlov import runs, storage
 from shlex import quote
 import jittens
 from . import aws, vast
+from pavlov import stats
 from invoke.exceptions import UnexpectedExit
 
 log = getLogger(__name__)
@@ -135,7 +136,7 @@ def refresh():
         fetch()
 
 
-def observed_rates():
+def arena_results():
     import json
     import pandas as pd
     from pathlib import Path
@@ -150,7 +151,7 @@ def observed_rates():
             info = json.loads((p / '_info.json').read_text())
             arena = json.loads((p / 'arena.json').read_text())
             for a in arena:
-                df.append({**info['params'], **a})
+                df.append({'run': p.name, **info['params'], **a})
             
         except FileNotFoundError:
             pass
@@ -158,19 +159,8 @@ def observed_rates():
 
     return df
 
-def solve(t, games, wins):
-    b = t[0]
-
-    refs = list(set(games.index[games.index.str.startswith(f'{b}-mohex')]))
-    query = [t] + refs
-    soln = activelo.solve(games.loc[query, query], wins.loc[query, query])
-
-    μd, σd = analysis.difference(soln, f'{b}-mohex-0.00', t)
-    return {'μ': μd, 'σ': σd}
-
-
-def solutions():
-    df = observed_rates()
+def keyed_arena():
+    df = arena_results()
 
     keys = {}
     for i, r in df.iterrows():
@@ -187,24 +177,69 @@ def solutions():
                 ks[key] = f'{r.boardsize}B{r.width}W{r.depth}D{idx}S'
         keys[i] = ks
     df = pd.concat([df, pd.DataFrame.from_dict(keys, orient='index')], 1)
-    df = df[['black_key', 'white_key', 'black_wins', 'white_wins']]
 
+    return df
+
+
+def keyed_samples():
+    aux = (keyed_arena()
+        .groupby('black_key').first()
+        .loc[lambda df: ~df.index.str.contains('mohex')]
+        .loc[:, ['run', 'boardsize', 'width', 'depth', 'black_name']])
+
+    trans = {}
+    for r, g in tqdm(aux.groupby('run')):
+        times = {f'snapshot.{idx}': pd.to_datetime(info['_created']) for idx, info in storage.snapshots(r).items()}
+        
+        samples = pd.DataFrame(stats.array(r, 'count.samples')).set_index('_time').tz_localize('UTC').cumsum()['total']
+        samps = {}
+        for s, t in times.items():
+            samps[s] = samples[:t].iloc[-1]
+        # This is approximate and I hate it
+        samps['latest'] = samples.iloc[-1]
+        
+        s = pd.Series(samps)[g.black_name.values]
+        s.index = g.index
+        trans[r] = s
+    trans = pd.concat(trans).reset_index()
+    trans.columns = ['run', 'black_key', 'samples']
+
+    aux = pd.concat([aux, trans.set_index('black_key')['samples']], 1)
+
+def solve(t, games, wins):
+    b = t[0]
+
+    refs = list(set(games.index[games.index.str.startswith(f'{b}-mohex')]))
+    query = [t] + refs
+    soln = activelo.solve(games.loc[query, query], wins.loc[query, query])
+
+    μd, σd = analysis.difference(soln, f'{b}-mohex-0.00', t)
+    return {'μ': μd, 'σ': σd}
+
+
+def solutions():
+    keyed = keyed_arena()[['black_key', 'white_key', 'black_wins', 'white_wins']]
     for b in [3, 5, 7, 9]:
         aux = database.pandas(f'mohex-{b}').reset_index()
         aux['black_key'] = f'{b}-' + aux.black_name
         aux['white_key'] = f'{b}-' + aux.white_name
-        df = pd.concat([df, aux.reindex(columns=df.columns)])
+        keyed = pd.concat([keyed, aux.reindex(columns=keyed.columns)])
 
-    black_wins = pd.pivot_table(df, 'black_wins', 'black_key', 'white_key', aggfunc='sum').fillna(0)
-    white_wins = pd.pivot_table(df, 'white_wins', 'black_key', 'white_key', aggfunc='sum').fillna(0)
+    black_wins = pd.pivot_table(keyed, 'black_wins', 'black_key', 'white_key', aggfunc='sum').fillna(0)
+    white_wins = pd.pivot_table(keyed, 'white_wins', 'black_key', 'white_key', aggfunc='sum').fillna(0)
 
     wins = black_wins + white_wins.T
     games = black_wins + white_wins + black_wins.T + white_wins.T
 
-    targets = set(df.black_key.values) | set(df.white_key.values)
+    targets = set(keyed.black_key.values) | set(keyed.white_key.values)
     targets = [t for t in targets if 'mohex' not in t]
 
     with aljpy.parallel(solve) as p:
-        results = p.wait({t: p(t, games, wins) for t in targets})
+        solns = p.wait({t: p(t, games, wins) for t in targets})
 
-    results = pd.DataFrame.from_dict(results, orient='index')
+    solns = pd.DataFrame.from_dict(solns, orient='index')
+
+    aux = keyed_samples()
+    joint = pd.concat([aux, solns], 1)
+
+    return joint

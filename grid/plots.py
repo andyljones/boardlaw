@@ -1,6 +1,6 @@
 import pandas as pd
 from plotnine import *
-from . import data
+from . import data, refine
 import numpy as np
 
 def mpl_theme(width=12, height=8):
@@ -160,3 +160,17 @@ def plot_frontier_slopes():
             x='FLOPS as a fraction of 95% of perfect play',
             title='slope of the frontier seems the same across boardsizes?')
         + mpl_theme())
+
+def plot_refine_results():
+    joint = refine.solutions()
+    joint['g'] = joint.index.str[:-2]
+    joint['flops'] = flops(joint)
+    joint['params'] = params(joint)
+
+    (ggplot(data=joint)
+        + geom_point(aes(x='flops', y='μ', group='g', color='params'))
+        + scale_x_continuous(trans='log10')
+        + scale_color_continuous(trans='log10')
+        + facet_wrap('boardsize')
+        + labs(title='')
+        + plots.mpl_theme(12, 8))
