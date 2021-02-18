@@ -79,9 +79,11 @@ def report(soln, games, futures):
     print(f'σ_ms: {σ.pow(2).mean()**.5:.2f}')
     print(f'n futures: {len(futures)}')
 
-def suggest(soln, n_workers):
+def suggest(soln, temp=100.):
     imp = activelo.improvement(soln)
-    return imp.stack().sort_values().tail(n_workers).sample(1).index[-1]
+    logits = temp*imp - sp.special.logsumexp(temp*imp)
+    idx = np.random.choice(imp.stack().index, p=np.exp(logits.values.flatten()))
+    return tuple(idx)
 
 def params(df):
     intake = (df.boardsize**2 + 1)*df.width
@@ -125,7 +127,7 @@ def run(boardsize=3, n_workers=8):
                 if soln is None:
                     sugg = tuple(np.random.choice(games.index, (2,)))
                 else:
-                    sugg = suggest(soln, n_workers)
+                    sugg = suggest(soln)
                 
                 futures[sugg] = pool.submit(evaluate, *sugg)
         
