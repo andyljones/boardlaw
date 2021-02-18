@@ -69,7 +69,7 @@ def guess(games, wins, futures):
             games=N_ENVS//2))
     return update(games, wins, mocks)
 
-def report(soln, games):
+def report(soln, games, futures):
     μ, σ = arena.analysis.difference(soln, soln.μ.idxmin())
 
     display.clear_output(wait=True)
@@ -78,6 +78,7 @@ def report(soln, games):
     print(f'coverage: {(soln.μ != 0).mean():.0%}')
     print(f'μ_max: {μ.max():.1f}')
     print(f'σ_ms: {σ.pow(2).mean()**.5:.2f}')
+    print(f'n futures: {len(futures)}')
 
 def suggest(soln, futures):
     imp = activelo.improvement(soln)
@@ -128,7 +129,7 @@ def run(boardsize=3, n_workers=8):
                     del futures[key]
         
             soln = activelo.solve(games, wins, soln=soln)
-            report(soln, games)
+            report(soln, games, futures)
             _, σ = arena.analysis.difference(soln, soln.μ.idxmin())
             if σ.pow(2).mean()**.5 < .1:
                 break
