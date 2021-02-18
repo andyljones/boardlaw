@@ -36,7 +36,6 @@ def parameters(snaps):
     return pd.DataFrame.from_dict(params, orient='index')
 
 def evaluate(Aname, Bname):
-
     Arun, Aidx = Aname.split('.')
     Brun, Bidx = Aname.split('.')
     A = arena.common.agent(f'*{Arun}', int(Aidx), 'cuda')
@@ -80,9 +79,9 @@ def report(soln, games, futures):
     print(f'σ_ms: {σ.pow(2).mean()**.5:.2f}')
     print(f'n futures: {len(futures)}')
 
-def suggest(soln, futures):
+def suggest(soln, n_workers):
     imp = activelo.improvement(soln)
-    return imp.stack().sort_values().tail((len(futures)+1)**2).sample(1).index[-1]
+    return imp.stack().sort_values().tail(n_workers).sample(1).index[-1]
 
 def params(df):
     intake = (df.boardsize**2 + 1)*df.width
@@ -91,7 +90,7 @@ def params(df):
     return intake + body + output
 
 def plot(snaps):
-    (pn.ggplot(data=snaps)
+    return (pn.ggplot(data=snaps)
         + pn.geom_line(pn.aes(x='flops', y='μ', group='run', color='params'))
         + pn.scale_x_continuous(trans='log10'))
 
@@ -110,28 +109,30 @@ def run(boardsize=3, n_workers=8):
     futures = {}
     with ProcessPoolExecutor(n_workers) as pool:
         while True:
-            if len(futures) < n_workers:
-                try:
-                    ggames, gwins = guess(games, wins, futures)
-                    gsoln = activelo.solve(ggames, gwins, soln=soln)
-                    sugg = activelo.suggest(gsoln)
-                except InManifoldError:
-                    soln = None
-                    sugg = tuple(np.random.choice(snaps.index, (2,)))
-                    log.warning('Got a manifold error; making a random suggestion')
-
-                futures[sugg] = pool.submit(evaluate, *sugg)
+            try:
+                soln = activelo.solve(games, wins, soln=soln)
+            except InManifoldError:
+                soln = None
+                log.warning('Got a manifold error; throwing soln out')
 
             for key, future in list(futures.items()):
                 if future.done():
                     results = future.result()
                     games, wins = update(games, wins, results)
                     del futures[key]
+
+            while len(futures) < n_workers:
+                if soln is None:
+                    sugg = tuple(np.random.choice(games.index, (2,)))
+                else:
+                    sugg = suggest(soln, n_workers)
+                
+                futures[sugg] = pool.submit(evaluate, *sugg)
         
-            soln = activelo.solve(games, wins, soln=soln)
-            report(soln, games, futures)
-            _, σ = arena.analysis.difference(soln, soln.μ.idxmin())
-            if σ.pow(2).mean()**.5 < .1:
-                break
+            if soln is not None:
+                report(soln, games, futures)
+                _, σ = arena.analysis.difference(soln, soln.μ.idxmin())
+                if σ.pow(2).mean()**.5 < .1:
+                    break
             
     snaps['μ'], snaps['σ'] = arena.analysis.difference(soln, soln.μ.idxmin())
