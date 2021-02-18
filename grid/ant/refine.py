@@ -13,7 +13,7 @@ from boardlaw import backup
 from pavlov import runs, storage
 from shlex import quote
 import jittens
-from . import aws, vast
+from .. import aws, vast
 from pavlov import stats
 from invoke.exceptions import UnexpectedExit
 
@@ -89,7 +89,7 @@ def submit(query='width <= 64', resources={'cpu': 2, 'memory': 4}):
         submit('width <= 64', {'cpu': 2, 'memory': 4})
         submit('width > 64', {'gpu': 1})
 
-    df = runs.pandas().loc[lambda df: df.description.fillna("").str.startswith("main/")]
+    df = runs.pandas().loc[lambda df: df.description.fillna("").str.startswith("ant/")]
     df = pd.concat([df, pd.DataFrame(df.params.values.tolist(), df.index)], 1)
     df['n_snapshots'] = df._files.apply(lambda d: len([f for f in d if f.startswith('storage.snapshot')]))
     df = (df

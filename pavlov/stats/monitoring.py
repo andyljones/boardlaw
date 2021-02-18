@@ -101,13 +101,16 @@ def from_run_sync(run, rule, canceller=None, throttle=1):
         if tests.time() > nxt:
             nxt = nxt + throttle
 
-            pool.refresh()
-            pairs = formatted_pairs(pool._pool, rule)
-            content = treeformat(pairs)
+            try:
+                pool.refresh()
+                pairs = formatted_pairs(pool._pool, rule)
+                content = treeformat(pairs)
 
-            size = files.size(run)
-            age = tests.timestamp() - start
-            out.refresh(f'{run}: {tdformat(age)} old, {rule} rule, {size:.0f}MB on disk\n\n{content}')
+                size = files.size(run)
+                age = tests.timestamp() - start
+                out.refresh(f'{run}: {tdformat(age)} old, {rule} rule, {size:.0f}MB on disk\n\n{content}')
+            except FileNotFoundError:
+                log.warn('Got a file not found error.')
 
         if canceller is not None and canceller.is_set():
             break
