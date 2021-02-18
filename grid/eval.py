@@ -17,6 +17,8 @@ log = getLogger(__name__)
 
 set_start_method('spawn', True)
 
+N_ENVS = 512
+
 def snapshots(boardsize):
     snapshots = {}
     for r in runs.runs(description=f'bee/{boardsize}'):
@@ -39,7 +41,7 @@ def evaluate(Aname, Bname):
     Brun, Bidx = Aname.split('.')
     A = arena.common.agent(f'*{Arun}', int(Aidx), 'cuda')
     B = arena.common.agent(f'*{Brun}', int(Bidx), 'cuda')
-    worlds = arena.common.worlds(f'*{Arun}', 512, 'cuda')
+    worlds = arena.common.worlds(f'*{Arun}', N_ENVS, 'cuda')
 
     return arena.common.evaluate(worlds, {Aname: A, Bname: B})
 
@@ -52,24 +54,33 @@ def update(games, wins, results):
         wins.loc[result.names[1], result.names[0]] += result.wins[1]
     return games, wins
 
-def report(soln):
+def guess(games, wins, futures):
+    mocks = []
+    for f in futures:
+        rate = (wins.at[f] + 1)/(games.at[f] + 2)
+        ws = (int(rate*N_ENVS), N_ENVS - int(rate*N_ENVS))
+        mocks.append(dotdict.dotdict(
+            names=f,
+            wins=ws, 
+            games=N_ENVS))
+        mocks.append(dotdict.dotdict(
+            names=f[::-1],
+            wins=ws[::-1],
+            games=N_ENVS))
+    return update(games, wins, mocks)
+
+def report(soln, games):
     μ, σ = arena.analysis.difference(soln, soln.μ.idxmin())
 
     display.clear_output(wait=True)
-    print(f'nonzero: {(soln.μ != 0).mean():.0%}')
+    print(f'saturation: {games.sum().sum()/N_ENVS/games.shape[0]:.0%}')
+    print(f'coverage: {(μ != 0).mean():.0%}')
     print(f'μ_max: {μ.max():.1f}')
     print(f'σ_ms: {σ.pow(2).mean()**.5:.2f}')
 
-def suggest(soln, temp=1):
+def suggest(soln, futures):
     imp = activelo.improvement(soln)
-
-    logits = temp*(imp.values.flatten() - sp.special.logsumexp(imp.values.flatten()))
-
-    n_agents = imp.shape[0]
-    choice = np.random.choice(np.arange(logits.size), p=np.exp(logits))
-    sugg = (imp.index[choice // n_agents], imp.index[choice % n_agents])
-
-    return sugg
+    return imp.stack().sort_values().tail((len(futures)+1)**2).sample(1).index[-1]
 
 def params(df):
     intake = (df.boardsize**2 + 1)*df.width
@@ -99,8 +110,9 @@ def run(boardsize=3, n_workers=8):
         while True:
             if len(futures) < n_workers:
                 try:
-                    soln = activelo.solve(games, wins, soln=soln)
-                    sugg = suggest(soln)
+                    ggames, gwins = guess(games, wins, futures)
+                    gsoln = activelo.solve(ggames, gwins, soln=soln)
+                    sugg = activelo.suggest(gsoln)
                 except InManifoldError:
                     soln = None
                     sugg = tuple(np.random.choice(snaps.index, (2,)))
@@ -114,12 +126,10 @@ def run(boardsize=3, n_workers=8):
                     games, wins = update(games, wins, results)
                     del futures[key]
         
-            if soln is not None:
-                report(soln)
-                _, σ = arena.analysis.difference(soln, soln.μ.idxmin())
-                if σ.pow(2).mean()**.5 < .1:
-                    break
+            soln = activelo.solve(games, wins, soln=soln)
+            report(soln, games)
+            _, σ = arena.analysis.difference(soln, soln.μ.idxmin())
+            if σ.pow(2).mean()**.5 < .1:
+                break
             
-            time.sleep(1)
-
     snaps['μ'], snaps['σ'] = arena.analysis.difference(soln, soln.μ.idxmin())
