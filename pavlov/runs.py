@@ -108,9 +108,9 @@ def new_run(suffix='', **kwargs):
     return run
 
 _cache = {}
-def runs(pattern=None):
-    if pattern is not None:
-        res = set(resolutions(pattern))
+def runs(name=None, **kwargs):
+    if name is not None or kwargs:
+        res = set(resolutions(name, **kwargs))
         return {k: v for k, v in runs().items() if k in res}
 
     global _cache
@@ -133,9 +133,9 @@ def runs(pattern=None):
     _cache = {n: cache[n] for n in order}
     return _cache
 
-def pandas(pattern=None):
+def pandas(name=None, **kwargs):
     df = {}
-    for run, info in runs(pattern).items():
+    for run, info in runs(name, **kwargs).items():
         df[run] = {k: v for k, v in info.items()}
     df = pd.DataFrame.from_dict(df, orient='index')
     df['_created'] = pd.to_datetime(df['_created'])
@@ -145,26 +145,45 @@ def pandas(pattern=None):
 def created(run):
     return pd.to_datetime(info(run)['_created'])
 
-def resolutions(run):
-    names = list(runs())
-    if isinstance(run, int):
-        return [names[run]]
-    elif run in names:
-        return [run]
-    else: # it's a glob
-        return [n for n in names if fnmatch(n, run)]
+def resolutions(name=None, **kwargs):
+    matches = []
+    for n, i in runs().items():
+        if name is None:
+            name_match = True
+        elif isinstance(name, int):
+            name_match = True
+        else: # is a glob
+            name_match = fnmatch(n, name)
 
-def resolve(run):
-    if run is None:
+        kwarg_matches = []
+        for k, v in kwargs.items():
+            if isinstance(v, str): # is a glob
+                kwarg_match = fnmatch(i.get(k, ''), v)
+            else:
+                kwarg_match = i.get(k, None) == v
+            kwarg_matches.append(kwarg_match)
+        
+        if name_match and all(kwarg_matches):
+            matches.append(n)
+
+    if name in matches:
+        return [name]
+    elif isinstance(name, int):
+        return [matches[name]]
+    else:
+        return matches
+
+def resolve(name=None, **kwargs):
+    if name is None and not kwargs:
         return None
-    hits = resolutions(run)
+    hits = resolutions(name, **kwargs)
     if len(hits) == 0:
-        raise ValueError(f'Found no runs that match query "{run}"')
+        raise ValueError(f'Found no runs that match query "{name}"')
     if len(hits) == 1:
         return hits[0]
     else:
         recent = ', '.join(f'"{h}"' for h in hits[-3:])
-        raise ValueError(f'Found {len(hits)} runs that match glob "{run}", such as: {recent}')
+        raise ValueError(f'Found {len(hits)} runs that match glob "{name}", such as: {recent}')
 
 def resuffix(old, new):
     oldpath = path(old)
