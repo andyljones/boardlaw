@@ -86,7 +86,7 @@ class LogarithmicStorer:
         sd = {'agent': agent.state_dict(), 'n_flops': self._n_flops, 'n_samples': self._n_samples}
         if self._n_flops >= self._savepoints[self._next]:
             log.info(f'Taking a snapshot at {self._n_flops:.1G} FLOPS')
-            storage.snapshot(self._run, sd)
+            storage.save_snapshot(self._run, sd)
             self._next += 1
 
         # For the arena

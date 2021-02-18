@@ -82,7 +82,7 @@ def throttled_latest(run, objs, throttle):
     if tests.timestamp() > last + pd.Timedelta(throttle, 's'):
         save_latest(run, objs)
 
-def snapshot(run, objs, **kwargs):
+def save_snapshot(run, objs, **kwargs):
     path = files.new_file(run, SNAPSHOT, **kwargs)
     _save(path, objs)
 
@@ -101,15 +101,15 @@ def throttled_snapshot(run, objs, throttle):
         last = pd.Timestamp(0, unit='s', tz='UTC')
 
     if tests.timestamp() > last + pd.Timedelta(throttle, 's'):
-        snapshot(run, objs)
+        save_snapshot(run, objs)
 
-def named(run, name, objs):
+def save_named(run, name, objs):
     name = NAMED.format(name=name)
     if not files.exists(run, name):
         files.new_file(run, name)
     _save(files.path(run, name), objs)
 
-def raw(run, name, bs):
+def save_raw(run, name, bs):
     name = NAMED.format(name=name)
     path = files.new_file(run, name)
     _save_raw(path, bs)

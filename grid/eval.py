@@ -1,3 +1,4 @@
+import plotnine as pn
 import scipy as sp
 import numpy as np
 import activelo
@@ -16,6 +17,13 @@ def snapshots(boardsize):
     return (pd.DataFrame.from_dict(snapshots, orient='index')
                     .rename_axis(index=('run', 'idx'))
                     .reset_index())
+
+def parameters(snaps):
+    params = {}
+    for idx, row in snaps.iterrows():
+        s = storage.load_snapshot(row.run, row.idx)
+        params[idx] = {**runs.info(row.run)['params'], 'samples': s['n_samples'], 'flops': s['n_flops']}
+    return pd.DataFrame.from_dict(params, orient='index')
 
 def evaluate(Aname, Bname):
     Arun, Aidx = Aname.split('.')
@@ -54,12 +62,27 @@ def suggest(soln, temp=1):
 
     return sugg
 
+def params(df):
+    intake = (df.boardsize**2 + 1)*df.width
+    body = (df.width**2 + df.width) * df.depth
+    output = df.boardsize**2 * (df.width + 1)
+    return intake + body + output
+
+def plot(snaps):
+    (pn.ggplot(data=snaps)
+        + pn.geom_line(pn.aes(x='flops', y='μ', group='run', color='params'))
+        + pn.scale_x_continuous(trans='log10'))
+
 def run(boardsize=3, n_workers=8):
     snaps = snapshots(boardsize)
+    snaps = pd.concat([snaps, parameters(snaps)], 1)
+    snaps['nickname'] = snaps.run.str.extract('.* (.*)', expand=False) + '.' + snaps.idx.astype(str)
+    snaps['params'] = params(snaps)
+    snaps = snaps.set_index('nickname')
 
     n_agents = len(snaps)
-    wins  = pd.DataFrame(np.zeros((n_agents, n_agents)), list(snaps.index), list(snaps.index))
-    games = pd.DataFrame(np.zeros((n_agents, n_agents)), list(snaps.index), list(snaps.index))
+    wins  = pd.DataFrame(np.zeros((n_agents, n_agents)), snaps.index, snaps.index)
+    games = pd.DataFrame(np.zeros((n_agents, n_agents)), snaps.index, snaps.index)
 
     soln = None
     futures = {}
@@ -74,5 +97,12 @@ def run(boardsize=3, n_workers=8):
                 if future.done():
                     results = future.result()
                     games, wins = update(games, wins, results)
-                    report(soln)
                     del futures[key]
+        
+            if soln is not None:
+                report(soln)
+                _, σ = arena.analysis.difference(soln, soln.μ.idxmin())
+                if σ.pow(2).mean()**.5 < .1:
+                    break
+
+    snaps['μ'], snaps['σ'] = arena.analysis.difference(soln, soln.μ.idxmin())
