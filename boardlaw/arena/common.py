@@ -43,8 +43,8 @@ def matchup_indices(n_envs, n_seats):
     patterns = matchup_patterns(n_seats)
     return patterns.repeat((n_envs//len(patterns), 1))
 
-def gather(wins, moves, times, matchup_idxs, names, boardsize):
-    names = np.array(names)
+def gather(wins, moves, times, matchup_idxs, agents, boardsize):
+    names = np.array([id for id, agent in agents])
     n_envs, n_seats = matchup_idxs.shape
     results = []
     for p in matchup_patterns(n_seats):
@@ -61,6 +61,8 @@ def gather(wins, moves, times, matchup_idxs, names, boardsize):
     return results
 
 def evaluate(worlds, agents):
+    if isinstance(agents, dict):
+        return evaluate(worlds, [(k, v) for k, v in agents.items()])
     assert worlds.n_seats == 2, 'Only support 2 seats for now'
     assert worlds.n_envs % np.math.factorial(worlds.n_seats) == 0, 'Number of envs needs to be divisible by the number of permutations of seats'
     assert len(agents) == worlds.n_seats, 'Need to pass one agent per seat'
@@ -72,11 +74,11 @@ def evaluate(worlds, agents):
     times = torch.zeros((worlds.n_envs,), dtype=torch.float, device=worlds.device)
     matchup_idxs = matchup_indices(worlds.n_envs, worlds.n_seats).to(worlds.device)
     while True:
-        for i, id in enumerate(agents):
+        for i, (id, agent) in enumerate(agents):
             mask = (matchup_idxs[envs, worlds.seats.long()] == i) & ~terminal
             if mask.any():
                 start = time.time()
-                decisions = agents[id](worlds[mask], eval=True)
+                decisions = agent(worlds[mask], eval=True)
                 worlds[mask], transitions = worlds[mask].step(decisions.actions)
                 terminal[mask] = transitions.terminal
                 end = time.time()
@@ -88,7 +90,7 @@ def evaluate(worlds, agents):
         if terminal.all():
             break
     
-    results = gather(wins.cpu(), moves.cpu(), times.cpu(), matchup_idxs.cpu(), list(agents), worlds.boardsize)
+    results = gather(wins.cpu(), moves.cpu(), times.cpu(), matchup_idxs.cpu(), agents, worlds.boardsize)
     return results
 
 def test_evaluate():

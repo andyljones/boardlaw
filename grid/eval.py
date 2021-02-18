@@ -37,7 +37,7 @@ def parameters(snaps):
 
 def evaluate(Aname, Bname):
     Arun, Aidx = Aname.split('.')
-    Brun, Bidx = Aname.split('.')
+    Brun, Bidx = Bname.split('.')
     A = arena.common.agent(f'*{Arun}', int(Aidx), 'cuda')
     B = arena.common.agent(f'*{Brun}', int(Bidx), 'cuda')
     worlds = arena.common.worlds(f'*{Arun}', N_ENVS, 'cuda')
@@ -79,7 +79,7 @@ def report(soln, games, futures):
     print(f'σ_ms: {σ.pow(2).mean()**.5:.2f}')
     print(f'n futures: {len(futures)}')
 
-def suggest(soln, temp=100.):
+def suggest(soln, temp=10.):
     imp = activelo.improvement(soln)
     logits = temp*imp - sp.special.logsumexp(temp*imp)
     idx = np.random.choice(imp.stack().index, p=np.exp(logits.values.flatten()))
@@ -91,10 +91,28 @@ def params(df):
     output = df.boardsize**2 * (df.width + 1)
     return intake + body + output
 
+def mpl_theme(width=12, height=8):
+    return [
+        pn.theme_matplotlib(),
+        pn.guides(
+            color=pn.guide_colorbar(ticks=False)),
+        pn.theme(
+            figure_size=(width, height), 
+            strip_background=pn.element_rect(color='w', fill='w'),
+            panel_grid=pn.element_line(color='k', alpha=.1))]
+
+def poster_sizes():
+    return pn.theme(text=pn.element_text(size=18),
+                title=pn.element_text(size=18),
+                legend_title=pn.element_text(size=18))
+
 def plot(snaps):
     return (pn.ggplot(data=snaps)
         + pn.geom_line(pn.aes(x='flops', y='μ', group='run', color='params'))
-        + pn.scale_x_continuous(trans='log10'))
+        + pn.geom_point(pn.aes(x='flops', y='μ', group='run', color='params'))
+        + pn.scale_x_continuous(trans='log10')
+        + mpl_theme()
+        + poster_sizes())
 
 def run(boardsize=3, n_workers=8):
     snaps = snapshots(boardsize)
