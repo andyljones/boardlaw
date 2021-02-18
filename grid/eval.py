@@ -1,3 +1,4 @@
+import scipy as sp
 import numpy as np
 import activelo
 import pandas as pd
@@ -5,6 +6,7 @@ from boardlaw import arena
 from pavlov import storage, runs
 from rebar import dotdict
 from IPython import display
+from concurrent.futures import ProcessPoolExecutor
 
 def snapshots(boardsize):
     snapshots = {}
@@ -15,16 +17,14 @@ def snapshots(boardsize):
                     .rename_axis(index=('run', 'idx'))
                     .reset_index())
 
-def worlds_and_agents(boardsize):
-    snaps = snapshots(boardsize)
-    worlds = arena.common.worlds(snaps.run[0], 512, 'cuda')
+def evaluate(Aname, Bname):
+    Arun, Aidx = Aname.split('.')
+    Brun, Bidx = Aname.split('.')
+    A = arena.common.agent(f'*{Arun}', int(Aidx), 'cuda')
+    B = arena.common.agent(f'*{Brun}', int(Bidx), 'cuda')
+    worlds = arena.common.worlds(f'*{Arun}', 512, 'cuda')
 
-    agents = {}
-    for _, row in snaps.iterrows():
-        name = f'{row.run.split(" ")[-1]}.{row.idx}'
-        agents[name] = arena.common.agent(row.run, row.idx, 'cuda')
-    
-    return worlds, agents
+    return arena.common.evaluate(worlds, {Aname: A, Bname: B})
 
 def update(games, wins, results):
     games, wins = games.copy(), wins.copy()
@@ -43,19 +43,36 @@ def report(soln):
     print(f'μ_max: {μ.max():.1f}')
     print(f'σ_ms: {σ.pow(2).mean()**.5:.2f}')
 
-def run(boardsize=3):
-    worlds, agents = worlds_and_agents(boardsize)
+def suggest(soln, temp=1):
+    imp = activelo.improvement(soln)
 
-    n_agents = len(agents)
-    wins  = pd.DataFrame(np.zeros((n_agents, n_agents)), list(agents), list(agents))
-    games = pd.DataFrame(np.zeros((n_agents, n_agents)), list(agents), list(agents))
+    logits = temp*(imp.values.flatten() - sp.special.logsumexp(imp.values.flatten()))
+
+    n_agents = imp.shape[0]
+    choice = np.random.choice(np.arange(logits.size), p=np.exp(logits))
+    sugg = (imp.index[choice // n_agents], imp.index[choice % n_agents])
+
+    return sugg
+
+def run(boardsize=3, n_workers=8):
+    snaps = snapshots(boardsize)
+
+    n_agents = len(snaps)
+    wins  = pd.DataFrame(np.zeros((n_agents, n_agents)), list(snaps.index), list(snaps.index))
+    games = pd.DataFrame(np.zeros((n_agents, n_agents)), list(snaps.index), list(snaps.index))
 
     soln = None
-    while True:
-        soln = activelo.solve(games, wins, soln=soln)
-        sugg = activelo.suggest(soln)
+    futures = {}
+    with ProcessPoolExecutor(n_workers) as pool:
+        while True:
+            if len(futures) < n_workers:
+                soln = activelo.solve(games, wins, soln=soln)
+                sugg = suggest(soln)
+                futures[sugg] = pool.submit(evaluate, *sugg)
 
-        results = arena.common.evaluate(worlds, {n: agents[n] for n in sugg})
-        games, wins = update(games, wins, results)
-
-        report(soln)
+            for key, future in list(futures.items()):
+                if future.done():
+                    results = future.result()
+                    games, wins = update(games, wins, results)
+                    report(soln)
+                    del futures[key]
