@@ -58,23 +58,24 @@ def guess(games, wins, futures):
     mocks = []
     for f in futures:
         rate = (wins.at[f] + 1)/(games.at[f] + 2)
-        ws = (int(rate*N_ENVS), N_ENVS - int(rate*N_ENVS))
+        ws = (int(rate*N_ENVS//2), N_ENVS//2 - int(rate*N_ENVS//2))
         mocks.append(dotdict.dotdict(
             names=f,
             wins=ws, 
-            games=N_ENVS))
+            games=N_ENVS//2))
         mocks.append(dotdict.dotdict(
             names=f[::-1],
             wins=ws[::-1],
-            games=N_ENVS))
+            games=N_ENVS//2))
     return update(games, wins, mocks)
 
 def report(soln, games):
     μ, σ = arena.analysis.difference(soln, soln.μ.idxmin())
 
     display.clear_output(wait=True)
+    print(f'n rounds: {games.sum().sum()/N_ENVS}')
     print(f'saturation: {games.sum().sum()/N_ENVS/games.shape[0]:.0%}')
-    print(f'coverage: {(μ != 0).mean():.0%}')
+    print(f'coverage: {(soln.μ != 0).mean():.0%}')
     print(f'μ_max: {μ.max():.1f}')
     print(f'σ_ms: {σ.pow(2).mean()**.5:.2f}')
 
