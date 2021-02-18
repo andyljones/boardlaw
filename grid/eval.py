@@ -12,6 +12,9 @@ from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import set_start_method
 from geotorch.exceptions import InManifoldError
 from logging import getLogger
+from pathlib import Path
+
+ROOT = Path('output/experiments/bee/eval')
 
 log = getLogger(__name__)
 
@@ -42,7 +45,7 @@ def evaluate(Aname, Bname):
     B = arena.common.agent(f'*{Brun}', int(Bidx), 'cuda')
     worlds = arena.common.worlds(f'*{Arun}', N_ENVS, 'cuda')
 
-    return arena.common.evaluate(worlds, {Aname: A, Bname: B})
+    return arena.common.evaluate(worlds, [(Aname, A), (Bname, B)])
 
 def update(games, wins, results):
     games, wins = games.copy(), wins.copy()
@@ -114,6 +117,37 @@ def plot(snaps):
         + mpl_theme()
         + poster_sizes())
 
+def load(boardsize, agents):
+    path = ROOT / f'{boardsize}.json'
+    if path.exists():
+        entries = pd.read_json(path.open('r'))
+        games = entries.pivot('agent', 'challenger', 'games').reindex(index=agents, columns=agents).fillna(0)
+        wins = entries.pivot('agent', 'challenger', 'wins').reindex(index=agents, columns=agents).fillna(0)
+    else:
+        games  = pd.DataFrame(index=agents, columns=agents).fillna(0).astype(int)
+        wins  = pd.DataFrame(index=agents, columns=agents).fillna(0).astype(int)
+
+    return games, wins
+
+def save(boardsize, games, wins):
+
+    new = (pd.concat({
+                    'games': games.stack(), 
+                    'wins': wins.stack()}, 1)
+                .loc[lambda df: df.games > 0]
+                .rename_axis(index=('agent', 'challenger')))
+
+    path = ROOT / f'{boardsize}.json'
+    if path.exists():
+        entries = pd.read_json(path.open('r')).set_index(['agent', 'challenger'])
+        entries = new.combine_first(entries)
+    else:
+        entries = new
+
+    path.parent.mkdir(exist_ok=True, parents=True)
+    entries.reset_index().to_json(path)
+    
+
 def run(boardsize=3, n_workers=8):
     snaps = snapshots(boardsize)
     snaps = pd.concat([snaps, parameters(snaps)], 1)
@@ -121,9 +155,7 @@ def run(boardsize=3, n_workers=8):
     snaps['params'] = params(snaps)
     snaps = snaps.set_index('nickname')
 
-    n_agents = len(snaps)
-    wins  = pd.DataFrame(np.zeros((n_agents, n_agents)), snaps.index, snaps.index)
-    games = pd.DataFrame(np.zeros((n_agents, n_agents)), snaps.index, snaps.index)
+    games, wins = load(boardsize, snaps.index)
 
     soln = None
     futures = {}
@@ -140,6 +172,7 @@ def run(boardsize=3, n_workers=8):
                     results = future.result()
                     games, wins = update(games, wins, results)
                     del futures[key]
+                    save(boardsize, games, wins)
 
             while len(futures) < n_workers:
                 if soln is None:
@@ -152,7 +185,7 @@ def run(boardsize=3, n_workers=8):
             if soln is not None:
                 report(soln, games, futures)
                 _, σ = arena.analysis.difference(soln, soln.μ.idxmin())
-                if σ.pow(2).mean()**.5 < .1:
+                if σ.pow(2).mean()**.5 < .01:
                     break
             
     snaps['μ'], snaps['σ'] = arena.analysis.difference(soln, soln.μ.idxmin())
