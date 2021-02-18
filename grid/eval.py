@@ -1,3 +1,4 @@
+import time
 import plotnine as pn
 import scipy as sp
 import numpy as np
@@ -8,6 +9,13 @@ from pavlov import storage, runs
 from rebar import dotdict
 from IPython import display
 from concurrent.futures import ProcessPoolExecutor
+from multiprocessing import set_start_method
+from geotorch.exceptions import InManifoldError
+from logging import getLogger
+
+log = getLogger(__name__)
+
+set_start_method('spawn', True)
 
 def snapshots(boardsize):
     snapshots = {}
@@ -26,6 +34,7 @@ def parameters(snaps):
     return pd.DataFrame.from_dict(params, orient='index')
 
 def evaluate(Aname, Bname):
+
     Arun, Aidx = Aname.split('.')
     Brun, Bidx = Aname.split('.')
     A = arena.common.agent(f'*{Arun}', int(Aidx), 'cuda')
@@ -89,8 +98,14 @@ def run(boardsize=3, n_workers=8):
     with ProcessPoolExecutor(n_workers) as pool:
         while True:
             if len(futures) < n_workers:
-                soln = activelo.solve(games, wins, soln=soln)
-                sugg = suggest(soln)
+                try:
+                    soln = activelo.solve(games, wins, soln=soln)
+                    sugg = suggest(soln)
+                except InManifoldError:
+                    soln = None
+                    sugg = tuple(np.random.choice(snaps.index, (2,)))
+                    log.warning('Got a manifold error; making a random suggestion')
+
                 futures[sugg] = pool.submit(evaluate, *sugg)
 
             for key, future in list(futures.items()):
@@ -104,5 +119,7 @@ def run(boardsize=3, n_workers=8):
                 _, σ = arena.analysis.difference(soln, soln.μ.idxmin())
                 if σ.pow(2).mean()**.5 < .1:
                     break
+            
+            time.sleep(1)
 
     snaps['μ'], snaps['σ'] = arena.analysis.difference(soln, soln.μ.idxmin())
