@@ -1,3 +1,8 @@
 .container { 
     width: 95% !important; 
 }
+
+/* Make lots of space at the end of the doc, so the window doesn't jump when an output vanishes */
+.end_space {
+    min-height: 100vh;
+}
