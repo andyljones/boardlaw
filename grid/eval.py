@@ -171,13 +171,19 @@ def run(boardsize=3, n_workers=8):
 
     soln = None
     futures = {}
+    solver = None
     with ProcessPoolExecutor(n_workers, initializer=init) as pool:
         while True:
-            try:
-                soln = activelo.solve(games, wins, soln=soln)
-            except InManifoldError:
-                soln = None
-                log.warning('Got a manifold error; throwing soln out')
+            if solver is None:
+                solver = pool.submit(activelo.solve, games, wins, soln=soln)
+            elif solver.done():
+                try:
+                    soln = solver.result()
+                except InManifoldError:
+                    soln = None
+                    log.warning('Got a manifold error; throwing soln out')
+                finally:
+                    solver = None
 
             for key, future in list(futures.items()):
                 if future.done():
@@ -186,7 +192,7 @@ def run(boardsize=3, n_workers=8):
                     del futures[key]
                     save(boardsize, games, wins)
 
-            while len(futures) < n_workers:
+            while len(futures) < n_workers - 1:
                 if soln is None:
                     sugg = tuple(np.random.choice(games.index, (2,)))
                 else:
