@@ -25,7 +25,7 @@ def is_missing(proposal, acks):
     return keystr(proposal) not in {keystr(a) for a in acks}
 
 def launch():
-    boardsize = 5
+    boardsize = 7
     desc = f'bee/{boardsize}'
     acks = acknowledged(desc)
     for width in [1, 2, 4, 8, 16]:

@@ -105,6 +105,7 @@ def plot(snaps):
         + pn.geom_line(pn.aes(x='flops', y='μ', group='run', color='params'))
         + pn.geom_point(pn.aes(x='flops', y='μ', group='run', color='params'))
         + pn.scale_x_continuous(trans='log10')
+        + pn.scale_color_continuous(trans='log10')
         + mpl_theme()
         + poster_sizes())
 
@@ -199,4 +200,18 @@ def run(boardsize=5, n_workers=8):
             if σ is not None and σ.pow(2).mean()**.5 < .01:
                 break
             
-    snaps['μ'], snaps['σ'] = arena.analysis.difference(soln, soln.μ.idxmin())
+    snaps['μ'], snaps['σ'] = arena.analysis.difference(soln, soln.μ.idxmax())
+
+def vitals(boardsize):
+    snaps = snapshots(boardsize)
+    snaps = pd.concat([snaps, parameters(snaps)], 1)
+    snaps['nickname'] = snaps.run.str.extract('.* (.*)', expand=False) + '.' + snaps.idx.astype(str)
+    snaps['params'] = params(snaps)
+    snaps = snaps.set_index('nickname')
+
+    games, wins = load(boardsize, snaps.index)
+    soln = activelo.solve(games, wins)
+    snaps['μ'], snaps['σ'] = arena.analysis.difference(soln, soln.μ.idxmax())
+
+    return snaps
+
