@@ -75,6 +75,7 @@ def report(soln, games, futures):
     μ, σ = arena.analysis.difference(soln, soln.μ.idxmin())
 
     display.clear_output(wait=True)
+    print(pd.Timestamp.now('UTC').strftime('%H:%M:%S'))
     print(f'n rounds: {games.sum().sum()/N_ENVS}')
     print(f'saturation: {games.sum().sum()/N_ENVS/games.shape[0]:.0%}')
     print(f'coverage: {(soln.μ != 0).mean():.0%}')
@@ -87,7 +88,7 @@ def suggest(soln):
     # for parallel exploration? Do I even need to go that complex - can I just collapse
     # Σ over the in-flight pairs?
     imp = activelo.improvement(soln)
-    idx = np.random.choice(imp.stack().index, p=imp/imp.sum().sum())
+    idx = np.random.choice(imp.stack().index, p=imp.values.flatten()/imp.sum().sum())
     return tuple(idx)
 
 def params(df):
@@ -150,6 +151,15 @@ def save(boardsize, games, wins):
     entries.reset_index().to_json(path)
     
 
+def init():
+    # Would be happier if I could get the index of the process in the pool so that 
+    # exactly half the processes could get each GPU. But I don't seem to be able to!
+    # Best I could manage would be to subclass ProcessPoolExecutor, and :effort:
+    import os
+    #TODO: Support variable number of GPUs
+    device = os.getpid() % 2
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(device)
+
 def run(boardsize=3, n_workers=8):
     snaps = snapshots(boardsize)
     snaps = pd.concat([snaps, parameters(snaps)], 1)
@@ -161,7 +171,7 @@ def run(boardsize=3, n_workers=8):
 
     soln = None
     futures = {}
-    with ProcessPoolExecutor(n_workers) as pool:
+    with ProcessPoolExecutor(n_workers, initializer=init) as pool:
         while True:
             try:
                 soln = activelo.solve(games, wins, soln=soln)
