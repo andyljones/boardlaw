@@ -9,7 +9,7 @@ from logging import getLogger
 
 log = getLogger(__name__)
 
-DISK = 25
+DISK = 50
 MAX_DPH = 4
 MAX_INSTANCES = 8
 
