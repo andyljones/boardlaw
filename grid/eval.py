@@ -20,7 +20,7 @@ log = getLogger(__name__)
 
 set_start_method('spawn', True)
 
-N_ENVS = 512
+N_ENVS = 1024
 
 def snapshots(boardsize):
     snapshots = {}
@@ -82,10 +82,12 @@ def report(soln, games, futures):
     print(f'σ_ms: {σ.pow(2).mean()**.5:.2f}')
     print(f'n futures: {len(futures)}')
 
-def suggest(soln, temp=10.):
+def suggest(soln):
+    #TODO: Can I use the eigenvectors of the Σ to rapidly make orthogonal suggestions
+    # for parallel exploration? Do I even need to go that complex - can I just collapse
+    # Σ over the in-flight pairs?
     imp = activelo.improvement(soln)
-    logits = temp*imp - sp.special.logsumexp(temp*imp)
-    idx = np.random.choice(imp.stack().index, p=np.exp(logits.values.flatten()))
+    idx = np.random.choice(imp.stack().index, p=imp/imp.sum().sum())
     return tuple(idx)
 
 def params(df):

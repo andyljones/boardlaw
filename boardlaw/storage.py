@@ -55,7 +55,7 @@ class LogarithmicStorer:
 
         self._samples_bound = SAMPLES[boardsize]
 
-        storage.raw(run, 'model', pickle.dumps(agent.network))
+        storage.save_raw(run, 'model', pickle.dumps(agent.network))
 
         self._start = time.time()
         self._last_report = time.time()

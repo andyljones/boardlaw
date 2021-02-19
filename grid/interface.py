@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import time
 import jittens
-from . import vast, data
+from . import vast
 import pandas as pd
 from logging import getLogger
 from pavlov import runs, stats
@@ -14,8 +14,7 @@ def acknowledged(desc):
     fresh = [j.params for j in jittens.jobs.jobs('fresh').values()]
     active = [j.params for j in jittens.jobs.jobs('active').values()]
 
-    rs = runs.pandas().loc[lambda df: df.description == desc]
-    fetched = [ast.literal_eval(r['JITTENS_PARAMS']) for _, r in rs._env.iteritems()]
+    fetched = runs.pandas(description=desc).params.values.tolist()
 
     return fresh + active + fetched
 
@@ -27,7 +26,7 @@ def is_missing(proposal, acks):
 
 def launch():
     boardsize = 5
-    desc = f'frontier/{boardsize}'
+    desc = f'bee/{boardsize}'
     acks = acknowledged(desc)
     for width in [1, 2, 4, 8, 16]:
         for depth in [1, 2, 4, 8]:
