@@ -138,7 +138,8 @@ def pandas(name=None, **kwargs):
     for run, info in runs(name, **kwargs).items():
         df[run] = {k: v for k, v in info.items()}
     df = pd.DataFrame.from_dict(df, orient='index')
-    df['_created'] = pd.to_datetime(df['_created'])
+    if '_created' in df:
+        df['_created'] = pd.to_datetime(df['_created'])
     df.index.name = 'run'
     return df.sort_index(axis=1)
 

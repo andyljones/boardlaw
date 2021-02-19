@@ -136,7 +136,7 @@ def fetch(source, target):
 
     return fetched
          
-def tails(path, jobglob='*', count=5):
+def tails(path, jobglob='*', lineglob='*', count=5):
     from pathlib import Path
     from shlex import quote
     from fnmatch import fnmatch
@@ -161,6 +161,7 @@ def tails(path, jobglob='*', count=5):
     for name, stdout in stdouts.items():
         print(f'{name}:')
         for line in stdout:
-            print(f'\t{line}')
+            if fnmatch(line, lineglob):
+                print(f'\t{line}')
 
          
