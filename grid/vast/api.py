@@ -27,7 +27,8 @@ OFFER_COLS = [
     'machine_id',
     'gpu_name',
     'inet_down',
-    'inet_down_cost']
+    'inet_down_cost',
+    'reliability2']
 
 STATUS_COLS = [
     'actual_status',
@@ -63,13 +64,14 @@ def run(command):
                 return s
         log.info('Hit multiple 502 errors, trying again')
 
-def offers(query, cols=OFFER_COLS):
+def offers(query, cols=OFFER_COLS, default=True):
     "inet_down >= 200"
     if cols is not None:
-        return offers(query, None)[cols]
+        return offers(query, None, default)[cols]
     if query:
-        return offers(None, cols).query(query)
-    js = json.loads(run(f'search offers --raw --storage {DISK}'))
+        return offers(None, cols, default).query(query)
+    default = '' if default else '-n' 
+    js = json.loads(run(f'search offers --raw {default} --storage {DISK}'))
     return pd.DataFrame.from_dict(js).sort_values('dph_total')
 
 def status(label=None, cols=STATUS_COLS):
@@ -100,8 +102,8 @@ def status(label=None, cols=STATUS_COLS):
 
     raise IOError('Couldn\'t get the status after several tries')
 
-def launch(query):
-    s = offers(query).iloc[0]
+def launch(query, **kwargs):
+    s = offers(query, **kwargs).iloc[0]
     assert s.dph_total < MAX_DPH
     assert status() is None or len(status()) < MAX_INSTANCES
     label = aljpy.humanhash(n=2)
