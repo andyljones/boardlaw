@@ -71,18 +71,6 @@ def guess(games, wins, futures):
             games=N_ENVS//2))
     return update(games, wins, mocks)
 
-def report(soln, games, futures):
-    μ, σ = arena.analysis.difference(soln, soln.μ.idxmin())
-
-    display.clear_output(wait=True)
-    print(pd.Timestamp.now('UTC').strftime('%H:%M:%S'))
-    print(f'n rounds: {games.sum().sum()/N_ENVS}')
-    print(f'saturation: {games.sum().sum()/N_ENVS/games.shape[0]:.0%}')
-    print(f'coverage: {(soln.μ != 0).mean():.0%}')
-    print(f'μ_max: {μ.max():.1f}')
-    print(f'σ_ms: {σ.pow(2).mean()**.5:.2f}')
-    print(f'n futures: {len(futures)}')
-
 def suggest(soln):
     #TODO: Can I use the eigenvectors of the Σ to rapidly make orthogonal suggestions
     # for parallel exploration? Do I even need to go that complex - can I just collapse
@@ -160,7 +148,7 @@ def init():
     device = os.getpid() % 2
     os.environ['CUDA_VISIBLE_DEVICES'] = str(device)
 
-def run(boardsize=3, n_workers=8):
+def run(boardsize=5, n_workers=8):
     snaps = snapshots(boardsize)
     snaps = pd.concat([snaps, parameters(snaps)], 1)
     snaps['nickname'] = snaps.run.str.extract('.* (.*)', expand=False) + '.' + snaps.idx.astype(str)
@@ -169,16 +157,20 @@ def run(boardsize=3, n_workers=8):
 
     games, wins = load(boardsize, snaps.index)
 
-    soln = None
+    solver, soln, σ = None, None, None
     futures = {}
-    solver = None
     with ProcessPoolExecutor(n_workers, initializer=init) as pool:
         while True:
             if solver is None:
+                log.info('Submitting solve task')
                 solver = pool.submit(activelo.solve, games, wins, soln=soln)
             elif solver.done():
                 try:
                     soln = solver.result()
+                    μ, σ = arena.analysis.difference(soln, soln.μ.idxmin())
+                    
+                    log.info(f'μ_max: {μ.max():.1f}')
+                    log.info(f'σ_ms: {σ.pow(2).mean()**.5:.2f}')
                 except InManifoldError:
                     soln = None
                     log.warning('Got a manifold error; throwing soln out')
@@ -191,6 +183,9 @@ def run(boardsize=3, n_workers=8):
                     games, wins = update(games, wins, results)
                     del futures[key]
                     save(boardsize, games, wins)
+                    
+                    log.info(f'saturation: {games.sum().sum()/N_ENVS/games.shape[0]:.0%}')
+                    log.info(f'coverage: {(soln.μ != 0).mean():.0%}')
 
             while len(futures) < n_workers - 1:
                 if soln is None:
@@ -198,12 +193,10 @@ def run(boardsize=3, n_workers=8):
                 else:
                     sugg = suggest(soln)
                 
+                log.info('Submitting eval task')
                 futures[sugg] = pool.submit(evaluate, *sugg)
         
-            if soln is not None:
-                report(soln, games, futures)
-                _, σ = arena.analysis.difference(soln, soln.μ.idxmin())
-                if σ.pow(2).mean()**.5 < .01:
-                    break
+            if σ is not None and σ.pow(2).mean()**.5 < .01:
+                break
             
     snaps['μ'], snaps['σ'] = arena.analysis.difference(soln, soln.μ.idxmin())
