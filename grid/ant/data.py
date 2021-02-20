@@ -8,7 +8,7 @@ log = getLogger(__name__)
 TAILS = {3: 5, 5: 15, 7: 30, 9: 90}
 
 def load_field(*args, key=('boardsize', 'width', 'depth')):
-    rs = runs.pandas().loc[lambda df: df.description.fillna('').str.startswith('main/')].index
+    rs = runs.pandas(description='ant/*').index
 
     head, tail = [], []
     for r in rs:

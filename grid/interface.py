@@ -14,7 +14,11 @@ def acknowledged(desc):
     fresh = [j.params for j in jittens.jobs.jobs('fresh').values()]
     active = [j.params for j in jittens.jobs.jobs('active').values()]
 
-    fetched = runs.pandas(description=desc).params.values.tolist()
+    fetched = runs.pandas(description=desc)
+    if fetched.size:
+        fetched = fetched.params.values.tolist()
+    else:
+        fetched = []
 
     return fresh + active + fetched
 
@@ -25,10 +29,10 @@ def is_missing(proposal, acks):
     return keystr(proposal) not in {keystr(a) for a in acks}
 
 def launch():
-    boardsize = 7
+    boardsize = 9
     desc = f'bee/{boardsize}'
     acks = acknowledged(desc)
-    for width in [1, 2, 4, 8, 16, 32, 64, 128]:
+    for width in [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]:
         for depth in [1, 2, 4, 8]:
             params = dict(width=width, depth=depth, boardsize=boardsize, desc=desc)
             if is_missing(params, acks):
@@ -51,7 +55,7 @@ def refresh():
             jittens.refresh()
             time.sleep(15)
 
-            if time.time() > last_fetch + 150:
+            if time.time() > last_fetch + 900:
                 fetched = fetch()
                 jittens.manage.cleanup(fetched)
                 last_fetch = time.time()
