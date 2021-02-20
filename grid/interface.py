@@ -51,16 +51,16 @@ def refresh():
             jittens.refresh()
             time.sleep(15)
 
-            if time.time() > last_fetch + 600:
+            if time.time() > last_fetch + 150:
                 fetched = fetch()
-                # jittens.manage.cleanup(fetched)
+                jittens.manage.cleanup(fetched)
                 last_fetch = time.time()
         except Exception as e:
             log.info(f'Failed with error {e}')
-            time.sleep(60)
+            time.sleep(5)
 
     fetched = fetch()
-    # jittens.manage.cleanup(fetched)
+    jittens.manage.cleanup(fetched)
 
 def progress():
     active_jobs = jittens.jobs.jobs('active')

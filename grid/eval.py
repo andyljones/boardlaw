@@ -149,7 +149,7 @@ def init():
     device = os.getpid() % 2
     os.environ['CUDA_VISIBLE_DEVICES'] = str(device)
 
-def run(boardsize=5, n_workers=8):
+def run(boardsize=7, n_workers=9):
     snaps = snapshots(boardsize)
     snaps = pd.concat([snaps, parameters(snaps)], 1)
     snaps['nickname'] = snaps.run.str.extract('.* (.*)', expand=False) + '.' + snaps.idx.astype(str)
@@ -186,9 +186,8 @@ def run(boardsize=5, n_workers=8):
                     save(boardsize, games, wins)
                     
                     log.info(f'saturation: {games.sum().sum()/N_ENVS/games.shape[0]:.0%}')
-                    log.info(f'coverage: {(soln.μ != 0).mean():.0%}')
 
-            while len(futures) < n_workers - 1:
+            while len(futures) < n_workers:
                 if soln is None:
                     sugg = tuple(np.random.choice(games.index, (2,)))
                 else:
@@ -197,7 +196,7 @@ def run(boardsize=5, n_workers=8):
                 log.info('Submitting eval task')
                 futures[sugg] = pool.submit(evaluate, *sugg)
         
-            if σ is not None and σ.pow(2).mean()**.5 < .01:
+            if σ is not None and σ.pow(2).mean()**.5 < .0:
                 break
             
     snaps['μ'], snaps['σ'] = arena.analysis.difference(soln, soln.μ.idxmax())
