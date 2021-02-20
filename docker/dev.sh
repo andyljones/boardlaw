@@ -5,10 +5,11 @@ env | egrep -v "^(HOME=|USER=|MAIL=|LC_ALL=|LS_COLORS=|LANG=|HOSTNAME=|PWD=|TERM
 service ssh start
 
 echo "Launching MPS"
-nvidia-cuda-mps-control -d
+nohup nvidia-cuda-mps-control -d &
 
 echo "Launching rsync daemon"
-rsync --daemon
+rm -f /var/run/rsyncd.pid
+nohup rsync --daemon &
 
 echo "Launching Jupyter"
 mkdir -p output/logs

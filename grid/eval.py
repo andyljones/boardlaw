@@ -56,6 +56,13 @@ def update(games, wins, results):
         wins.loc[result.names[1], result.names[0]] += result.wins[1]
     return games, wins
 
+def solve(games, wins, soln):
+    try:
+        return activelo.solve(games, wins, soln=soln)
+    except InManifoldError:
+        log.warning('Got a manifold error; throwing soln out')
+        return None
+
 def guess(games, wins, futures):
     mocks = []
     for f in futures:
@@ -164,19 +171,14 @@ def run(boardsize=7, n_workers=9):
         while True:
             if solver is None:
                 log.info('Submitting solve task')
-                solver = pool.submit(activelo.solve, games, wins, soln=soln)
+                solver = pool.submit(solve, games, wins, soln=soln)
             elif solver.done():
-                try:
-                    soln = solver.result()
+                soln = solver.result()
+                solver = None
+                if soln is not None:
                     μ, σ = arena.analysis.difference(soln, soln.μ.idxmin())
-                    
                     log.info(f'μ_max: {μ.max():.1f}')
                     log.info(f'σ_ms: {σ.pow(2).mean()**.5:.2f}')
-                except InManifoldError:
-                    soln = None
-                    log.warning('Got a manifold error; throwing soln out')
-                finally:
-                    solver = None
 
             for key, future in list(futures.items()):
                 if future.done():
@@ -202,6 +204,7 @@ def run(boardsize=7, n_workers=9):
     snaps['μ'], snaps['σ'] = arena.analysis.difference(soln, soln.μ.idxmax())
 
 def vitals(boardsize):
+    log.info(f'Generating vitals for {boardsize}')
     snaps = snapshots(boardsize)
     snaps = pd.concat([snaps, parameters(snaps)], 1)
     snaps['nickname'] = snaps.run.str.extract('.* (.*)', expand=False) + '.' + snaps.idx.astype(str)
