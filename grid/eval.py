@@ -107,7 +107,7 @@ def poster_sizes():
                 title=pn.element_text(size=18),
                 legend_title=pn.element_text(size=18))
 
-def plot(snaps):
+def plot_flops(snaps):
     return (pn.ggplot(data=snaps)
         + pn.geom_line(pn.aes(x='flops', y='μ', group='run', color='params'))
         + pn.geom_point(pn.aes(x='flops', y='μ', group='run', color='params'))
@@ -115,6 +115,17 @@ def plot(snaps):
         + pn.scale_color_continuous(trans='log10')
         + mpl_theme()
         + poster_sizes())
+
+def plot_params(snaps):
+    best = snaps.groupby(['boardsize', 'depth', 'width']).apply(lambda g: g.loc[g.μ.idxmax()])
+    return (pn.ggplot(data=best)
+        + pn.geom_line(pn.aes(x='params', y='μ', group='boardsize', color='boardsize'))
+        + pn.geom_point(pn.aes(x='params', y='μ', group='boardsize', color='boardsize'))
+        + pn.scale_x_continuous(trans='log10')
+        + pn.scale_color_continuous(trans='log10')
+        + mpl_theme()
+        + poster_sizes())
+
 
 def load(boardsize, agents):
     path = ROOT / f'{boardsize}.json'
