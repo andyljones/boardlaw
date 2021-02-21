@@ -75,3 +75,17 @@ def progress():
 
 def offers():
     vast.offers('cuda_max_good >= 11.1 & gpu_name == "RTX 2080 Ti"')
+
+def times():
+    lines = jittens.manage.tails('output/pavlov/*/logs.0.txt', count=500, lineglob='*Approx*', display=False)
+
+    times = {}
+    js = jittens.jobs.jobs()
+    ms = jittens.machines.machines()
+    for j, ls in lines.items():
+        if ls:
+            times[j] = (pd.to_timedelta(ls[-1].split(' ')[-2]), js[j].machine)
+        else:
+            times[j] = (pd.Timedelta('8h'), js[j].machine)
+        
+    return pd.DataFrame.from_dict(times, orient='index', columns=['time', 'machine'])
