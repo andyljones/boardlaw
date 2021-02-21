@@ -1,3 +1,5 @@
+import hashlib
+import aljpy
 import time
 import plotnine as pn
 import scipy as sp
@@ -95,8 +97,6 @@ def params(df):
 def mpl_theme(width=12, height=8):
     return [
         pn.theme_matplotlib(),
-        pn.guides(
-            color=pn.guide_colorbar(ticks=False)),
         pn.theme(
             figure_size=(width, height), 
             strip_background=pn.element_rect(color='w', fill='w'),
@@ -108,21 +108,22 @@ def poster_sizes():
                 legend_title=pn.element_text(size=18))
 
 def plot_flops(snaps):
-    return (pn.ggplot(data=snaps)
-        + pn.geom_line(pn.aes(x='flops', y='μ', group='run', color='params'))
-        + pn.geom_point(pn.aes(x='flops', y='μ', group='run', color='params'))
+    return (pn.ggplot(snaps, pn.aes(x='flops', y='μ', group='run', color='params'))
+        + pn.geom_line()
+        + pn.geom_point()
         + pn.scale_x_continuous(trans='log10')
         + pn.scale_color_continuous(trans='log10')
+        + pn.guides(color=pn.guide_colorbar(ticks=False))
         + mpl_theme()
         + poster_sizes())
 
 def plot_params(snaps):
     best = snaps.groupby(['boardsize', 'depth', 'width']).apply(lambda g: g.loc[g.μ.idxmax()])
-    return (pn.ggplot(data=best)
-        + pn.geom_line(pn.aes(x='params', y='μ', group='boardsize', color='boardsize'))
-        + pn.geom_point(pn.aes(x='params', y='μ', group='boardsize', color='boardsize'))
+    return (pn.ggplot(best, pn.aes(x='params', y='μ', color='factor(boardsize)'))
+        + pn.geom_line()
+        + pn.geom_point()
         + pn.scale_x_continuous(trans='log10')
-        + pn.scale_color_continuous(trans='log10')
+        + pn.scale_color_discrete(name='boardsize')
         + mpl_theme()
         + poster_sizes())
 
@@ -167,7 +168,7 @@ def init():
     device = os.getpid() % 2
     os.environ['CUDA_VISIBLE_DEVICES'] = str(device)
 
-def run(boardsize=7, n_workers=9):
+def run(boardsize=7, n_workers=8):
     snaps = snapshots(boardsize)
     snaps = pd.concat([snaps, parameters(snaps)], 1)
     snaps['nickname'] = snaps.run.str.extract('.* (.*)', expand=False) + '.' + snaps.idx.astype(str)
@@ -178,7 +179,7 @@ def run(boardsize=7, n_workers=9):
 
     solver, soln, σ = None, None, None
     futures = {}
-    with ProcessPoolExecutor(n_workers, initializer=init) as pool:
+    with ProcessPoolExecutor(n_workers+1, initializer=init) as pool:
         while True:
             if solver is None:
                 log.info('Submitting solve task')
@@ -214,6 +215,15 @@ def run(boardsize=7, n_workers=9):
             
     snaps['μ'], snaps['σ'] = arena.analysis.difference(soln, soln.μ.idxmax())
 
+@aljpy.autocache('{key}')
+def _solve_cached(games, wins, key):
+    return activelo.solve(games, wins)
+
+def solve_cached(games, wins):
+    gkey = hashlib.md5(games.to_json().encode()).hexdigest()
+    wkey = hashlib.md5(wins.to_json().encode()).hexdigest()
+    return _solve_cached(games, wins, gkey + wkey)
+
 def vitals(boardsize):
     log.info(f'Generating vitals for {boardsize}')
     snaps = snapshots(boardsize)
@@ -223,7 +233,7 @@ def vitals(boardsize):
     snaps = snaps.set_index('nickname')
 
     games, wins = load(boardsize, snaps.index)
-    soln = activelo.solve(games, wins)
+    soln = solve_cached(games, wins)
     snaps['μ'], snaps['σ'] = arena.analysis.difference(soln, soln.μ.idxmax())
 
     return snaps
