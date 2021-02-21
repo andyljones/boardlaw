@@ -40,6 +40,16 @@ def parameters(snaps):
         params[idx] = {**runs.info(row.run)['params'], 'samples': s['n_samples'], 'flops': s['n_flops']}
     return pd.DataFrame.from_dict(params, orient='index')
 
+def compile(name):
+    run, idx = name.split('.')
+    log.info('Compiling...')
+    agent = arena.common.agent(f'*{run}', int(idx), 'cuda')
+    worlds = arena.common.worlds(f'*{run}', 2, 'cuda')
+    
+    decisions = agent(worlds)
+    worlds.step(decisions.actions)
+    log.info('Compiled')
+
 def evaluate(Aname, Bname):
     Arun, Aidx = Aname.split('.')
     Brun, Bidx = Bname.split('.')
@@ -58,7 +68,7 @@ def update(games, wins, results):
         wins.loc[result.names[1], result.names[0]] += result.wins[1]
     return games, wins
 
-def solve(games, wins, soln):
+def solve(games, wins, soln=None):
     try:
         return activelo.solve(games, wins, soln=soln)
     except InManifoldError:
@@ -157,7 +167,7 @@ def save(boardsize, games, wins):
 
     path.parent.mkdir(exist_ok=True, parents=True)
     entries.reset_index().to_json(path)
-    
+
 
 def init():
     # Would be happier if I could get the index of the process in the pool so that 
@@ -177,13 +187,15 @@ def run(boardsize=7, n_workers=8):
 
     games, wins = load(boardsize, snaps.index)
 
+    compile(snaps.index[0])
+
     solver, soln, σ = None, None, None
     futures = {}
     with ProcessPoolExecutor(n_workers+1, initializer=init) as pool:
         while True:
             if solver is None:
                 log.info('Submitting solve task')
-                solver = pool.submit(solve, games, wins, soln=soln)
+                solver = pool.submit(solve, games, wins)
             elif solver.done():
                 soln = solver.result()
                 solver = None
