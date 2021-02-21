@@ -1,3 +1,4 @@
+import json
 import hashlib
 import aljpy
 import time
@@ -33,12 +34,17 @@ def snapshots(boardsize):
                     .rename_axis(index=('run', 'idx'))
                     .reset_index())
 
-def parameters(snaps):
+@aljpy.autocache('{key}')
+def _parameters_cached(snaps, key):
     params = {}
     for idx, row in snaps.iterrows():
         s = storage.load_snapshot(row.run, row.idx)
         params[idx] = {**runs.info(row.run)['params'], 'samples': s['n_samples'], 'flops': s['n_flops']}
     return pd.DataFrame.from_dict(params, orient='index')
+
+def parameters(snaps):
+    key = hashlib.md5(json.dumps(snaps.index.tolist()).encode()).hexdigest()
+    return _parameters_cached(snaps, key)
 
 def compile(name):
     run, idx = name.split('.')
