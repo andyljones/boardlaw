@@ -28,7 +28,7 @@ def viable(asked, offered):
 
 def select(job, machines):
     for m in machines.values():
-        if viable(job.resources, m.resources):
+        if viable(job.resources, m.resources) and not m.forbid:
             return m
 
 def allocate(job, machine):
@@ -136,7 +136,7 @@ def fetch(source, target):
 
     return fetched
          
-def tails(path, jobglob='*', lineglob='*', count=5):
+def tails(path, jobglob='*', lineglob='*', count=5, display=True):
     from pathlib import Path
     from shlex import quote
     from fnmatch import fnmatch
@@ -158,10 +158,16 @@ def tails(path, jobglob='*', lineglob='*', count=5):
         except Exception as e:
             stdouts[name] = ['Fabric error:'] + str(e).splitlines()[-count:]
     
-    for name, stdout in stdouts.items():
-        print(f'{name}:')
-        for line in stdout:
-            if fnmatch(line, lineglob):
-                print(f'\t{line}')
+    if display:
+        for name, stdout in stdouts.items():
+            print(f'{name}:')
+            for line in stdout:
+                if fnmatch(line, lineglob):
+                    print(f'\t{line}')
+    else:
+        results = {}
+        for name, stdout in stdouts.items():
+            results[name] = [l for l in stdout if fnmatch(l, lineglob)] 
+        return results
 
          

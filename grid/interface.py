@@ -1,3 +1,4 @@
+from jittens.machines import forbid
 import matplotlib.pyplot as plt
 import time
 import jittens
@@ -46,8 +47,8 @@ def launch():
 def fetch():
     return jittens.manage.fetch('output/pavlov/', 'output/pavlov/')
 
-def refresh():
-    vast.jittenate(local=False, ssh_accept=True)
+def refresh(forbidden=[]):
+    vast.jittenate(local=True, ssh_accept=True, forbidden=forbidden)
     last_fetch = 0
     while not jittens.finished():
         try:

@@ -3,7 +3,7 @@ from .api import launch, status, offers, wait, destroy
 
 log = getLogger(__name__)
 
-def jittenate(local=False, ssh_accept=True):
+def jittenate(local=False, ssh_accept=True, forbidden=[]):
     import jittens
     jittens.machines.clear()
     if local:
@@ -11,11 +11,13 @@ def jittenate(local=False, ssh_accept=True):
 
     for name, row in status().iterrows():
         if row.actual_status == 'running':
+            forbid = name in forbidden
             jittens.ssh.add(name,
                 resources={
                     'gpu': row.num_gpus if ssh_accept else 0,
                     'memory': row.cpu_ram*row.gpu_frac/1e3},
                 root='/code',
+                forbid=forbid,
                 connection_kwargs={
                     'host': row.ssh_host, 
                     'user': 'root', 

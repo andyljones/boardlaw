@@ -143,7 +143,7 @@ def plot_params(snaps):
         + poster_sizes())
 
 
-def load(boardsize, agents):
+def load(boardsize, agents=None):
     path = ROOT / f'{boardsize}.json'
     if path.exists():
         entries = pd.read_json(path.open('r'))

@@ -13,6 +13,7 @@ class Machine:
     name: str
     root: str
     resources: Dict[str, int]
+    forbid: bool = False
 
     def run(self, command, **kwargs):
         raise NotImplementedError()
@@ -61,3 +62,9 @@ def cleanup(job):
 
     machine = ms[job.machine]
     machine.cleanup(job)
+
+def forbid(name):
+    path = jobs.ROOT / f'machines/{name}.json'
+    contents = json.loads(path.read_text())
+    contents['forbid'] = True
+    path.write_text(json.dumps(contents))
