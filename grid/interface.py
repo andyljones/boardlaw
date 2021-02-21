@@ -29,10 +29,10 @@ def is_missing(proposal, acks):
     return keystr(proposal) not in {keystr(a) for a in acks}
 
 def launch():
-    boardsize = 6
+    boardsize = 8
     desc = f'bee/{boardsize}'
     acks = acknowledged(desc)
-    for width in [1, 2, 4, 8, 16, 32, 64, 128]:
+    for width in [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]:
         for depth in [1, 2, 4, 8]:
             params = dict(width=width, depth=depth, boardsize=boardsize, desc=desc)
             if is_missing(params, acks):
@@ -47,7 +47,7 @@ def fetch():
     return jittens.manage.fetch('output/pavlov/', 'output/pavlov/')
 
 def refresh():
-    vast.jittenate(local=True, ssh_accept=True)
+    vast.jittenate(local=False, ssh_accept=True)
     last_fetch = 0
     while not jittens.finished():
         try:

@@ -118,12 +118,11 @@ def poster_sizes():
                 legend_title=pn.element_text(size=18))
 
 def plot_flops(snaps):
-    return (pn.ggplot(snaps, pn.aes(x='flops', y='μ', group='run', color='params'))
+    return (pn.ggplot(snaps, pn.aes(x='flops', y='μ', group='run', color='factor(boardsize)'))
         + pn.geom_line()
         + pn.geom_point()
         + pn.scale_x_continuous(trans='log10')
-        + pn.scale_color_continuous(trans='log10')
-        + pn.guides(color=pn.guide_colorbar(ticks=False))
+        + pn.scale_color_discrete(name='boardsize')
         + mpl_theme()
         + poster_sizes())
 
