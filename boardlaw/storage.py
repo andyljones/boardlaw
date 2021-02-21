@@ -11,12 +11,14 @@ log = getLogger(__name__)
 # Found by inspecting the `main/` runs
 BOUNDS = {
     3: (1e10, 5e11),
+    4: (1e10, 1e13),
     5: (1e11, 3e13),
     7: (1e11, 1e16),
     9: (1e12, 1e17)}
 
 SAMPLES = {
     3: 1e8,
+    4: 2e8,
     5: 3e8,
     7: 1e9,
     9: 2e9,

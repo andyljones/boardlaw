@@ -29,11 +29,11 @@ def is_missing(proposal, acks):
     return keystr(proposal) not in {keystr(a) for a in acks}
 
 def launch():
-    boardsize = 9
+    boardsize = 4
     desc = f'bee/{boardsize}'
     acks = acknowledged(desc)
-    for width in [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]:
-        for depth in [1, 2, 4, 8]:
+    for width in [1, 2, 4, 8, 16]:
+        for depth in [1, 2, 4]:
             params = dict(width=width, depth=depth, boardsize=boardsize, desc=desc)
             if is_missing(params, acks):
                 log.info(f'Launching {params}')
