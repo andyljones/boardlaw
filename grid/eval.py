@@ -137,21 +137,28 @@ def plot_flops(snaps):
         + mpl_theme()
         + poster_sizes())
 
-def plot_params(snaps):
+def plot_frontier(snaps, var='params'):
     df = (snaps
             .groupby(['boardsize'])
             .apply(lambda df: df
-                .sort_values('params')
-                .groupby('params').μ.max()
-                .expanding().max())
+                .sort_values(var)
+                .set_index(var)
+                .expanding().μ.max())
             .reset_index())
-    return (pn.ggplot(df, pn.aes(x='params', y='μ', color='factor(boardsize)', group='boardsize'))
+    return (pn.ggplot(df, pn.aes(x=var, y='μ', color='factor(boardsize)', group='boardsize'))
         + pn.geom_point()
         + pn.geom_line()
+        + pn.labs(
+            x='training flops', 
+            y='elo v. perfect play')
         + pn.scale_x_continuous(trans='log10')
         + pn.scale_color_discrete(name='boardsize')
         + mpl_theme()
         + poster_sizes())
+
+def plot_flops_frontier(snaps):
+    return (plot_frontier(snaps, 'flops')
+        + pn.labs(title='performance frontier in terms of compute'))
 
 def load(boardsize, agents=None):
     path = ROOT / f'{boardsize}.json'
@@ -207,7 +214,7 @@ def init(i):
     os.environ['CUDA_VISIBLE_DEVICES'] = str(device)
 
 def activelo_eval(boardsize=7, n_workers=8):
-    snaps = vitals(boardsize, solve=False)
+    snaps = snapshot_solns(boardsize, solve=False)
     games, wins = load(boardsize, snaps.index)
 
     compile(snaps.index[0])
@@ -246,7 +253,7 @@ def activelo_eval(boardsize=7, n_workers=8):
                 futures[(np.random.randint(2**32), *sugg)] = pool.submit(evaluate, *sugg)
 
 def structured_eval(boardsize=7, n_workers=8):
-    snaps = vitals(boardsize, solve=False)
+    snaps = snapshot_solns(boardsize, solve=False)
     games, wins = load(boardsize, snaps.index)
 
     compile(snaps.index[0])
@@ -287,7 +294,9 @@ def solve_cached(games, wins):
     wkey = hashlib.md5(wins.to_json().encode()).hexdigest()
     return _solve_cached(games, wins, gkey + wkey)
 
-def vitals(boardsize, solve=True):
+def snapshot_solns(boardsize=None, solve=True):
+    if boardsize is None:
+        return pd.concat([snapshot_solns(b) for b in range(3, 10)], 0)
     log.info(f'Generating vitals for {boardsize}')
     snaps = snapshots(boardsize)
     snaps = pd.concat([snaps, parameters(snaps)], 1)
@@ -301,4 +310,3 @@ def vitals(boardsize, solve=True):
         snaps['μ'], snaps['σ'] = arena.analysis.difference(soln, soln.μ.idxmax())
 
     return snaps
-
