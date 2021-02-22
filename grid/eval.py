@@ -139,15 +139,20 @@ def plot_flops(snaps):
         + poster_sizes())
 
 def plot_params(snaps):
-    best = snaps.groupby(['boardsize', 'depth', 'width']).apply(lambda g: g.loc[g.μ.idxmax()])
-    return (pn.ggplot(best, pn.aes(x='params', y='μ', color='factor(boardsize)'))
-        + pn.geom_line()
+    df = (snaps
+            .groupby(['boardsize'])
+            .apply(lambda df: df
+                .sort_values('params')
+                .groupby('params').μ.max()
+                .expanding().max())
+            .reset_index())
+    return (pn.ggplot(df, pn.aes(x='params', y='μ', color='factor(boardsize)', group='boardsize'))
         + pn.geom_point()
+        + pn.geom_line()
         + pn.scale_x_continuous(trans='log10')
         + pn.scale_color_discrete(name='boardsize')
         + mpl_theme()
         + poster_sizes())
-
 
 def load(boardsize, agents=None):
     path = ROOT / f'{boardsize}.json'
