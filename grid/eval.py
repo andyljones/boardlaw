@@ -97,10 +97,9 @@ def structured_suggest(games):
     targets = succ | first | last
 
     sugg = ((games == 0) & (targets > 0)).stack().loc[lambda df: df]
-
-    log.info(f'{len(sugg)} suggestions left')
-
-    return sugg.sample(1).index[0]
+    if len(sugg):
+        log.info(f'{len(sugg)} suggestions left')
+        return sugg.sample(1).index[0]
 
 def activelo_suggest(soln):
     #TODO: Can I use the eigenvectors of the Σ to rapidly make orthogonal suggestions
@@ -244,7 +243,7 @@ def activelo_eval(boardsize=7, n_workers=8):
                     sugg = activelo_suggest(soln)
                 
                 log.info('Submitting eval task')
-                futures[sugg] = pool.submit(evaluate, *sugg)
+                futures[(len(futures), *sugg)] = pool.submit(evaluate, *sugg)
 
 def structured_eval(boardsize=7, n_workers=8):
     snaps = vitals(boardsize, solve=False)
@@ -266,9 +265,16 @@ def structured_eval(boardsize=7, n_workers=8):
 
             while len(futures) < n_workers:
                 sugg = structured_suggest(games)
-                
-                log.info('Submitting eval task')
-                futures[sugg] = pool.submit(evaluate, *sugg)
+                if sugg:
+                    log.info('Submitting eval task')
+                    futures[(len(futures), *sugg)] = pool.submit(evaluate, *sugg)
+                else:
+                    break
+
+            if len(futures) == 0:
+                break
+
+            time.sleep(1)
         
 @aljpy.autocache('{key}')
 def _solve_cached(games, wins, key):
