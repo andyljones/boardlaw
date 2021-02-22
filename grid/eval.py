@@ -243,7 +243,7 @@ def activelo_eval(boardsize=7, n_workers=8):
                     sugg = activelo_suggest(soln)
                 
                 log.info('Submitting eval task')
-                futures[(len(futures), *sugg)] = pool.submit(evaluate, *sugg)
+                futures[(np.random.randint(2**32), *sugg)] = pool.submit(evaluate, *sugg)
 
 def structured_eval(boardsize=7, n_workers=8):
     snaps = vitals(boardsize, solve=False)
@@ -267,11 +267,13 @@ def structured_eval(boardsize=7, n_workers=8):
                 sugg = structured_suggest(games)
                 if sugg:
                     log.info('Submitting eval task')
-                    futures[(len(futures), *sugg)] = pool.submit(evaluate, *sugg)
+                    futures[(np.random.randint(2**32), *sugg)] = pool.submit(evaluate, *sugg)
                 else:
+                    log.info('No suggetsions')
                     break
 
             if len(futures) == 0:
+                log.info('Finished')
                 break
 
             time.sleep(1)
