@@ -81,22 +81,28 @@ def solve(games, wins, soln=None):
         log.warning('Got a manifold error; throwing soln out')
         return None
 
-def guess(games, wins, futures):
-    mocks = []
-    for f in futures:
-        rate = (wins.at[f] + 1)/(games.at[f] + 2)
-        ws = (int(rate*N_ENVS//2), N_ENVS//2 - int(rate*N_ENVS//2))
-        mocks.append(dotdict.dotdict(
-            names=f,
-            wins=ws, 
-            games=N_ENVS//2))
-        mocks.append(dotdict.dotdict(
-            names=f[::-1],
-            wins=ws[::-1],
-            games=N_ENVS//2))
-    return update(games, wins, mocks)
+def structured_suggest(games):
+    parts = games.index.str.extract('(?P<run>.*)\.(?P<idx>.*)')
+    parts['idx'] = parts['idx'].astype(int)
+    parts['is_last'] = parts.groupby('run').apply(lambda df: df.idx == df.idx.max()).reset_index(level=0, drop=True)
+    parts.index = games.index
 
-def suggest(soln):
+    succ = parts.run + '.' + (parts.idx + 1).astype(str)
+    succ = succ.index.values[:, None] == succ.values[None, :]
+    succ = succ | succ.T
+
+    first = (parts.idx.values[:, None] == 0) & (parts.idx.values[None, :] == 0)
+    last = parts.is_last.values[:, None] & parts.is_last.values[None, :]
+
+    targets = succ | first | last
+
+    sugg = ((games == 0) & (targets > 0)).stack().loc[lambda df: df]
+
+    log.info(f'{len(sugg)} suggestions left')
+
+    return sugg.sample(1).index[0]
+
+def activelo_suggest(soln):
     #TODO: Can I use the eigenvectors of the Σ to rapidly make orthogonal suggestions
     # for parallel exploration? Do I even need to go that complex - can I just collapse
     # Σ over the in-flight pairs?
@@ -174,29 +180,37 @@ def save(boardsize, games, wins):
     entries.reset_index().to_json(path)
 
 
-def init():
-    # Would be happier if I could get the index of the process in the pool so that 
-    # exactly half the processes could get each GPU. But I don't seem to be able to!
-    # Best I could manage would be to subclass ProcessPoolExecutor, and :effort:
+class DeviceExecutor(ProcessPoolExecutor):
+    # Passes the index of the process to the init, so that we can balance CUDA jobs
+
+    def _adjust_process_count(self):
+        from concurrent.futures.process import _process_worker
+        for i in range(len(self._processes), self._max_workers):
+            p = self._mp_context.Process(
+                target=_process_worker,
+                args=(self._call_queue,
+                      self._result_queue,
+                      self._initializer,
+                      (*self._initargs, i)))
+            p.start()
+            self._processes[p.pid] = p
+
+
+def init(i):
     import os
     #TODO: Support variable number of GPUs
-    device = os.getpid() % 2
+    device = i % 2
     os.environ['CUDA_VISIBLE_DEVICES'] = str(device)
 
-def run(boardsize=7, n_workers=8):
-    snaps = snapshots(boardsize)
-    snaps = pd.concat([snaps, parameters(snaps)], 1)
-    snaps['nickname'] = snaps.run.str.extract('.* (.*)', expand=False) + '.' + snaps.idx.astype(str)
-    snaps['params'] = params(snaps)
-    snaps = snaps.set_index('nickname')
-
+def activelo_eval(boardsize=7, n_workers=8):
+    snaps = vitals(boardsize, solve=False)
     games, wins = load(boardsize, snaps.index)
 
     compile(snaps.index[0])
 
     solver, soln, σ = None, None, None
     futures = {}
-    with ProcessPoolExecutor(n_workers+1, initializer=init) as pool:
+    with DeviceExecutor(n_workers+1, initializer=init) as pool:
         while True:
             if solver is None:
                 log.info('Submitting solve task')
@@ -222,16 +236,35 @@ def run(boardsize=7, n_workers=8):
                 if soln is None:
                     sugg = tuple(np.random.choice(games.index, (2,)))
                 else:
-                    sugg = suggest(soln)
+                    sugg = activelo_suggest(soln)
+                
+                log.info('Submitting eval task')
+                futures[sugg] = pool.submit(evaluate, *sugg)
+
+def structured_eval(boardsize=7, n_workers=8):
+    snaps = vitals(boardsize, solve=False)
+    games, wins = load(boardsize, snaps.index)
+
+    compile(snaps.index[0])
+
+    futures = {}
+    with DeviceExecutor(n_workers, initializer=init) as pool:
+        while True:
+            for key, future in list(futures.items()):
+                if future.done():
+                    results = future.result()
+                    games, wins = update(games, wins, results)
+                    del futures[key]
+                    save(boardsize, games, wins)
+                    
+                    log.info(f'saturation: {games.sum().sum()/N_ENVS/games.shape[0]:.0%}')
+
+            while len(futures) < n_workers:
+                sugg = structured_suggest(games)
                 
                 log.info('Submitting eval task')
                 futures[sugg] = pool.submit(evaluate, *sugg)
         
-            if σ is not None and σ.pow(2).mean()**.5 < .0:
-                break
-            
-    snaps['μ'], snaps['σ'] = arena.analysis.difference(soln, soln.μ.idxmax())
-
 @aljpy.autocache('{key}')
 def _solve_cached(games, wins, key):
     return activelo.solve(games, wins)
@@ -241,7 +274,7 @@ def solve_cached(games, wins):
     wkey = hashlib.md5(wins.to_json().encode()).hexdigest()
     return _solve_cached(games, wins, gkey + wkey)
 
-def vitals(boardsize):
+def vitals(boardsize, solve=True):
     log.info(f'Generating vitals for {boardsize}')
     snaps = snapshots(boardsize)
     snaps = pd.concat([snaps, parameters(snaps)], 1)
@@ -249,9 +282,10 @@ def vitals(boardsize):
     snaps['params'] = params(snaps)
     snaps = snaps.set_index('nickname')
 
-    games, wins = load(boardsize, snaps.index)
-    soln = solve_cached(games, wins)
-    snaps['μ'], snaps['σ'] = arena.analysis.difference(soln, soln.μ.idxmax())
+    if solve:
+        games, wins = load(boardsize, snaps.index)
+        soln = solve_cached(games, wins)
+        snaps['μ'], snaps['σ'] = arena.analysis.difference(soln, soln.μ.idxmax())
 
     return snaps
 

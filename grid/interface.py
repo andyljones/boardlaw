@@ -83,9 +83,12 @@ def times():
     js = jittens.jobs.jobs()
     ms = jittens.machines.machines()
     for j, ls in lines.items():
+        m = ms[js[j].machine]
+        port = getattr(m, 'connection_kwargs', {}).get('port', '')
+
         if ls:
-            times[j] = (pd.to_timedelta(ls[-1].split(' ')[-2]), js[j].machine)
+            times[j] = (pd.to_timedelta(ls[-1].split(' ')[-2]), js[j].machine, port)
         else:
-            times[j] = (pd.Timedelta('8h'), js[j].machine)
+            times[j] = (pd.Timedelta('8h'), js[j].machine, port)
         
-    return pd.DataFrame.from_dict(times, orient='index', columns=['time', 'machine'])
+    return pd.DataFrame.from_dict(times, orient='index', columns=['time', 'machine', 'port'])
