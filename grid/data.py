@@ -81,7 +81,7 @@ def solve_cached(games, wins):
 
 def snapshot_solns(boardsize=None, solve=True):
     if boardsize is None:
-        return pd.concat([snapshot_solns(b) for b in range(3, 10)], 0)
+        return pd.concat([snapshot_solns(b, solve) for b in range(3, 10)], 0)
     log.info(f'Generating vitals for {boardsize}')
     snaps = snapshots(boardsize)
     snaps = pd.concat([snaps, parameters(snaps)], 1)

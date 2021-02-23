@@ -41,7 +41,7 @@ def evaluate(Aname, Bname):
     B = arena.common.agent(f'*{Brun}', int(Bidx), 'cuda')
     worlds = arena.common.worlds(f'*{Arun}', N_ENVS, 'cuda')
 
-    return arena.common.evaluate(worlds, [(Aname, A), (Bname, B)])
+    return arena.common.evaluate(worlds, [(Aname, A), (Bname, B)]), worlds.boardsize
 
 def update(games, wins, results):
     games, wins = games.copy(), wins.copy()
@@ -151,60 +151,73 @@ def structured_suggest(games):
 
 class FullSuggester:
 
-    def __init__(self, boardsize, agents):
-        self.games, self.wins = data.load(boardsize, agents)
+    def __init__(self, snaps):
+        self.games, self.wins = {}, {}
+        for b in snaps.boardsize.unique():
+            self.games[b], self.wins[b] = data.load(b, snaps[snaps.boardsize == b].index)
+
         self.start = time.time()
-        self.init_matches = self.games.gt(0).sum().sum()
+        self.init_matches = self.played()
+    
+    def played(self):
+        return sum(g.gt(0).sum().sum() for g in self.games.values())
 
-    def update(self, results):
-        self.games, self.wins = update(self.games, self.wins, results)
+    def remaining(self):
+        return sum(g.eq(0).sum().sum() for g in self.games.values())
 
-        matches_played = self.games.gt(0).sum().sum() - self.init_matches
+    def report(self):
+        matches_played = self.played() - self.init_matches
         time_passed = (time.time() - self.start)
         match_rate = matches_played/time_passed
 
-        matches_remain = self.games.eq(0).sum().sum()
+        matches_remain = self.remaining()
         time_remain = pd.to_timedelta(matches_remain/match_rate, unit='s')
-        end_time = pd.Timestamp.now(time.time()) + time_remain
+        end_time = pd.Timestamp.now() + time_remain
 
-        log.info(f'{60*match_rate:.1f} matches/min. Finish at {end_time:%a %H:%M:%S}')
+        log.info(f'{60*match_rate:.0f} matches/min. {time_remain.total_seconds()/3600:.0f}hrs to go, finish at {end_time:%a %d %b %H:%M:%S}')
+
+    def update(self, results, boardsize):
+        self.games[boardsize], self.wins[boardsize] = update(self.games[boardsize], self.wins[boardsize], results)
+        
+        self.report()
 
     def suggest(self):
-        sugg = (self.games == 0).stack().loc[lambda df: df]
-        if len(sugg):
-            log.info(f'{len(sugg)} suggestions left')
-            return sugg.sample(1).index[0]
+        suggs = pd.concat([(g == 0).stack().loc[lambda df: df] for b, g in self.games.items()])
+        
+        if len(suggs):
+            return suggs.sample(1).index[0]
+        else:
+            log.info('No suggestions')
 
+def structured_eval(n_workers=12):
+    # 4: 105 matches/min
 
-def structured_eval(boardsize=7, n_workers=8):
     #TODO: Unify these eval fns
-    snaps = data.snapshot_solns(boardsize, solve=False)
-
-    suggester = FullSuggester(boardsize, snaps.index)
+    snaps = data.snapshot_solns(solve=False) 
 
     compile(snaps.index[0])
+
+    suggester = FullSuggester(snaps)
 
     futures = {}
     with DeviceExecutor(n_workers, initializer=init) as pool:
         while True:
             for key, future in list(futures.items()):
                 if future.done():
-                    results = future.result()
-                    suggester.update(results)
+                    results, boardsize = future.result()
+                    suggester.update(results, boardsize)
                     del futures[key]
-                    data.save(boardsize, suggester.games, suggester.wins)
+                    data.save(boardsize, suggester.games[boardsize], suggester.wins[boardsize])
 
             while len(futures) < n_workers:
                 sugg = suggester.suggest()
                 if sugg:
-                    log.info('Submitting eval task')
                     futures[(np.random.randint(2**32), *sugg)] = pool.submit(evaluate, *sugg)
                 else:
-                    log.info('No suggetsions')
                     break
 
             if len(futures) == 0:
                 log.info('Finished')
                 break
 
-            time.sleep(1)
+            time.sleep(.1)
