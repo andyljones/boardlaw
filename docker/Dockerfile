@@ -3,7 +3,7 @@
 # openspiel install is another 5GB: 1.4GB for the pip cache, 1.5GB for Tensorflow, 1.5GB for a torch reinstall?
 
 # Build image
-FROM nvidia/cuda:11.0-cudnn8-devel-ubuntu18.04 as build
+FROM nvidia/cuda:11.2.1-cudnn8-devel-ubuntu20.04 as build
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
