@@ -1,5 +1,5 @@
 from logging import getLogger
-from .api import launch, status, offers, wait, destroy
+from .vast_api import launch, status, offers, wait, destroy
 
 log = getLogger(__name__)
 

@@ -101,6 +101,12 @@ def structured_suggest(games):
         log.info(f'{len(sugg)} suggestions left')
         return sugg.sample(1).index[0]
 
+def full_suggest(games):
+    sugg = (games == 0).stack().loc[lambda df: df]
+    if len(sugg):
+        log.info(f'{len(sugg)} suggestions left')
+        return sugg.sample(1).index[0]
+
 def activelo_suggest(soln):
     #TODO: Can I use the eigenvectors of the Σ to rapidly make orthogonal suggestions
     # for parallel exploration? Do I even need to go that complex - can I just collapse
@@ -243,7 +249,7 @@ def init(i):
     device = i % 2
     os.environ['CUDA_VISIBLE_DEVICES'] = str(device)
 
-def activelo_eval(boardsize=7, n_workers=8):
+def activelo_eval(boardsize=9, n_workers=6):
     snaps = snapshot_solns(boardsize, solve=False)
     games, wins = load(boardsize, snaps.index)
 
@@ -297,11 +303,9 @@ def structured_eval(boardsize=7, n_workers=8):
                     games, wins = update(games, wins, results)
                     del futures[key]
                     save(boardsize, games, wins)
-                    
-                    log.info(f'saturation: {games.sum().sum()/N_ENVS/games.shape[0]:.0%}')
 
             while len(futures) < n_workers:
-                sugg = structured_suggest(games)
+                sugg = full_suggest(games)
                 if sugg:
                     log.info('Submitting eval task')
                     futures[(np.random.randint(2**32), *sugg)] = pool.submit(evaluate, *sugg)
@@ -340,3 +344,27 @@ def snapshot_solns(boardsize=None, solve=True):
         snaps['μ'], snaps['σ'] = arena.analysis.difference(soln, soln.μ.idxmax())
 
     return snaps
+
+def elo_errors(snaps):
+    errs = []
+    for b in snaps.boardsize.unique():
+        μ = snaps.loc[lambda df: df.boardsize == b].μ
+        games, wins = load(b)
+
+        rates = (wins/games).reindex(index=μ.index, columns=μ.index)
+
+        diffs = pd.DataFrame(μ.values[:, None] - μ.values[None, :], μ.index, μ.index)
+        expected = 1/(1 + np.exp(-diffs))
+
+        errs.append((rates - expected).abs().mean())
+    return pd.concat(errs)
+
+def plot_elo_errors(snaps):
+    snaps['err'] = elo_errors(snaps)
+    return (pn.ggplot(snaps)
+        + pn.geom_point(pn.aes(x='μ', y='err', group='run', color='flops'), size=.5)
+        + pn.scale_color_continuous(trans='log10')
+        + pn.facet_wrap('boardsize', labeller='label_both')
+        + pn.guides(color=pn.guide_colorbar(ticks=False))
+        + mpl_theme(18, 12)
+        + poster_sizes())
