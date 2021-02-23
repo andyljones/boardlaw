@@ -40,7 +40,10 @@ def params(df):
     output = df.boardsize**2 * (df.width + 1)
     return intake + body + output
 
-def load(boardsize, agents=None):
+def load(boardsize=None, agents=None):
+    if boardsize is None:
+        games, wins = zip(*[load(b) for b in range(3, 10)])
+        return pd.concat(games), pd.concat(wins)
     path = ROOT / f'{boardsize}.json'
     if path.exists():
         entries = pd.read_json(path.open('r'))

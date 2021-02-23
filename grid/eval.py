@@ -1,21 +1,12 @@
-import json
-import hashlib
-import aljpy
 import time
-import plotnine as pn
-import scipy as sp
 import numpy as np
 import activelo
 import pandas as pd
 from boardlaw import arena
-from pavlov import storage, runs
-from rebar import dotdict
-from IPython import display
 from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import set_start_method
 from geotorch.exceptions import InManifoldError
 from logging import getLogger
-from pathlib import Path
 from . import data
 
 log = getLogger(__name__)
@@ -190,7 +181,7 @@ class FullSuggester:
             log.info('No suggestions')
 
 def structured_eval(n_workers=12):
-    # 4: 105 matches/min
+    # ```!while true; do python -c "from grid.eval import *; structured_eval()" || true; done```
 
     #TODO: Unify these eval fns
     snaps = data.snapshot_solns(solve=False) 
