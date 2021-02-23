@@ -52,47 +52,6 @@ def update(games, wins, results):
         wins.loc[result.names[1], result.names[0]] += result.wins[1]
     return games, wins
 
-def solve(games, wins, soln=None):
-    try:
-        return activelo.solve(games, wins, soln=soln)
-    except InManifoldError:
-        log.warning('Got a manifold error; throwing soln out')
-        return None
-
-def structured_suggest(games):
-    parts = games.index.str.extract('(?P<run>.*)\.(?P<idx>.*)')
-    parts['idx'] = parts['idx'].astype(int)
-    parts['is_last'] = parts.groupby('run').apply(lambda df: df.idx == df.idx.max()).reset_index(level=0, drop=True)
-    parts.index = games.index
-
-    succ = parts.run + '.' + (parts.idx + 1).astype(str)
-    succ = succ.index.values[:, None] == succ.values[None, :]
-    succ = succ | succ.T
-
-    first = (parts.idx.values[:, None] == 0) & (parts.idx.values[None, :] == 0)
-    last = parts.is_last.values[:, None] & parts.is_last.values[None, :]
-
-    targets = succ | first | last
-
-    sugg = ((games == 0) & (targets > 0)).stack().loc[lambda df: df]
-    if len(sugg):
-        log.info(f'{len(sugg)} suggestions left')
-        return sugg.sample(1).index[0]
-
-def full_suggest(games):
-    sugg = (games == 0).stack().loc[lambda df: df]
-    if len(sugg):
-        log.info(f'{len(sugg)} suggestions left')
-        return sugg.sample(1).index[0]
-
-def activelo_suggest(soln):
-    #TODO: Can I use the eigenvectors of the Σ to rapidly make orthogonal suggestions
-    # for parallel exploration? Do I even need to go that complex - can I just collapse
-    # Σ over the in-flight pairs?
-    imp = activelo.improvement(soln)
-    idx = np.random.choice(imp.stack().index, p=imp.values.flatten()/imp.sum().sum())
-    return tuple(idx)
-
 class DeviceExecutor(ProcessPoolExecutor):
     # Passes the index of the process to the init, so that we can balance CUDA jobs
 
@@ -114,6 +73,21 @@ def init(i):
     #TODO: Support variable number of GPUs
     device = i % 2
     os.environ['CUDA_VISIBLE_DEVICES'] = str(device)
+
+def solve(games, wins, soln=None):
+    try:
+        return activelo.solve(games, wins, soln=soln)
+    except InManifoldError:
+        log.warning('Got a manifold error; throwing soln out')
+        return None
+
+def activelo_suggest(soln):
+    #TODO: Can I use the eigenvectors of the Σ to rapidly make orthogonal suggestions
+    # for parallel exploration? Do I even need to go that complex - can I just collapse
+    # Σ over the in-flight pairs?
+    imp = activelo.improvement(soln)
+    idx = np.random.choice(imp.stack().index, p=imp.values.flatten()/imp.sum().sum())
+    return tuple(idx)
 
 def activelo_eval(boardsize=9, n_workers=6):
     snaps = data.snapshot_solns(boardsize, solve=False)
@@ -141,7 +115,7 @@ def activelo_eval(boardsize=9, n_workers=6):
                     results = future.result()
                     games, wins = update(games, wins, results)
                     del futures[key]
-                    save(boardsize, games, wins)
+                    data.save(boardsize, games, wins)
                     
                     log.info(f'saturation: {games.sum().sum()/N_ENVS/games.shape[0]:.0%}')
 
@@ -154,10 +128,59 @@ def activelo_eval(boardsize=9, n_workers=6):
                 log.info('Submitting eval task')
                 futures[(np.random.randint(2**32), *sugg)] = pool.submit(evaluate, *sugg)
 
+
+def structured_suggest(games):
+    parts = games.index.str.extract(r'(?P<run>.*)\.(?P<idx>.*)')
+    parts['idx'] = parts['idx'].astype(int)
+    parts['is_last'] = parts.groupby('run').apply(lambda df: df.idx == df.idx.max()).reset_index(level=0, drop=True)
+    parts.index = games.index
+
+    succ = parts.run + '.' + (parts.idx + 1).astype(str)
+    succ = succ.index.values[:, None] == succ.values[None, :]
+    succ = succ | succ.T
+
+    first = (parts.idx.values[:, None] == 0) & (parts.idx.values[None, :] == 0)
+    last = parts.is_last.values[:, None] & parts.is_last.values[None, :]
+
+    targets = succ | first | last
+
+    sugg = ((games == 0) & (targets > 0)).stack().loc[lambda df: df]
+    if len(sugg):
+        log.info(f'{len(sugg)} suggestions left')
+        return sugg.sample(1).index[0]
+
+class FullSuggester:
+
+    def __init__(self, boardsize, agents):
+        self.games, self.wins = data.load(boardsize, agents)
+        self.start = time.time()
+        self.init_matches = self.games.gt(0).sum().sum()
+
+    def update(self, results):
+        self.games, self.wins = update(self.games, self.wins, results)
+
+        matches_played = self.games.gt(0).sum().sum() - self.init_matches
+        time_passed = (time.time() - self.start)
+        match_rate = matches_played/time_passed
+
+        matches_remain = self.games.eq(0).sum().sum()
+        time_remain = pd.to_timedelta(matches_remain/match_rate, unit='s')
+        end_time = pd.Timestamp.now(time.time()) + time_remain
+
+        log.info(f'{60*match_rate:.1f} matches/min. Finish at {end_time:%a %H:%M:%S}')
+
+    def suggest(self):
+        sugg = (self.games == 0).stack().loc[lambda df: df]
+        if len(sugg):
+            log.info(f'{len(sugg)} suggestions left')
+            return sugg.sample(1).index[0]
+
+
 def structured_eval(boardsize=7, n_workers=8):
     #TODO: Unify these eval fns
     snaps = data.snapshot_solns(boardsize, solve=False)
-    games, wins = data.load(boardsize, snaps.index)
+
+    suggester = FullSuggester(boardsize, snaps.index)
 
     compile(snaps.index[0])
 
@@ -167,12 +190,12 @@ def structured_eval(boardsize=7, n_workers=8):
             for key, future in list(futures.items()):
                 if future.done():
                     results = future.result()
-                    games, wins = update(games, wins, results)
+                    suggester.update(results)
                     del futures[key]
-                    data.save(boardsize, games, wins)
+                    data.save(boardsize, suggester.games, suggester.wins)
 
             while len(futures) < n_workers:
-                sugg = full_suggest(games)
+                sugg = suggester.suggest()
                 if sugg:
                     log.info('Submitting eval task')
                     futures[(np.random.randint(2**32), *sugg)] = pool.submit(evaluate, *sugg)

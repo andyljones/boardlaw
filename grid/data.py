@@ -5,6 +5,7 @@ from pavlov import runs, storage
 import json
 import aljpy
 import hashlib
+from logging import getLogger
 from boardlaw import arena
 
 ROOT = Path('output/experiments/bee/eval')
