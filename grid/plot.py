@@ -84,7 +84,7 @@ def plot_interp_frontier(snaps):
     df['μhat'] = model.predict(df)
 
     ps = model.params.mul(400/np.log(10)).apply(lambda x: f'{float(f"{x:.1g}"):g}')
-    s = f'elo = {ps.boardsize}·boardsize + {ps["np.log10(flops)"]}·log10(flops) + C'
+    s = f'$\mathrm{{elo}} = {ps.boardsize} \cdot \mathrm{{boardsize}} + {ps["np.log10(flops)"]} \cdot \ln_{{10}}(\mathrm{{flops}}) + C$'
 
     (pn.ggplot(df, pn.aes(x='flops', color='factor(boardsize)', group='boardsize'))
             + pn.geom_line(pn.aes(y='400/np.log(10)*μ'), size=2)
