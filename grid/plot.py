@@ -18,11 +18,15 @@ def poster_sizes():
                 legend_title=pn.element_text(size=18))
 
 def plot_flops(snaps):
-    return (pn.ggplot(snaps, pn.aes(x='flops', y='μ', group='run', color='factor(boardsize)'))
+    return (pn.ggplot(snaps, pn.aes(x='flops', y='400/np.log(10)*μ', group='run', color='factor(boardsize)'))
         + pn.geom_line()
         + pn.geom_point(size=.5)
         + pn.scale_x_continuous(trans='log10')
         + pn.scale_color_discrete(name='boardsize')
+        + pn.labs(
+            x='training flops', 
+            y='elo v. perfect play',
+            title='all agents\' performance in terms of compute')
         + mpl_theme()
         + poster_sizes())
 
