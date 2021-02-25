@@ -101,3 +101,10 @@ def test_evaluate():
 
     assert results[0].wins == (2., 0.)
     assert results[1].wins == (2., 0.)
+
+class Evaluator:
+    # Idea here is that if we've got two lists of agents and we want to play all of one 
+    # list against all of the other, we can evade some overhead by playing one agent against lots of 
+    # opponents in parallel. We can also be clever about slices so that we're never stepping
+    # the env with less than a full complement of agents.
+    pass
