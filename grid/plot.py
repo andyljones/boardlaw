@@ -90,7 +90,7 @@ def plot_interp_frontier(snaps):
     ps = model.params.mul(400/np.log(10)).apply(lambda x: f'{float(f"{x:.1g}"):g}')
     s = f'$\mathrm{{elo}} = {ps.boardsize} \cdot \mathrm{{boardsize}} + {ps["np.log10(flops)"]} \cdot \ln_{{10}}(\mathrm{{flops}}) + C$'
 
-    (pn.ggplot(df, pn.aes(x='flops', color='factor(boardsize)', group='boardsize'))
+    return (pn.ggplot(df, pn.aes(x='flops', color='factor(boardsize)', group='boardsize'))
             + pn.geom_line(pn.aes(y='400/np.log(10)*μ'), size=2)
             + pn.geom_line(pn.aes(y='400/np.log(10)*μhat'), size=1, linetype='dashed')
             + pn.annotate('text', 5e14, -2500, label=s, size=20)

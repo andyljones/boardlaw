@@ -149,6 +149,7 @@ class FullSuggester:
 
         self.start = time.time()
         self.init_matches = self.played()
+        self.moves = 0
     
     def played(self):
         return sum(g.gt(0).sum().sum() for g in self.games.values())
@@ -160,15 +161,17 @@ class FullSuggester:
         matches_played = self.played() - self.init_matches
         time_passed = (time.time() - self.start)
         match_rate = matches_played/time_passed
+        move_rate = self.moves/time_passed
 
         matches_remain = self.remaining()
         time_remain = pd.to_timedelta(matches_remain/match_rate, unit='s')
         end_time = pd.Timestamp.now() + time_remain
 
-        log.info(f'{60*match_rate:.0f} matches/min. {time_remain.total_seconds()/3600:.0f}hrs to go, finish at {end_time:%a %d %b %H:%M:%S}')
+        log.info(f'{60*match_rate:.0f} matches/min, {move_rate:.0f} moves/sec. {time_remain.total_seconds()/3600:.0f}hrs to go, finish at {end_time:%a %d %b %H:%M:%S}')
 
     def update(self, results, boardsize):
         self.games[boardsize], self.wins[boardsize] = update(self.games[boardsize], self.wins[boardsize], results)
+        self.moves += sum(r.moves for r in results)
         
         self.report()
 
