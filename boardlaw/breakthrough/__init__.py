@@ -89,23 +89,24 @@ class Breakthrough(arrdict.namedarrtuple(fields=('board', 'seats'))):
 
 def open_spiel_board(state):
     # state ordering taken from hex.h 
-    strs = 'W<>w.bv^B'
-    board = np.array(state.observation_tensor()).reshape(9, 11, 11).argmax(0)
+    strs = 'bw.'
+    board = np.array(state.observation_tensor()).reshape(3, 8, 8).argmax(0)
     strs = np.vectorize(strs.__getitem__)(board)
-    return '\n'.join(' '*i + ' '.join(r) for i, r in enumerate(strs))
+    return '\n'.join(' '.join(r) for i, r in enumerate(strs))
 
 def open_spiel_display_str(env, e):
     board = env.board[e].clone()
-    strings = np.vectorize(CHARS.__getitem__)(board.cpu().numpy())
-    return '\n'.join(' '*i + ' '.join(r) for i, r in enumerate(strings))
+    strings = np.vectorize('.bw'.__getitem__)(board.cpu().numpy())
+    return '\n'.join(' '.join(r) for i, r in enumerate(strings))
 
 def test_open_spiel():
+    """https://github.com/deepmind/open_spiel/blob/master/open_spiel/games/breakthrough.cc"""
     import pyspiel
 
     e = 10
     ours = Breakthrough.initial(64, 11, 'cpu')
 
-    theirs = pyspiel.load_game("hex")
+    theirs = pyspiel.load_game("breakthrough")
     state = theirs.new_initial_state()
     while True:
         seat = ours.seats[e]
