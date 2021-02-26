@@ -4,17 +4,31 @@ from rebar import arrdict
 from .. import heads
 import boardlaw
 
+def observe(board, seats):
+    obs = torch.stack([board == 1, board == 2], -2).float()
+    obs[seats == 1] = obs[seats == 1].flip(0).flip(2)
+    return obs
+
+def step(board, seats, actions):
+    pass
+
 class Breakthrough(arrdict.namedarrtuple(fields=('board', 'seats'))):
 
     @classmethod
     def initial(cls, n_envs, boardsize=8, device='cuda'):
         boardsize = boardsize if isinstance(boardsize, tuple) else (boardsize, boardsize)
+        assert boardsize[0] >= 4
+
+        board = torch.full((n_envs, *boardsize), 0, device=device, dtype=torch.uint8)
+        board[:, :2] = 1
+        board[:, -2:] = 2
 
         return cls(
-            board=torch.full((n_envs, *boardsize), 0, device=device, dtype=torch.uint8),
+            board=board,
             seats=torch.full((n_envs,), 0, device=device, dtype=torch.int))
 
     def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         if not isinstance(self.board, torch.Tensor):
             # Need this conditional to deal with the case where we're calling a method like `self.clone()`, and the
             # intermediate arrdict generated is full of methods, which will break this here init function.
@@ -31,10 +45,11 @@ class Breakthrough(arrdict.namedarrtuple(fields=('board', 'seats'))):
         self._obs = None
         self._valid = None 
 
+
     @property
     def obs(self):
         if self._obs is None:
-            self._obs = cuda.observe(self.board, self.seats)
+            self._obs = observe(self.board, self.seats)
         return self._obs
 
     @property
@@ -104,7 +119,7 @@ def test_open_spiel():
     import pyspiel
 
     e = 10
-    ours = Breakthrough.initial(64, 11, 'cpu')
+    ours = Breakthrough.initial(64, 8, 'cpu')
 
     theirs = pyspiel.load_game("breakthrough")
     state = theirs.new_initial_state()
@@ -127,6 +142,4 @@ def test_open_spiel():
             
         our_state = open_spiel_display_str(ours, e)
         their_state = open_spiel_board(state)
-        for o, n in {'>': 'R', 'v': 'B', '<': 'L', '^': 'T'}.items():
-            their_state = their_state.replace(o, n)
         assert our_state == their_state
