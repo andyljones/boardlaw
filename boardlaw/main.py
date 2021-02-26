@@ -180,14 +180,14 @@ def half(x):
     else:
         return x
 
-def run(boardsize, width, depth, desc):
+def run(boardsize, width, depth, nodes, desc):
     buffer_len = 64
     n_envs = 32*1024
 
     #TODO: Restore league and sched when you go back to large boards
     worlds = mix(hex.Hex.initial(n_envs, boardsize))
     network = networks.FCModel(worlds.obs_space, worlds.action_space, width=width, depth=depth).to(worlds.device)
-    agent = mcts.MCTSAgent(network)
+    agent = mcts.MCTSAgent(network, n_nodes=nodes)
 
     opt = torch.optim.Adam(network.parameters(), lr=1e-3)
     scaler = torch.cuda.amp.GradScaler()

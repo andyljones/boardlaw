@@ -2,7 +2,7 @@ from jittens.machines import forbid
 import matplotlib.pyplot as plt
 import time
 import jittens
-from . import vast
+from cloud import vast
 import pandas as pd
 from logging import getLogger
 from pavlov import runs, stats
@@ -30,19 +30,20 @@ def is_missing(proposal, acks):
     return keystr(proposal) not in {keystr(a) for a in acks}
 
 def launch():
-    boardsize = 8
-    desc = f'bee/{boardsize}'
+    boardsize = 5
+    desc = f'cat/nodes'
     acks = acknowledged(desc)
-    for width in [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]:
-        for depth in [1, 2, 4, 8]:
-            params = dict(width=width, depth=depth, boardsize=boardsize, desc=desc)
-            if is_missing(params, acks):
-                log.info(f'Launching {params}')
-                jittens.jobs.submit(
-                    cmd='python -c "from boardlaw.main import *; run_jittens()" >logs.txt 2>&1',
-                    dir='.',
-                    resources={'gpu': 1},
-                    params=params)
+    for nodes in [32, 128]:
+        for width in [1, 2, 4, 8, 16]:
+            for depth in [1, 2, 4]:
+                params = dict(width=width, depth=depth, boardsize=boardsize, nodes=nodes, desc=desc)
+                if is_missing(params, acks):
+                    log.info(f'Launching {params}')
+                    jittens.jobs.submit(
+                        cmd='python -c "from boardlaw.main import *; run_jittens()" >logs.txt 2>&1',
+                        dir='.',
+                        resources={'gpu': 1},
+                        params=params)
 
 def fetch():
     return jittens.manage.fetch('output/pavlov/', 'output/pavlov/')
