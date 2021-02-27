@@ -3,6 +3,7 @@ import activelo
 import pandas as pd
 from pathlib import Path
 from pavlov import runs, storage
+import ast
 import json
 import aljpy
 import hashlib
@@ -34,20 +35,27 @@ def snapshots(boardsize):
                     .rename_axis(index=('run', 'idx'))
                     .reset_index())
     
-    return pd.merge(snapshots, rows[['description']], on='run')
+    return pd.merge(snapshots, rows[['description', '_env']], on='run')
 
 @aljpy.autocache('{key}')
 def _parameters_cached(snaps, key):
     params = {}
     for idx, row in snaps.iterrows():
         s = storage.load_snapshot(row.run, row.idx)
-        params[idx] = {**runs.info(row.run)['params'], 'samples': s['n_samples'], 'flops': s['n_flops']}
+        # Gotta combine two sources of param data here cause I forgot to save down the params for the cat/nodes runs
+        env_params = ast.literal_eval(row['_env']['JITTENS_PARAMS'])
+        saved_params = runs.info(row.run)['params']
+
+        params[idx] = {
+            **env_params, 
+            **saved_params,
+            'samples': s['n_samples'], 
+            'flops': s['n_flops']}
     return pd.DataFrame.from_dict(params, orient='index')
 
 def parameters(snaps):
     key = hashlib.md5(json.dumps(snaps.index.tolist()).encode()).hexdigest()
     return _parameters_cached(snaps, key)
-
 
 def params(df):
     intake = (df.boardsize**2 + 1)*df.width

@@ -120,25 +120,58 @@ def activelo_eval(boardsize=9, n_workers=6):
                 futures[(np.random.randint(2**32), *sugg)] = pool.submit(evaluate, *sugg)
 
 
-def structured_suggest(games):
-    parts = games.index.str.extract(r'(?P<run>.*)\.(?P<idx>.*)')
-    parts['idx'] = parts['idx'].astype(int)
-    parts['is_last'] = parts.groupby('run').apply(lambda df: df.idx == df.idx.max()).reset_index(level=0, drop=True)
-    parts.index = games.index
+class StructuredSuggester:
 
-    succ = parts.run + '.' + (parts.idx + 1).astype(str)
-    succ = succ.index.values[:, None] == succ.values[None, :]
-    succ = succ | succ.T
+    def __init__(self, snaps):
+        self.games, self.wins = {}, {}
+        for b in snaps.boardsize.unique():
+            self.games[b], self.wins[b] = data.load(b, snaps[snaps.boardsize == b].index)
 
-    first = (parts.idx.values[:, None] == 0) & (parts.idx.values[None, :] == 0)
-    last = parts.is_last.values[:, None] & parts.is_last.values[None, :]
+        self.start = time.time()
+        self.init_matches = self.played()
+        self.moves = 0 
+    
+    def played(self):
+        return sum(g.gt(0).sum().sum() for g in self.games.values())
 
-    targets = succ | first | last
+    def update(self, results, boardsize):
+        self.games[boardsize], self.wins[boardsize] = update(self.games[boardsize], self.wins[boardsize], results)
 
-    sugg = ((games == 0) & (targets > 0)).stack().loc[lambda df: df]
-    if len(sugg):
-        log.info(f'{len(sugg)} suggestions left')
-        return sugg.sample(1).index[0]
+    def report(self, sugg):
+        matches_played = self.played() - self.init_matches
+        time_passed = (time.time() - self.start)
+        match_rate = (matches_played+1)/time_passed
+
+        matches_remain = len(sugg)
+        time_remain = pd.to_timedelta(matches_remain/match_rate, unit='s')
+        end_time = pd.Timestamp.now() + time_remain
+
+        secs_remain = time_remain.total_seconds()
+        log.info(f'{60*match_rate:.0f} matches/min, {secs_remain/3600:.0f}h{(secs_remain % 3600)/60:.0f}m to go, finish at {end_time:%a %d %b %H:%M:%S}')
+
+    
+    def suggest(self):
+        #TODO: Lazy hardcoding for now
+        games = self.games[5]
+        parts = games.index.str.extract(r'(?P<run>.*)\.(?P<idx>.*)')
+        parts['idx'] = parts['idx'].astype(int)
+        parts['is_last'] = parts.groupby('run').apply(lambda df: df.idx == df.idx.max()).reset_index(level=0, drop=True)
+        parts.index = games.index
+
+        succ = parts.run + '.' + (parts.idx + 1).astype(str)
+        succ = succ.index.values[:, None] == succ.values[None, :]
+        succ = succ | succ.T
+
+        first = (parts.idx.values[:, None] == 0) & (parts.idx.values[None, :] == 0)
+        last = parts.is_last.values[:, None] & parts.is_last.values[None, :]
+
+        targets = succ | first | last
+
+        sugg = ((games == 0) & (targets > 0)).stack().loc[lambda df: df]
+
+        if len(sugg):
+            self.report(sugg)
+            return sugg.sample(1).index[0]
 
 class FullSuggester:
 
@@ -160,7 +193,7 @@ class FullSuggester:
     def report(self):
         matches_played = self.played() - self.init_matches
         time_passed = (time.time() - self.start)
-        match_rate = matches_played/time_passed
+        match_rate = (matches_played+1)/time_passed
         move_rate = self.moves/time_passed
 
         matches_remain = self.remaining()
@@ -183,20 +216,15 @@ class FullSuggester:
         else:
             log.info('No suggestions')
 
-class ActivEloSuggester: 
-
-    def __init__(self, snaps):
-        pass
-
-def structured_eval(n_workers=12):
+def structured_eval(n_workers=12, **kwargs):
     # ```!while true; do python -c "from grid.eval import *; structured_eval()" || true; done```
 
     #TODO: Unify these eval fns
-    snaps = data.snapshot_solns(solve=False) 
+    snaps = data.snapshot_solns(**kwargs, solve=False) 
 
     compile(snaps.index[0])
 
-    suggester = FullSuggester(snaps)
+    suggester = StructuredSuggester(snaps)
 
     futures = {}
     with DeviceExecutor(n_workers, initializer=init) as pool:

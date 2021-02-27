@@ -196,7 +196,7 @@ def run(boardsize, width, depth, nodes, desc):
 
     run = runs.new_run(
             description=desc, 
-            params=dict(boardsize=worlds.boardsize, width=width, depth=depth, parent=parent))
+            params=dict(boardsize=worlds.boardsize, width=width, depth=depth, nodes=nodes, parent=parent))
 
     archive.archive(run)
 
