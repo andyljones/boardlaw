@@ -151,8 +151,7 @@ class StructuredSuggester:
 
     
     def suggest(self):
-        #TODO: Lazy hardcoding for now
-        games = self.games[5]
+        games = pd.concat(list(self.games.values()))
         parts = games.index.str.extract(r'(?P<run>.*)\.(?P<idx>.*)')
         parts['idx'] = parts['idx'].astype(int)
         parts['is_last'] = parts.groupby('run').apply(lambda df: df.idx == df.idx.max()).reset_index(level=0, drop=True)
@@ -216,7 +215,7 @@ class FullSuggester:
         else:
             log.info('No suggestions')
 
-def structured_eval(n_workers=12, **kwargs):
+def structured_eval(n_workers=12, suggester=FullSuggester, **kwargs):
     # ```!while true; do python -c "from grid.eval import *; structured_eval()" || true; done```
 
     #TODO: Unify these eval fns
@@ -224,7 +223,7 @@ def structured_eval(n_workers=12, **kwargs):
 
     compile(snaps.index[0])
 
-    suggester = StructuredSuggester(snaps)
+    suggester = FullSuggester(snaps)
 
     futures = {}
     with DeviceExecutor(n_workers, initializer=init) as pool:
