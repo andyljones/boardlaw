@@ -1,3 +1,4 @@
+import numpy as np
 import activelo
 import pandas as pd
 from pathlib import Path
@@ -12,14 +13,28 @@ ROOT = Path('output/experiments/bee/eval')
 
 log = getLogger(__name__)
 
+def runs_pandas(*args, **kwargs):
+    df = runs.pandas(*args, **kwargs)
+    df['params'] = df.params.map(lambda x: {} if isinstance(x, float) else x)
+    df['description'] = df.description.fillna('')
+    return df
+
 def snapshots(boardsize):
+    #TODO: I need a better indexing system than 'bee' and 'cat', jesus
+    rows = (runs_pandas()
+                .loc[lambda df: df.description.str.match('^(bee|cat)/')]
+                .loc[lambda df: df.params.apply(lambda d: d.get('boardsize') == boardsize)])
+
     snapshots = {}
-    for r in runs.runs(description=f'bee/{boardsize}'):
+    for r, _ in rows.iterrows():
         for i, s in storage.snapshots(r).items():
             snapshots[r, i] = s
-    return (pd.DataFrame.from_dict(snapshots, orient='index')
+
+    snapshots = (pd.DataFrame.from_dict(snapshots, orient='index')
                     .rename_axis(index=('run', 'idx'))
                     .reset_index())
+    
+    return pd.merge(snapshots, rows[['description']], on='run')
 
 @aljpy.autocache('{key}')
 def _parameters_cached(snaps, key):
@@ -91,6 +106,7 @@ def snapshot_solns(boardsize=None, solve=True):
     snaps['nickname'] = snaps.run.str.extract('.* (.*)', expand=False) + '.' + snaps.idx.astype(str)
     snaps['params'] = params(snaps)
     snaps = snaps.set_index('nickname')
+    assert snaps.index.to_series().value_counts().eq(1).all()
 
     if solve:
         games, wins = load(boardsize, snaps.index)
@@ -98,4 +114,3 @@ def snapshot_solns(boardsize=None, solve=True):
         snaps['μ'], snaps['σ'] = arena.analysis.difference(soln, soln.μ.idxmax())
 
     return snaps
-

@@ -103,7 +103,7 @@ def activelo_eval(boardsize=9, n_workers=6):
 
             for key, future in list(futures.items()):
                 if future.done():
-                    results = future.result()
+                    results, boardsize = future.result()
                     games, wins = update(games, wins, results)
                     del futures[key]
                     data.save(boardsize, games, wins)
@@ -182,6 +182,11 @@ class FullSuggester:
             return suggs.sample(1).index[0]
         else:
             log.info('No suggestions')
+
+class ActivEloSuggester: 
+
+    def __init__(self, snaps):
+        pass
 
 def structured_eval(n_workers=12):
     # ```!while true; do python -c "from grid.eval import *; structured_eval()" || true; done```
