@@ -91,6 +91,7 @@ def evaluate(worlds, agents):
             break
     
     results = gather(wins.cpu(), moves.cpu(), times.cpu(), matchup_idxs.cpu(), agents, worlds.boardsize)
+    import aljpy; aljpy.extract()
     return results
 
 def test_evaluate():
