@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from .. import validation
+from rebar import arrdict
 
 def scatter_inc_(totals, indices):
     assert indices.ndim == 2
@@ -19,31 +19,32 @@ def scatter_inc_symmetric_(totals, indices):
 
 class Tracker:
 
-    def __init__(self, n_envs, n_envs_per, names):
+    def __init__(self, n_envs, n_envs_per, names, device='cuda'):
         assert n_envs % n_envs_per == 0
         self.n_envs = n_envs
         self.n_envs_per = n_envs_per
         self.names = list(names)
 
         # Counts games that are either in-progress or that have been completed
-        self.games = torch.zeros((len(names), len(names)), dtype=torch.int)
+        self.games = torch.zeros((len(names), len(names)), dtype=torch.int, device=device)
 
-        self.live = torch.full((n_envs, 2), -1)
+        self.live = torch.full((n_envs, 2), -1, device=device)
 
     def _live_counts(self):
         counts = torch.zeros_like(self.games)
         scatter_inc_symmetric_(counts, self.live[(self.live > -1).all(-1)])
         return counts
 
-    def step(self, seats, terminal):
+    def step(self, seats, terminal=None):
         # Kill off the finished games
+        terminal = torch.zeros_like(seats, dtype=torch.bool) if terminal is None else terminal
         self.live[terminal] = -1
 
         # Figure out how the -1s in live should be repopulated
         while True:
             available = (self.live == -1).any(-1)
             remaining = (self.games < self.n_envs_per)
-            if not (available.any() or remaining.any()):
+            if not (available.any() and remaining.any()):
                 break
 
             counts = self._live_counts()
@@ -53,19 +54,19 @@ class Tracker:
             choice = (choice // len(self.names), choice % len(self.names))
 
             allocation = available.nonzero()[:self.n_envs_per]
-            self.live[allocation] = torch.as_tensor(choice)
+            self.live[allocation] = torch.as_tensor(choice, device=allocation.device)
 
             self.games[choice] += len(allocation)
 
         # Suggest the most 'popular' agent  
         active = self.live.gather(1, seats[:, None]).squeeze(1)
         totals = torch.zeros_like(self.games[0])
-        totals.scatter_add_(0, active, torch.ones_like(active))
+        totals.scatter_add_(0, active, totals.new_ones(active.shape))
 
         suggestion = totals.argmax()
         mask = (active == suggestion)
 
-        return suggestion, mask
+        return int(suggestion), mask
 
 class MultiEvaluator:
     # Idea: keep lots and lots of envs in memory at once, play 
@@ -80,20 +81,54 @@ class MockAgent:
     def __init__(self, id):
         self.id = id
 
-    def __call__(self):
-        return self.id
+    def __call__(self, world):
+        id = torch.full((world.n_envs,), self.id, device=world.device, dtype=torch.long)
+        actions = torch.empty((world.n_envs, 0), device=world.device, dtype=torch.long)
+        return arrdict.arrdict(id=id, actions=actions)
 
-class MockEnvironment:
+class MockGame(arrdict.namedarrtuple(fields=('count', 'max_count'))):
 
-    def __init__(self)
+    @classmethod
+    def initial(cls, n_envs=1, max_count=4, device='cuda'):
+        return cls(
+            max_count=torch.full((n_envs,), max_count, dtype=torch.long, device=device),
+            count=torch.full((n_envs,), 0, dtype=torch.long, device=device))
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not isinstance(self.count, torch.Tensor):
+            return 
+
+        self.n_envs = self.count.shape[0]
+        self.device = self.count.device 
+        self.n_seats = 2
+
+        self.valid = torch.ones(self.count.shape + (2,), dtype=torch.bool, device=self.device)
+        self.seats = self.count % self.n_seats
+
+    def step(self, actions):
+        count = self.count.clone()
+        terminal = (count == self.max_count)
+        transition = arrdict.arrdict(terminal=terminal)
+
+        count[terminal] = 0
+        
+        world = type(self)(
+            count=count,
+            max_count=self.max_count.clone())
+        return world, transition
 
 def test_tracker():
+    n_envs = 8
+    n_envs_per = 2
 
-    n_envs = 16
-    n_envs_per = 4
+    worlds = MockGame.initial(n_envs)
+    agents = {i: MockAgent(i) for i in range(8)}
 
-    seats = torch.zeros((n_envs,)).long()
-    age = torch.zeros((n_envs,)).long()
+    tracker = Tracker(n_envs, n_envs_per, agents, worlds.device)
 
     while True:
-        pass
+        suggestion, mask = tracker.step(worlds.seats)
+        
+        decisions = agents[suggestion](worlds)
+        worlds[mask], transitions = worlds[mask].step(decisions)
