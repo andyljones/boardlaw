@@ -19,7 +19,7 @@ def scatter_inc_symmetric_(totals, indices):
 
 class Tracker:
 
-    def __init__(self, n_envs, n_envs_per, names, device='cuda'):
+    def __init__(self, n_envs, n_envs_per, names, device='cuda', verbose=False):
         assert n_envs % n_envs_per == 0
         self.n_envs = n_envs
         self.n_envs_per = n_envs_per
@@ -29,6 +29,7 @@ class Tracker:
         self.games = torch.zeros((len(names), len(names)), dtype=torch.int, device=device)
 
         self.live = torch.full((n_envs, 2), -1, device=device)
+        self.verbose = verbose
 
     def _live_counts(self):
         counts = torch.zeros_like(self.games)
@@ -40,9 +41,11 @@ class Tracker:
         masked = torch.zeros_like(mask)
         masked[mask] = terminal
         self.live[masked] = -1
+        if self.verbose:
+            print(f'Marked as terminated: {list(masked.cpu().int().numpy())}')
 
     def finished(self):
-        return (self.games == self.n_envs_per).all()
+        return (self.games == self.n_envs_per).all() & (self.live == -1).all()
 
     def suggest(self, seats):
         # Figure out how the -1s in live should be repopulated
@@ -52,7 +55,7 @@ class Tracker:
             if not (available.any() and remaining.any()):
                 break
 
-            counts = self._live_counts()
+            counts = self._live_counts() + 1
             counts = counts.sum(0, keepdim=True) * counts.sum(1, keepdim=True) 
             counts = counts + counts.T
             goodness = (2*remaining.float() - 1)*counts
@@ -64,16 +67,23 @@ class Tracker:
             self.live[allocation] = torch.as_tensor(choice, device=allocation.device)
 
             self.games[choice] += len(allocation)
+            if self.verbose:
+                print(f'Matching {list(map(int, choice))} on envs {list(allocation.flatten().int().cpu().numpy())}')
 
         # Suggest the most 'popular' agent  
         active = self.live.gather(1, seats[:, None]).squeeze(1)
+        live_active = active[active > -1]
         totals = torch.zeros_like(self.games[0])
-        totals.scatter_add_(0, active, totals.new_ones(active.shape))
+        totals.scatter_add_(0, live_active, totals.new_ones(live_active.shape))
 
         suggestion = totals.argmax()
         mask = (active == suggestion)
+        name = self.names[int(suggestion)]
 
-        return self.names[int(suggestion)], mask
+        if self.verbose:
+            print(f'Suggesting agent {name} with mask {list(mask.int().cpu().numpy())}')
+
+        return name, mask
 
 class MultiEvaluator:
     # Idea: keep lots and lots of envs in memory at once, play 
@@ -132,15 +142,15 @@ def test_tracker():
     n_envs = 8
     n_envs_per = 2
 
-    worlds = MockGame.initial(n_envs)
-    agents = {i: MockAgent(i) for i in range(8)}
+    worlds = MockGame.initial(n_envs, device='cpu')
+    agents = {i: MockAgent(i) for i in range(4)}
 
     tracker = Tracker(n_envs, n_envs_per, agents, worlds.device)
 
-    while True:
+    while not tracker.finished():
         name, mask = tracker.suggest(worlds.seats)
         
         decisions = agents[name](worlds)
         worlds[mask], transitions = worlds[mask].step(decisions)
 
-        tracker.update(transitions.terminal)
+        tracker.update(transitions.terminal, mask)
