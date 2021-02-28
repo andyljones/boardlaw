@@ -1,7 +1,6 @@
 import numpy as np
 import torch
-from itertools import combinations
-from collections import deque
+from .. import validation
 
 def scatter_inc_(totals, indices):
     assert indices.ndim == 2
@@ -59,8 +58,14 @@ class Tracker:
             self.games[choice] += len(allocation)
 
         # Suggest the most 'popular' agent  
-        suggestion = self.live.gather(1, seats[:, None]).squeeze(-1)
-        return suggestion
+        active = self.live.gather(1, seats[:, None]).squeeze(1)
+        totals = torch.zeros_like(self.games[0])
+        totals.scatter_add_(0, active, torch.ones_like(active))
+
+        suggestion = totals.argmax()
+        mask = (active == suggestion)
+
+        return suggestion, mask
 
 class MultiEvaluator:
     # Idea: keep lots and lots of envs in memory at once, play 
@@ -69,3 +74,26 @@ class MultiEvaluator:
     def __init__(self, worlds, agents):
         pass
     pass
+
+class MockAgent:
+
+    def __init__(self, id):
+        self.id = id
+
+    def __call__(self):
+        return self.id
+
+class MockEnvironment:
+
+    def __init__(self)
+
+def test_tracker():
+
+    n_envs = 16
+    n_envs_per = 4
+
+    seats = torch.zeros((n_envs,)).long()
+    age = torch.zeros((n_envs,)).long()
+
+    while True:
+        pass
