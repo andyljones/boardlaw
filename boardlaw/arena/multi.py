@@ -1,3 +1,4 @@
+import pandas as pd
 import numpy as np
 import torch
 from rebar import arrdict
@@ -26,7 +27,8 @@ class Tracker:
         self.names = list(names)
 
         # Counts games that are either in-progress or that have been completed
-        self.games = torch.zeros((len(names), len(names)), dtype=torch.int, device=device)
+        # self.games = torch.zeros((len(names), len(names)), dtype=torch.int, device=device)
+        self.games = n_envs_per*torch.eye(len(names), dtype=torch.int, device=device)
 
         self.live = torch.full((n_envs, 2), -1, device=device)
         self.verbose = verbose
@@ -49,6 +51,7 @@ class Tracker:
 
     def suggest(self, seats):
         # Figure out how the -1s in live should be repopulated
+
         while True:
             available = (self.live == -1).any(-1)
             remaining = (self.games < self.n_envs_per)
@@ -100,15 +103,14 @@ class MockAgent:
 
     def __call__(self, world):
         id = torch.full((world.n_envs,), self.id, device=world.device, dtype=torch.long)
-        actions = torch.empty((world.n_envs, 0), device=world.device, dtype=torch.long)
-        return arrdict.arrdict(id=id, actions=actions)
+        return arrdict.arrdict(actions=id)
 
-class MockGame(arrdict.namedarrtuple(fields=('count', 'max_count'))):
+class MockGame(arrdict.namedarrtuple(fields=('count', 'history'))):
 
     @classmethod
-    def initial(cls, n_envs=1, max_count=4, device='cuda'):
+    def initial(cls, n_envs=1, length=4, device='cuda'):
         return cls(
-            max_count=torch.full((n_envs,), max_count, dtype=torch.long, device=device),
+            history=torch.full((n_envs, length), -1, dtype=torch.long, device=device),
             count=torch.full((n_envs,), 0, dtype=torch.long, device=device))
 
     def __init__(self, *args, **kwargs):
@@ -127,30 +129,45 @@ class MockGame(arrdict.namedarrtuple(fields=('count', 'max_count'))):
         return self.count % self.n_seats
 
     def step(self, actions):
+        history = self.history.clone()
+        history.scatter_(1, self.count[:, None], actions[:, None])
+
         count = self.count + 1
-        terminal = (count == self.max_count)
+        terminal = (count == self.history.shape[1])
         transition = arrdict.arrdict(terminal=terminal)
 
         count[terminal] = 0
         
-        world = type(self)(
-            count=count,
-            max_count=self.max_count.clone())
-        return world, transition
+        world = type(self)(count=count, history=history)
+
+        return world, transition, list(history[terminal])
 
 def test_tracker():
-    n_envs = 8
-    n_envs_per = 2
+    n_envs = 32
+    n_envs_per = 4
+    length = 8
 
-    worlds = MockGame.initial(n_envs, device='cpu')
-    agents = {i: MockAgent(i) for i in range(4)}
+    worlds = MockGame.initial(n_envs, device='cpu', length=length)
+    agents = {i: MockAgent(i) for i in range(16)}
 
     tracker = Tracker(n_envs, n_envs_per, agents, worlds.device)
 
+    hists = []
     while not tracker.finished():
         name, mask = tracker.suggest(worlds.seats)
         
         decisions = agents[name](worlds)
-        worlds[mask], transitions = worlds[mask].step(decisions)
+        worlds[mask], transitions, hist = worlds[mask].step(decisions.actions)
+        hists.extend(hist)
 
         tracker.update(transitions.terminal, mask)
+    hists = torch.stack(hists).cpu().numpy()
+
+    from collections import defaultdict
+    counts = defaultdict(lambda: 0)
+    for h in hists:
+        assert len(set(h)) <= 2
+        counts[tuple(h[:2])] += 1
+
+    assert len(counts) == len(agents)*(len(agents)-1)
+    assert set(counts.values()) == {n_envs_per}
