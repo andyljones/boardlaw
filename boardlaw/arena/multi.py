@@ -75,7 +75,8 @@ class Tracker:
             choice = goodness.argmax()
             choice = (choice // len(self.names), choice % len(self.names))
 
-            allocation = available.nonzero(as_tuple=False)[:self.n_envs_per]
+            residual = self.n_envs_per - self.games[choice]
+            allocation = available.nonzero(as_tuple=False)[:residual]
             self.live[allocation] = torch.as_tensor(choice, device=allocation.device)
 
             self.games[choice] += len(allocation)
@@ -118,22 +119,22 @@ class MultiEvaluator:
         masked = torch.zeros_like(mask)
         masked[mask] = transitions.terminal
 
-        results = []
-        for idx in masked.nonzero(as_tuple=False).squeeze(-1):
-            names = tuple(self.tracker.names[l] for l in live[idx])
-            results.append(dotdict.dotdict(
-                        names=names,
-                        wins=tuple(map(float, self.wins[idx])),
-                        moves=float(self.moves[idx].sum()),
-                        games=float(self.wins[idx].sum()),
-                        times=float(self.times[idx].sum()),
-                        boardsize=self.worlds.boardsize))
+        # results = []
+        # for idx in masked.nonzero(as_tuple=False).squeeze(-1):
+        #     names = tuple(self.tracker.names[l] for l in live[idx])
+        #     results.append(dotdict.dotdict(
+        #                 names=names,
+        #                 wins=tuple(map(float, self.wins[idx])),
+        #                 moves=float(self.moves[idx].sum()),
+        #                 games=float(self.wins[idx].sum()),
+        #                 times=float(self.times[idx].sum()),
+        #                 boardsize=self.worlds.boardsize))
 
         self.wins[masked] = 0.
         self.moves[masked] = 0.
         self.times[masked] = 0.
 
-        return results
+        return masked.sum()
 
     def step(self):
         name, mask, live = self.tracker.suggest(self.worlds.seats)
