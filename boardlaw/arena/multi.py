@@ -32,16 +32,26 @@ class Tracker:
 
         # Counts games that are either in-progress or that have been completed
         # self.games = torch.zeros((len(names), len(names)), dtype=torch.int, device=device)
-        self.games = n_envs_per*torch.eye(len(names), dtype=torch.int, device=device)
+        self._games = n_envs_per*torch.eye(len(names), dtype=torch.int, device=device)
+        self._init_games = self._games.sum()
 
         self.live = torch.full((n_envs, 2), -1, device=device)
         self.verbose = verbose
 
+    @property
+    def games(self):
+        return self._games
+
+    @games.setter
+    def games(self, value):
+        value = value.reindex(index=self.names, columns=self.names)
+        self._games = torch.as_tensor(value.fillna(0).values, device=self._games.device, dtype=self._games.dtype).contiguous()
+        self._init_games = self._games.sum()
+
     def report(self):
-        diag = len(self.names)*self.n_envs_per
-        done = self.games.sum() - diag
-        total = self.games.nelement()*self.n_envs_per - diag
-        return int(done), int(total)
+        done = self.games.sum() - self._init_games
+        remaining = self.games.nelement()*self.n_envs_per - done
+        return int(done), int(remaining)
 
     def _live_counts(self):
         counts = torch.zeros_like(self.games)
@@ -62,7 +72,7 @@ class Tracker:
         return terminated
 
     def finished(self):
-        return (self.games == self.n_envs_per).all() & (self.live == -1).all()
+        return (self.games >= self.n_envs_per).all() & (self.live == -1).all()
 
     def suggest(self, seats):
         # Figure out how the -1s in live should be repopulated
@@ -105,7 +115,7 @@ class Tracker:
 
         return name, mask, self.live[mask]
 
-class MultiEvaluator:
+class Evaluator:
     # Idea: keep lots and lots of envs in memory at once, play 
     # every agent against every agent simultaneously
     
@@ -149,21 +159,21 @@ class MultiEvaluator:
                         boardsize=self.worlds.boardsize))
         
         self.stats.wins[done] = -1
-        self.stats.moves[done] = -1
-        self.stats.times[done] = -1
 
         return results
     
     def report(self):
         duration = time.time() - self.start
-        done, total = self.tracker.report()
-        remaining = pd.to_timedelta(duration/done*total, unit='s')
-        forecast = pd.Timestamp.now(None) + remaining
+        done, remaining = self.tracker.report()
+        to_go = pd.to_timedelta(duration/done*remaining, unit='s')
+        forecast = pd.Timestamp.now(None) + to_go
         game_rate = done/duration
         match_rate = game_rate/self.tracker.n_envs_per
 
-        rem = remaining.components
-        print(f'{done/total:.1%} done, {rem.days}d{rem.hours:02d}h{rem.minutes:02d}m to go, will finish {forecast:%a %d %b %H:%M}. {60*game_rate:.0f} games/min, {60*match_rate:.0f} matchups/min.')
+        move_rate = self.stats.moves.sum()/duration
+
+        rem = to_go.components
+        print(f'{done/(done+remaining):.1%} done, {rem.days}d{rem.hours:02d}h{rem.minutes:02d}m to go, will finish {forecast:%a %d %b %H:%M}. {move_rate:.0f} moves/sec, {game_rate:.0f} games/sec, {60*match_rate:.0f} matchups/min.')
 
     def step(self):
         name, mask, live = self.tracker.suggest(self.worlds.seats)
@@ -255,14 +265,18 @@ def test_tracker():
     assert set(counts.values()) == {n_envs_per}
 
 def test_evaluator():
-    from pavlov import runs
+    from pavlov import runs, storage
     from boardlaw.arena import common
 
     df = runs.pandas(description='cat/nodes')
-    worlds = common.worlds(df.index[0], 128*1024, device='cuda')
-    agents = {r: common.agent(r, 1, worlds.device) for r in df.index}
+    worlds = common.worlds(df.index[0], 256*1024, device='cuda')
+    agents = {}
+    for r in df.index:
+        snaps = storage.snapshots(r)
+        for i in snaps:
+            agents[f'{r}.{i}'] = common.agent(r, i, worlds.device)
 
-    evaluator = MultiEvaluator(worlds, agents, 1024)
+    evaluator = Evaluator(worlds, agents, 512)
 
     from IPython import display
 

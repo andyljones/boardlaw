@@ -7,7 +7,7 @@ from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import set_start_method
 from geotorch.exceptions import InManifoldError
 from logging import getLogger
-from . import data
+from . import data, asymdata
 
 log = getLogger(__name__)
 
@@ -247,3 +247,31 @@ def structured_eval(n_workers=12, suggester=FullSuggester, **kwargs):
                 break
 
             time.sleep(.1)
+
+def fast_eval(boardsize=5, **kwargs):
+    from boardlaw.arena import multi, common
+
+    snaps = data.snapshot_solns(boardsize, solve=False) 
+
+    raw = asymdata.pandas(boardsize)
+    raw['games'] = raw.black_wins + raw.white_wins
+
+    worlds = common.worlds(snaps.run.iloc[0], 256*1024, device='cuda')
+    agents = {}
+    for nickname, row in snaps.iterrows():
+        agents[nickname] = common.agent(row.run, row.idx, worlds.device)
+
+    evaluator = multi.Evaluator(worlds, agents, 512)
+    evaluator.tracker.games = raw['games'].unstack().fillna(0)
+
+    from IPython import display
+
+    results = []
+    while not evaluator.finished():
+        results.extend(evaluator.step())
+        if len(results) > 100:
+            asymdata.save(results)
+            results = []
+        
+        display.clear_output(wait=True)
+        evaluator.report()
