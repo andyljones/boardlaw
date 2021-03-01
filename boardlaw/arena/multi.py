@@ -23,11 +23,12 @@ def scatter_add_(totals, indices, vals=None):
 
 class Tracker:
 
-    def __init__(self, n_envs, n_envs_per, names, device='cuda', verbose=False):
+    def __init__(self, n_envs, n_envs_per, names, max_simultaneous=32*1024, device='cuda', verbose=False):
         assert n_envs % n_envs_per == 0
         self.n_envs = n_envs
         self.n_envs_per = n_envs_per
-        self.names = list(names)
+        self.max_simultaneous = max_simultaneous
+        self.names = np.random.permutation(list(names))
 
         # Counts games that are either in-progress or that have been completed
         # self.games = torch.zeros((len(names), len(names)), dtype=torch.int, device=device)
@@ -35,6 +36,12 @@ class Tracker:
 
         self.live = torch.full((n_envs, 2), -1, device=device)
         self.verbose = verbose
+
+    def progress(self):
+        diag = len(self.names)*self.n_envs_per
+        done = self.games.sum() - diag
+        total = self.games.nelement()*self.n_envs_per - diag
+        return done/total
 
     def _live_counts(self):
         counts = torch.zeros_like(self.games)
@@ -90,6 +97,7 @@ class Tracker:
 
         suggestion = totals.argmax()
         mask = (active == suggestion)
+        mask = mask & (mask.cumsum(0) < self.max_simultaneous)
         name = self.names[int(suggestion)]
 
         if self.verbose:
@@ -249,9 +257,7 @@ def test_evaluator():
     start = time.time()
     results = []
     games = 0
-    for i in range(1000):
-        if evaluator.finished():
-            break
+    while not evaluator.finished():
         rs = evaluator.step()
         end = time.time()
         
@@ -259,4 +265,4 @@ def test_evaluator():
         games += sum(sum(r.wins) for r in rs)
         
         display.clear_output(wait=True)
-        print(f'{i}: {games/(end - start)/60:.0f}')
+        print(f'{games/(end - start)/60:.0f}')
