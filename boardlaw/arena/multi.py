@@ -50,7 +50,7 @@ class Tracker:
 
     def report(self):
         done = self.games.sum() - self._init_games
-        remaining = self.games.nelement()*self.n_envs_per - done
+        remaining = self.games.nelement()*self.n_envs_per - self.games.sum()
         return int(done), int(remaining)
 
     def _live_counts(self):
@@ -86,9 +86,11 @@ class Tracker:
             counts = self._live_counts() + 1
             counts = counts.sum(0, keepdim=True) * counts.sum(1, keepdim=True) 
             counts = counts + counts.T
-            goodness = (2*remaining.float() - 1)*counts
+            counts[~remaining] = -2
+            # counts[counts > self.max_simultaneous] = -1
+            # import aljpy; aljpy.extract()
 
-            choice = goodness.argmax()
+            choice = counts.argmax()
             choice = (choice // len(self.names), choice % len(self.names))
 
             residual = self.n_envs_per - self.games[choice]
@@ -131,6 +133,9 @@ class Evaluator:
             moves=torch.zeros((n_agents, n_agents,), dtype=torch.int),
             times=torch.zeros((n_agents, n_agents), dtype=torch.float)).to(worlds.device)
 
+        self.steps = 0
+        self.bad_masks = 0
+
         self.start = time.time()
 
     def finished(self):
@@ -167,16 +172,24 @@ class Evaluator:
         done, remaining = self.tracker.report()
         to_go = pd.to_timedelta(duration/done*remaining, unit='s')
         forecast = pd.Timestamp.now(None) + to_go
+
         game_rate = done/duration
         match_rate = game_rate/self.tracker.n_envs_per
-
         move_rate = self.stats.moves.sum()/duration
 
+        mask_size = self.stats.moves.sum()/self.steps
+        bad_rate = self.bad_masks/self.steps
+
         rem = to_go.components
-        print(f'{done/(done+remaining):.1%} done, {rem.days}d{rem.hours:02d}h{rem.minutes:02d}m to go, will finish {forecast:%a %d %b %H:%M}. {move_rate:.0f} moves/sec, {game_rate:.0f} games/sec, {60*match_rate:.0f} matchups/min.')
+        print(f'{done/(done+remaining):.1%} done, {rem.days}d{rem.hours:02d}h{rem.minutes:02d}m to go, will finish {forecast:%a %d %b %H:%M}.')
+        print(f'{move_rate:.0f} moves/sec, {game_rate:.0f} games/sec, {60*match_rate:.0f} matchups/min.')
+        print(f'{mask_size:.0f} average mask size, {bad_rate:.0%} bad.')
 
     def step(self):
         name, mask, live = self.tracker.suggest(self.worlds.seats)
+        
+        self.steps += 1
+        self.bad_masks += int(mask.sum() < 8*1024)
         
         start = time.time()
         decisions = self.agents[name](self.worlds[mask])
