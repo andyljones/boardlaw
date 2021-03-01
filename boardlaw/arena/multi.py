@@ -37,11 +37,11 @@ class Tracker:
         self.live = torch.full((n_envs, 2), -1, device=device)
         self.verbose = verbose
 
-    def progress(self):
+    def report(self):
         diag = len(self.names)*self.n_envs_per
         done = self.games.sum() - diag
         total = self.games.nelement()*self.n_envs_per - diag
-        return done/total
+        return int(done), int(total)
 
     def _live_counts(self):
         counts = torch.zeros_like(self.games)
@@ -121,6 +121,8 @@ class MultiEvaluator:
             moves=torch.zeros((n_agents, n_agents,), dtype=torch.int),
             times=torch.zeros((n_agents, n_agents), dtype=torch.float)).to(worlds.device)
 
+        self.start = time.time()
+
     def finished(self):
         return self.tracker.finished()
 
@@ -151,6 +153,17 @@ class MultiEvaluator:
         self.stats.times[done] = -1
 
         return results
+    
+    def report(self):
+        duration = time.time() - self.start
+        done, total = self.tracker.report()
+        remaining = pd.to_timedelta(duration/done*total, unit='s')
+        forecast = pd.Timestamp.now(None) + remaining
+        game_rate = done/duration
+        match_rate = game_rate/self.tracker.n_envs_per
+
+        rem = remaining.components
+        print(f'{done/total:.1%} done, {rem.days}d{rem.hours:02d}h{rem.minutes:02d}m to go, will finish {forecast:%a %d %b %H:%M}. {60*game_rate:.0f} games/min, {60*match_rate:.0f} matchups/min.')
 
     def step(self):
         name, mask, live = self.tracker.suggest(self.worlds.seats)
@@ -251,18 +264,11 @@ def test_evaluator():
 
     evaluator = MultiEvaluator(worlds, agents, 1024)
 
-    import time 
     from IPython import display
 
-    start = time.time()
     results = []
-    games = 0
     while not evaluator.finished():
-        rs = evaluator.step()
-        end = time.time()
-        
-        results.extend(rs)
-        games += sum(sum(r.wins) for r in rs)
+        results.extend(evaluator.step())
         
         display.clear_output(wait=True)
-        print(f'{games/(end - start)/60:.0f}')
+        evaluator.report()
