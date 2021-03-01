@@ -7,20 +7,19 @@ from logging import getLogger
 
 log = getLogger(__name__)
 
-def scatter_inc_(totals, indices):
+def scatter_add_(totals, indices, vals=None):
     assert indices.ndim == 2
     rows, cols = indices.T
 
     width = totals.shape[1]
     raveled = rows + width*cols
 
-    ones = totals.new_ones((len(rows),))
-    totals.view(-1).scatter_add_(0, raveled, ones)
+    if vals is None:
+        vals = totals.new_ones((len(rows),))
+    if isinstance(vals, (int, float)):
+        vals = totals.new_full((len(rows),), vals)
 
-def scatter_inc_symmetric_(totals, indices):
-    scatter_inc_(totals, indices)
-    scatter_inc_(totals, indices.flip(1))
-
+    totals.view(-1).scatter_add_(0, raveled, vals)
 
 class Tracker:
 
@@ -39,7 +38,7 @@ class Tracker:
 
     def _live_counts(self):
         counts = torch.zeros_like(self.games)
-        scatter_inc_(counts, self.live[(self.live > -1).all(-1)])
+        scatter_add_(counts, self.live[(self.live > -1).all(-1)])
         return counts
 
     def update(self, terminal, mask):
@@ -96,7 +95,7 @@ class Tracker:
         if self.verbose:
             log.debug(f'Suggesting agent {name} with mask {list(mask.int().cpu().numpy())}')
 
-        return name, mask, self.live.clone()
+        return name, mask, self.live[mask]
 
 class MultiEvaluator:
     # Idea: keep lots and lots of envs in memory at once, play 
@@ -107,34 +106,43 @@ class MultiEvaluator:
         self.agents = agents
         self.tracker = Tracker(worlds.n_envs, n_envs_per, list(agents))
 
-        self.wins = torch.zeros((worlds.n_envs, worlds.n_seats), dtype=torch.int, device=worlds.device)
-        self.moves = torch.zeros((worlds.n_envs,), dtype=torch.int, device=worlds.device)
-        self.times = torch.zeros((worlds.n_envs,), dtype=torch.float, device=worlds.device)
+        n_agents = len(agents)
+        self.stats = arrdict.arrdict(
+            indices=torch.stack(torch.meshgrid(torch.arange(n_agents), torch.arange(n_agents)), -1),
+            wins=torch.zeros((n_agents, n_agents, worlds.n_seats), dtype=torch.int),
+            moves=torch.zeros((n_agents, n_agents,), dtype=torch.int),
+            times=torch.zeros((n_agents, n_agents), dtype=torch.float)).to(worlds.device)
 
-    def record(self, mask, transitions, live, start, end):
-        self.wins[mask] += (transitions.rewards == 1).int()
-        self.moves[mask] += 1
-        self.times[mask] += (end - start)/mask.sum()
+    def finished(self):
+        return self.tracker.finished()
 
-        masked = torch.zeros_like(mask)
-        masked[mask] = transitions.terminal
+    def record(self, transitions, live, start, end):
+        #TODO: Figure out how to get scatter_add_ to work on vector-valued vals
+        wins = (transitions.rewards == 1).int()
+        scatter_add_(self.stats.wins[:, :, 0], live, wins[:, 0])
+        scatter_add_(self.stats.wins[:, :, 1], live, wins[:, 1])
+        scatter_add_(self.stats.moves, live, 1) 
+        scatter_add_(self.stats.times, live, (end - start)/transitions.terminal.size(0))
 
-        # results = []
-        # for idx in masked.nonzero(as_tuple=False).squeeze(-1):
-        #     names = tuple(self.tracker.names[l] for l in live[idx])
-        #     results.append(dotdict.dotdict(
-        #                 names=names,
-        #                 wins=tuple(map(float, self.wins[idx])),
-        #                 moves=float(self.moves[idx].sum()),
-        #                 games=float(self.wins[idx].sum()),
-        #                 times=float(self.times[idx].sum()),
-        #                 boardsize=self.worlds.boardsize))
+        done = self.stats.wins.sum(-1) == self.tracker.n_envs_per
+        stats = self.stats[done].cpu()
+        results = []
+        for idx in range(stats.indices.size(0)):
+            item = stats[idx]
+            names = tuple(self.tracker.names[i] for i in item.indices)
+            results.append(dotdict.dotdict(
+                        names=names,
+                        wins=tuple(map(float, item.wins)),
+                        moves=float(item.moves),
+                        games=float(sum(item.wins)),
+                        times=float(item.times),
+                        boardsize=self.worlds.boardsize))
+        
+        self.stats.wins[done] = -1
+        self.stats.moves[done] = -1
+        self.stats.times[done] = -1
 
-        self.wins[masked] = 0.
-        self.moves[masked] = 0.
-        self.times[masked] = 0.
-
-        return masked.sum()
+        return results
 
     def step(self):
         name, mask, live = self.tracker.suggest(self.worlds.seats)
@@ -146,7 +154,7 @@ class MultiEvaluator:
 
         self.tracker.update(transitions.terminal, mask)
 
-        results = self.record(mask, transitions, live, start, end)
+        results = self.record(transitions, live, start, end)
         return results
 
 class MockAgent:
@@ -238,12 +246,17 @@ def test_evaluator():
     import time 
     from IPython import display
 
-    games = 0
     start = time.time()
+    results = []
+    games = 0
     for i in range(1000):
-        results = evaluator.step()
-        for r in results:
-            games += 1
+        if evaluator.finished():
+            break
+        rs = evaluator.step()
         end = time.time()
+        
+        results.extend(rs)
+        games += sum(sum(r.wins) for r in rs)
+        
         display.clear_output(wait=True)
-        print(f'{i}: {moves/(end - start)/60:.0f}')
+        print(f'{i}: {games/(end - start)/60:.0f}')
