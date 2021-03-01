@@ -53,11 +53,6 @@ class Tracker:
         remaining = self.games.nelement()*self.n_envs_per - self.games.sum()
         return int(done), int(remaining)
 
-    def _live_counts(self):
-        counts = torch.zeros_like(self.games)
-        scatter_add_(counts, self.live[(self.live > -1).all(-1)])
-        return counts
-
     def update(self, terminal, mask):
         # Kill off the finished games
         masked = torch.zeros_like(mask)
@@ -83,14 +78,15 @@ class Tracker:
             if not (available.any() and remaining.any()):
                 break
 
-            counts = self._live_counts() + 1
-            counts = counts.sum(0, keepdim=True) * counts.sum(1, keepdim=True) 
-            counts = counts + counts.T
-            counts[~remaining] = -2
-            # counts[counts > self.max_simultaneous] = -1
-            # import aljpy; aljpy.extract()
+            counts = torch.zeros((len(self.names),), device=seats.device)
+            indices = self.live[self.live > -1]
+            counts.scatter_add_(0, indices, counts.new_ones(indices.shape))
+            efficiency = counts.div(8*1024).clamp(0, 1)
+            efficiency = (efficiency[:, None] + efficiency[None, :])/2.
+            efficiency[efficiency == 0] = 1
+            efficiency[~remaining] = 2
 
-            choice = counts.argmax()
+            choice = efficiency.argmin()
             choice = (choice // len(self.names), choice % len(self.names))
 
             residual = self.n_envs_per - self.games[choice]
