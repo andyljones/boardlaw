@@ -20,8 +20,31 @@ class SerialExecutor(_base.Executor):
         future.set_result(f(*args, **kwargs))
         return future
 
+class CUDAPoolExecutor(ProcessPoolExecutor):
+    # Passes the index of the process to the init, so that we can balance CUDA jobs
+
+    @staticmethod
+    def _device_init(i):
+        import os
+        import torch
+        device = i % torch.cuda.device_count()
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(device)
+
+    def _adjust_process_count(self):
+        assert self._init_args == (), 'Device executor doesn\'t currently support custom initializers
+        from concurrent.futures.process import _process_worker
+        for i in range(len(self._processes), self._max_workers):
+            p = self._mp_context.Process(
+                target=_process_worker,
+                args=(self._call_queue,
+                      self._result_queue,
+                      self._device_init,
+                      (i,)))
+            p.start()
+            self._processes[p.pid] = p
+
 @contextmanager
-def VariableExecutor(N=None, processes=True, **kwargs):
+def VariableExecutor(N=None, executor='process', **kwargs):
     """An executor that can be easily switched between serial, thread and parallel execution.
     If N=0, a serial executor will be used.
     """
@@ -29,16 +52,19 @@ def VariableExecutor(N=None, processes=True, **kwargs):
     N = multiprocessing.cpu_count() if N is None else N
     
     if N == 0:
-        executor = SerialExecutor
-    elif processes:
-        executor = ProcessPoolExecutor
-    else:
-        executor = ThreadPoolExecutor
+        executor = 'serial'
+
+    executors = {
+        'process': ProcessPoolExecutor,
+        'thread': ThreadPoolExecutor,
+        'cuda': CUDAPoolExecutor}
+    executor = executors[executor]
     
     log.debug('Launching a {} with {} processes'.format(executor.__name__, N))    
     with executor(N, **kwargs) as pool:
         yield pool
-        
+       
+ 
 @contextmanager
 def parallel(f, progress=True, **kwargs):
     """Sugar for using the VariableExecutor. Call as

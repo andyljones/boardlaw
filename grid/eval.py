@@ -8,6 +8,7 @@ from multiprocessing import set_start_method
 from geotorch.exceptions import InManifoldError
 from logging import getLogger
 from . import data, asymdata
+from rebar.parallel import CUDAPoolExecutor
 
 log = getLogger(__name__)
 
@@ -43,28 +44,6 @@ def update(games, wins, results):
         wins.loc[result.names[1], result.names[0]] += result.wins[1]
     return games, wins
 
-class DeviceExecutor(ProcessPoolExecutor):
-    # Passes the index of the process to the init, so that we can balance CUDA jobs
-
-    def _adjust_process_count(self):
-        from concurrent.futures.process import _process_worker
-        for i in range(len(self._processes), self._max_workers):
-            p = self._mp_context.Process(
-                target=_process_worker,
-                args=(self._call_queue,
-                      self._result_queue,
-                      self._initializer,
-                      (*self._initargs, i)))
-            p.start()
-            self._processes[p.pid] = p
-
-
-def init(i):
-    import os
-    #TODO: Support variable number of GPUs
-    device = i % 2
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(device)
-
 def solve(games, wins, soln=None):
     try:
         return activelo.solve(games, wins, soln=soln)
@@ -88,7 +67,7 @@ def activelo_eval(boardsize=9, n_workers=6):
 
     solver, soln, σ = None, None, None
     futures = {}
-    with DeviceExecutor(n_workers+1, initializer=init) as pool:
+    with CUDAPoolExecutor(n_workers+1) as pool:
         while True:
             if solver is None:
                 log.info('Submitting solve task')

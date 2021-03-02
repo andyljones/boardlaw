@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from rebar import arrdict, dotdict
 from logging import getLogger
+from itertools import combinations
 
 log = getLogger(__name__)
 
@@ -92,7 +93,7 @@ class Tracker:
 
         return name, mask, self.live[mask]
 
-class Evaluator:
+class ChunkEvaluator:
     # Idea: keep lots and lots of envs in memory at once, play 
     # every agent against every agent simultaneously
     
@@ -183,6 +184,26 @@ class Evaluator:
         results = self.record(transitions, live, start, end)
         return results
 
+def evaluate(worldfunc, agentfunc, games, n_envs_per, chunksize=64):
+    assert games.index == games.columns
+
+    names = list(games.index)
+    chunks = [names[i:i+chunksize] for i in range(0, len(names), chunksize)]
+
+    jobs = []
+    # Diagonal pieces
+    for chunk in chunks:
+        jobs.append(games.loc[chunk, chunk])
+    
+    # Skew pieces
+    for first, second in combinations(chunks, 2):
+        combined = first + second
+        subgames = games.loc[combined, combined].copy()
+        subgames.loc[first, first] = n_envs_per
+        subgames.loc[second, second] = n_envs_per
+        jobs.append(subgames)
+    pass
+
 class MockAgent:
 
     def __init__(self, id):
@@ -259,8 +280,7 @@ def test_tracker():
     assert len(counts) == len(agents)*(len(agents)-1)
     assert set(counts.values()) == {n_envs_per}
 
-
-def test_evaluator():
+def test_chunk_evaluator():
     from pavlov import runs, storage
     from boardlaw.arena import common
 
@@ -273,7 +293,7 @@ def test_evaluator():
     agents = {k: agents[k] for k in list(agents)[:100]}
 
     worldfunc = lambda n_envs: common.worlds(df.index[0], n_envs, device='cuda')
-    evaluator = Evaluator(worldfunc, agents, 512)
+    evaluator = ChunkEvaluator(worldfunc, agents, 512)
 
     from IPython import display
 
