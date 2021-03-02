@@ -49,19 +49,16 @@ class Tracker:
         games = games.reindex(index=self.names, columns=self.names).values
         games[np.diag_indices_from(games)] = n_envs_per
 
-        self.games = torch.as_tensor(games, device=device).int()
-        self.init_games = self.games.sum()
-
-        residual = n_envs_per - self.games
+        games = torch.as_tensor(games, device=device).int()
+        residual = n_envs_per - games
         self.live = live_indices(residual)
         self.verbose = verbose
 
         self.n_envs = len(self.live)
 
     def report(self):
-        done = self.games.sum() - self.init_games
-        remaining = self.games.nelement()*self.n_envs_per - self.games.sum()
-        return int(done), int(remaining)
+        is_done = (self.live == -1).any(1)
+        return int(is_done.sum()), int((~is_done).sum())
 
     def update(self, terminal, mask):
         # Kill off the finished games
@@ -82,7 +79,7 @@ class Tracker:
     def suggest(self, seats):
         active = self.live.gather(1, seats.long()[:, None]).squeeze(1)
         live_active = active[active > -1]
-        totals = torch.zeros_like(self.games[0])
+        totals = self.live.int().new_zeros(len(self.names))
         totals.scatter_add_(0, live_active, totals.new_ones(live_active.shape))
 
         suggestion = totals.argmax()
@@ -155,7 +152,7 @@ class Evaluator:
     def report(self):
         duration = time.time() - self.start
         done, remaining = self.tracker.report()
-        to_go = pd.to_timedelta(duration/done*remaining, unit='s')
+        to_go = pd.to_timedelta(duration/(done+1)*remaining, unit='s')
         forecast = pd.Timestamp.now(None) + to_go
 
         game_rate = done/duration
@@ -268,14 +265,15 @@ def test_evaluator():
     from boardlaw.arena import common
 
     df = runs.pandas(description='cat/nodes')
-    worlds = common.worlds(df.index[0], 256*1024, device='cuda')
     agents = {}
     for r in df.index:
         snaps = storage.snapshots(r)
         for i in snaps:
-            agents[f'{r}.{i}'] = common.agent(r, i, worlds.device)
+            agents[f'{r}.{i}'] = common.agent(r, i, 'cuda')
+    agents = {k: agents[k] for k in list(agents)[:100]}
 
-    evaluator = Evaluator(worlds, agents, 512)
+    worldfunc = lambda n_envs: common.worlds(df.index[0], n_envs, device='cuda')
+    evaluator = Evaluator(worldfunc, agents, 512)
 
     from IPython import display
 
