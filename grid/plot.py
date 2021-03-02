@@ -17,6 +17,9 @@ def poster_sizes():
                 title=pn.element_text(size=18),
                 legend_title=pn.element_text(size=18))
 
+def no_colorbar_ticks():
+    return pn.guides(color=pn.guide_colorbar(ticks=False))
+
 def plot_flops(snaps):
     return (pn.ggplot(snaps, pn.aes(x='flops', y='400/np.log(10)*μ', group='run', color='factor(boardsize)'))
         + pn.geom_line()
@@ -61,7 +64,7 @@ def plot_sample_efficiency(snaps):
                 y='elo v. perfect play',
                 title='all agents\' performance in terms of samples')
             + pn.facet_wrap('boardsize', labeller='both')
-            + pn.guides(color=pn.guide_colorbar(ticks=False))
+            + no_colorbar_ticks()
             + mpl_theme()
             + poster_sizes())
 
@@ -139,7 +142,7 @@ def plot_elo_errors(snaps):
         + pn.geom_point(pn.aes(x='μ', y='err', group='run', color='flops'), size=.5)
         + pn.scale_color_continuous(trans='log10')
         + pn.facet_wrap('boardsize', labeller='label_both')
-        + pn.guides(color=pn.guide_colorbar(ticks=False))
+        + no_colorbar_ticks()
         + mpl_theme(18, 12)
         + poster_sizes())
 
@@ -155,4 +158,5 @@ def plot_network_arch(snaps):
                 y='elo v. perfect play',
                 title='network arch, as width/depth')
             + mpl_theme()
+            + no_colorbar_ticks()
             + poster_sizes())

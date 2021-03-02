@@ -21,34 +21,45 @@ def scatter_add_(totals, indices, vals=None):
 
     totals.view(-1).scatter_add_(0, raveled, vals)
 
+def live_indices(residual):
+    # Want to have residual[i, j] copies of (i, j) in the output
+
+    # More than 100m envs is gonna run into memory issues; it's about 80 bytes/env IIRC.
+    assert residual.sum() < 100*1024*1024 
+
+    residual = residual.int()
+    idxs = residual.nonzero(as_tuple=False)
+    full = idxs[:, None, :].repeat(1, residual.max(), 1)
+    counts = residual[tuple(idxs.T)]
+
+    mask = torch.arange(full.shape[1], device=full.device)[None, :] < counts[:, None]
+
+    return full[mask]
+
 class Tracker:
 
-    def __init__(self, n_envs_per, games, max_simultaneous=32*1024, device='cuda', verbose=False):
+    def __init__(self, n_envs_per, games, max_dispatch=32*1024, device='cuda', verbose=False):
         assert (games.index == games.columns).all()
         self.n_envs_per = n_envs_per
-        self.max_simultaneous = max_simultaneous
+        self.max_dispatch = max_dispatch
         self.names = list(games.index)
 
         # Counts games that are either in-progress or that have been completed
         # self.games = torch.zeros((len(names), len(names)), dtype=torch.int, device=device)
-        self._games = n_envs_per*torch.eye(len(names), dtype=torch.int, device=device)
-        self._init_games = self._games.sum()
+        games = games.reindex(index=self.names, columns=self.names).values
+        games[np.diag_indices_from(games)] = n_envs_per
 
-        self.live = torch.full((n_envs, 2), -1, device=device)
+        self.games = torch.as_tensor(games, device=device).int()
+        self.init_games = self.games.sum()
+
+        residual = n_envs_per - self.games
+        self.live = live_indices(residual)
         self.verbose = verbose
 
-    @property
-    def games(self):
-        return self._games
-
-    @games.setter
-    def games(self, value):
-        value = value.reindex(index=self.names, columns=self.names)
-        self._games = torch.as_tensor(value.fillna(0).values, device=self._games.device, dtype=self._games.dtype).contiguous()
-        self._init_games = self._games.sum()
+        self.n_envs = len(self.live)
 
     def report(self):
-        done = self.games.sum() - self._init_games
+        done = self.games.sum() - self.init_games
         remaining = self.games.nelement()*self.n_envs_per - self.games.sum()
         return int(done), int(remaining)
 
@@ -66,37 +77,9 @@ class Tracker:
         return terminated
 
     def finished(self):
-        return (self.games >= self.n_envs_per).all() & (self.live == -1).all()
+        return (self.live == -1).all()
 
     def suggest(self, seats):
-        # Figure out how the -1s in live should be repopulated
-
-        while True:
-            available = (self.live == -1).any(-1)
-            remaining = (self.games < self.n_envs_per)
-            if not (available.any() and remaining.any()):
-                break
-
-            counts = torch.zeros((len(self.names),), device=seats.device)
-            indices = self.live[self.live > -1]
-            counts.scatter_add_(0, indices, counts.new_ones(indices.shape))
-            priority = counts/(16*1024)
-            priority[priority >= 1] = 0
-            priority = (priority[:, None] + priority[None, :])/2
-            priority[~remaining] = -1.
-
-            choice = priority.argmax()
-            choice = (choice // len(self.names), choice % len(self.names))
-
-            residual = self.n_envs_per - self.games[choice]
-            allocation = available.nonzero(as_tuple=False)[:residual]
-            self.live[allocation] = torch.as_tensor(choice, device=allocation.device)
-
-            self.games[choice] += len(allocation)
-            if self.verbose:
-                log.debug(f'Matching {list(map(int, choice))} on envs {list(allocation.flatten().int().cpu().numpy())}')
-
-        # Suggest the most 'popular' agent  
         active = self.live.gather(1, seats.long()[:, None]).squeeze(1)
         live_active = active[active > -1]
         totals = torch.zeros_like(self.games[0])
@@ -104,7 +87,7 @@ class Tracker:
 
         suggestion = totals.argmax()
         mask = (active == suggestion)
-        mask = mask & (mask.cumsum(0) < self.max_simultaneous)
+        mask = mask & (mask.cumsum(0) < self.max_dispatch)
         name = self.names[int(suggestion)]
 
         if self.verbose:
@@ -116,17 +99,24 @@ class Evaluator:
     # Idea: keep lots and lots of envs in memory at once, play 
     # every agent against every agent simultaneously
     
-    def __init__(self, worlds, agents, n_envs_per=1024):
-        self.worlds = worlds
+    def __init__(self, worldfunc, agents, games=None, n_envs_per=1024, device='cuda'):
         self.agents = agents
-        self.tracker = Tracker(worlds.n_envs, n_envs_per, list(agents))
+
+        if games is None:
+            games = pd.DataFrame(0, list(agents), list(agents))
+        else:
+            assert set(agents) == set(games.index)
+            assert set(agents) == set(games.columns)
+
+        self.tracker = Tracker(n_envs_per, games, device=device)
+        self.worlds = worldfunc(self.tracker.n_envs).to(device)
 
         n_agents = len(agents)
         self.stats = arrdict.arrdict(
             indices=torch.stack(torch.meshgrid(torch.arange(n_agents), torch.arange(n_agents)), -1),
-            wins=torch.zeros((n_agents, n_agents, worlds.n_seats), dtype=torch.int),
+            wins=torch.zeros((n_agents, n_agents, self.worlds.n_seats), dtype=torch.int),
             moves=torch.zeros((n_agents, n_agents,), dtype=torch.int),
-            times=torch.zeros((n_agents, n_agents), dtype=torch.float)).to(worlds.device)
+            times=torch.zeros((n_agents, n_agents), dtype=torch.float)).to(device)
 
         self.steps = 0
         self.bad_masks = 0
@@ -243,14 +233,14 @@ class MockGame(arrdict.namedarrtuple(fields=('count', 'history'))):
         return world, transition, list(history[terminal])
 
 def test_tracker():
-    n_envs = 32
     n_envs_per = 4
     length = 8
 
-    worlds = MockGame.initial(n_envs, device='cpu', length=length)
     agents = {i: MockAgent(i) for i in range(16)}
+    games = pd.DataFrame(0, list(agents), list(agents))
+    tracker = Tracker(n_envs_per, games, device='cpu')
 
-    tracker = Tracker(n_envs, n_envs_per, agents, worlds.device)
+    worlds = MockGame.initial(tracker.n_envs, length=length, device=tracker.games.device)
 
     hists = []
     while not tracker.finished():
@@ -271,6 +261,7 @@ def test_tracker():
 
     assert len(counts) == len(agents)*(len(agents)-1)
     assert set(counts.values()) == {n_envs_per}
+
 
 def test_evaluator():
     from pavlov import runs, storage
