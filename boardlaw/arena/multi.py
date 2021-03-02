@@ -228,15 +228,16 @@ def evaluate(worldfunc, agentfunc, games, n_envs_per=512, chunksize=64, n_worker
         
     log.info('Generated skew pieces')
 
-    results = []
     set_start_method('spawn', True)
     with parallel.parallel(_evaluate, N=n_workers, executor='cuda') as pool:
         jobs = {k: pool(worldfunc, agentfunc, subgames, n_envs_per) for k, subgames in jobs.items()}
-        for k, rs in pool.wait(jobs).items():
-            results.extend(rs)
-            print(len(results))
-    
-    return results
+        while jobs:
+            for k, future in list(jobs.items()):
+                if future.done():
+                    yield future.result()
+                    del jobs[k]
+            yield []
+            time.sleep(.1)
 
 class MockAgent:
 
@@ -344,12 +345,6 @@ def test_evaluator():
 
     df = runs.pandas(description='cat/nodes')
 
-    def worldfunc(n_envs):
-        return common.worlds(df.index[0], n_envs, device='cuda')
-
-    def agentfunc(name):
-        run, idx = name
-        return common.agent(run, idx, device='cuda')
         
     names = []
     for r in df.index:
@@ -357,5 +352,17 @@ def test_evaluator():
         for i in snaps:
             names.append((r, i))
             
-    games = pd.DataFrame(0, names, names).iloc[:12, :12]
-    rs = evaluate(worldfunc, agentfunc, games, chunksize=4)
+    games = pd.DataFrame(0, names, names)
+
+    from IPython import display
+
+    start = time.time()
+    moves, matches = 0, 0
+    for rs in evaluate(worldfunc, agentfunc, games, chunksize=64):
+        moves += sum(r.moves for r in rs)
+        matches += len(rs)
+        
+        duration = time.time() - start
+        display.clear_output(wait=True)
+        print(f'{moves/duration:.0f} moves/s, {60*matches/duration:.0f} matches/min')
+        

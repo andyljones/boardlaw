@@ -25,18 +25,19 @@ class CUDAPoolExecutor(LokyPoolExecutor):
     # Passes the index of the process to the init, so that we can balance CUDA jobs
 
     @staticmethod
-    def _device_init(i):
+    def _device_init(n, N):
         import os
-        import torch
-        device = i % torch.cuda.device_count()
+        device = n % N
         os.environ['CUDA_VISIBLE_DEVICES'] = str(device)
 
     def _adjust_process_count(self):
         assert self._initargs == (), 'Device executor doesn\'t currently support custom initializers'
-        for i in range(len(self._processes), self._max_workers):
+        import torch
+        N = torch.cuda.device_count()
+        for n in range(len(self._processes), self._max_workers):
             worker_exit_lock = self._context.BoundedSemaphore(1)
             args = (self._call_queue, self._result_queue, self._device_init,
-                    (i,), self._processes_management_lock,
+                    (n, N), self._processes_management_lock,
                     self._timeout, worker_exit_lock, _CURRENT_DEPTH + 1)
             worker_exit_lock.acquire()
             try:
