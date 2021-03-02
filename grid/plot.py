@@ -142,3 +142,17 @@ def plot_elo_errors(snaps):
         + pn.guides(color=pn.guide_colorbar(ticks=False))
         + mpl_theme(18, 12)
         + poster_sizes())
+
+def plot_network_arch(snaps):
+    snaps['flops_jitter'] = np.random.uniform(4/5, 5/4, len(snaps.flops))*snaps.flops
+    snaps['arch'] = snaps.width.astype(str) + '/' + snaps.depth.astype(str)
+    (pn.ggplot(snaps[snaps.boardsize == 7], pn.aes(x='flops_jitter', y='400/np.log(10)*μ', group='run', color='params'))
+            + pn.geom_text(pn.aes(label='arch'), size=8)
+            + pn.scale_x_continuous(trans='log10')
+            + pn.scale_color_continuous(trans='log10')
+            + pn.labs(
+                x='training flops', 
+                y='elo v. perfect play',
+                title='network arch, as width/depth')
+            + mpl_theme()
+            + poster_sizes())
