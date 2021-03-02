@@ -227,30 +227,41 @@ def structured_eval(n_workers=12, suggester=FullSuggester, **kwargs):
 
             time.sleep(.1)
 
+def format_seconds(s):
+    td = pd.to_timedelta(s, unit='s')
+    h = td.components.days*24 + td.components.hours
+    return f'{h}h{td.components.minutes}m{td.components.seconds}s'
+    
+def print_stats(stats):
+    duration = stats.end - stats.start
+    remaining = (stats.total - stats.finished)/(stats.finished + 1)*(stats.end - stats.start)
+    end = pd.to_datetime(stats.start + remaining, unit='s')
+    print(
+        f'{stats.finished}/{stats.total}:\n'
+        f'  {format_seconds(duration)} so far. {format_seconds(remaining)} remaining, end {end:%a %d %b %H:%M}.\n'
+        f'  {stats.moves/duration:.0f} moves/sec, {60*stats.matchups/duration:.0f} matchups/min.')
+
 def fast_eval(boardsize=5, **kwargs):
     from boardlaw.arena import multi, common
 
-    snaps = data.snapshot_solns(boardsize, solve=False) 
+    snaps = data.snapshot_solns(boardsize, solve=False)
 
     raw = asymdata.pandas(boardsize)
     raw['games'] = raw.black_wins + raw.white_wins
 
-    worlds = common.worlds(snaps.run.iloc[0], 256*1024, device='cuda')
-    agents = {}
-    for nickname, row in snaps.iterrows():
-        agents[nickname] = common.agent(row.run, row.idx, worlds.device)
+    games = raw.games.unstack().reindex(index=snaps.index, columns=snaps.index).fillna(0)
 
-    evaluator = multi.Evaluator(worlds, agents, 512)
-    evaluator.tracker.games = raw['games'].unstack().fillna(0)
+    def worldfunc(n_envs):
+        return common.worlds(snaps.run.iloc[0], n_envs, device='cuda')
+
+    def agentfunc(name):
+        row = snaps.loc[name]
+        return common.agent(row.run, row.idx, device='cuda')
 
     from IPython import display
 
-    results = []
-    while not evaluator.finished():
-        results.extend(evaluator.step())
-        if len(results) > 100:
-            asymdata.save(results)
-            results = []
-        
+    for rs, stats in multi.evaluate(worldfunc, agentfunc, games, chunksize=64):
+        asymdata.save(rs)
+
         display.clear_output(wait=True)
-        evaluator.report()
+        print_stats(stats)

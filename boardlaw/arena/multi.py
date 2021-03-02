@@ -196,14 +196,19 @@ def _evaluate(worldfunc, agentfunc, subgames, n_envs_per):
 
     return results
 
-def worldfunc(n_envs):
-    from . import common
-    return common.worlds('2021-02-26 16-57-51 angry-depth', n_envs, device='cuda')
+def initial_stats(n_jobs):
+    return dotdict.dotdict(finished=0, total=n_jobs, moves=0, games=0, matchups=0, start=time.time(), end=time.time()+1)
 
-def agentfunc(name):
-    from . import common
-    run, idx = name
-    return common.agent(run, idx, device='cuda')
+def update_stats(stats, results):
+    stats = stats.copy()
+    stats['finished'] += 1 
+    stats['end'] = time.time()
+    stats['duration'] = stats.end - stats.start
+    for r in results:
+        stats['moves'] += r.moves
+        stats['games'] += r.games
+        stats['matchups'] += 1
+    return stats
 
 def evaluate(worldfunc, agentfunc, games, n_envs_per=512, chunksize=64, n_workers=4):
     assert list(games.index) == list(games.columns)
@@ -229,14 +234,17 @@ def evaluate(worldfunc, agentfunc, games, n_envs_per=512, chunksize=64, n_worker
     log.info('Generated skew pieces')
 
     set_start_method('spawn', True)
+    stats = initial_stats(len(jobs))
     with parallel.parallel(_evaluate, N=n_workers, executor='cuda') as pool:
-        jobs = {k: pool(worldfunc, agentfunc, subgames, n_envs_per) for k, subgames in jobs.items()}
+        jobs = {k: pool(worldfunc, agentfunc, jobs[k], n_envs_per) for k in np.random.permutation(jobs)}
         while jobs:
             for k, future in list(jobs.items()):
                 if future.done():
-                    yield future.result()
+                    results = future.result()
+                    stats = update_stats(stats, results)
+                    yield results, stats
                     del jobs[k]
-            yield []
+            yield [], stats
             time.sleep(.1)
 
 class MockAgent:
@@ -360,7 +368,7 @@ def test_evaluator():
     start = time.time()
     results = []
     moves, matches = 0, 0
-    for rs in evaluate(worldfunc, agentfunc, games, chunksize=4, n_envs_per=n_envs_per):
+    for rs, stats in evaluate(worldfunc, agentfunc, games, chunksize=4, n_envs_per=n_envs_per):
         results.extend(rs)
         moves += sum(r.moves for r in rs)
         matches += len(rs)
