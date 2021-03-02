@@ -31,7 +31,7 @@ class CUDAPoolExecutor(ProcessPoolExecutor):
         os.environ['CUDA_VISIBLE_DEVICES'] = str(device)
 
     def _adjust_process_count(self):
-        assert self._init_args == (), 'Device executor doesn\'t currently support custom initializers
+        assert self._initargs == (), 'Device executor doesn\'t currently support custom initializers'
         from concurrent.futures.process import _process_worker
         for i in range(len(self._processes), self._max_workers):
             p = self._mp_context.Process(
@@ -55,6 +55,7 @@ def VariableExecutor(N=None, executor='process', **kwargs):
         executor = 'serial'
 
     executors = {
+        'serial': SerialExecutor,
         'process': ProcessPoolExecutor,
         'thread': ThreadPoolExecutor,
         'cuda': CUDAPoolExecutor}
