@@ -230,7 +230,7 @@ def evaluate(worldfunc, agentfunc, games, n_envs_per=512, chunksize=64, n_worker
 
     results = []
     set_start_method('spawn', True)
-    with parallel.parallel(_evaluate, N=n_workers, executor='process') as pool:
+    with parallel.parallel(_evaluate, N=n_workers, executor='cuda') as pool:
         jobs = {k: pool(worldfunc, agentfunc, subgames, n_envs_per) for k, subgames in jobs.items()}
         for k, rs in pool.wait(jobs).items():
             results.extend(rs)
