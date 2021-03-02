@@ -343,22 +343,25 @@ def test_evaluator():
     from pavlov import runs, storage
     from boardlaw.arena import common
 
+    n_envs_per = 512
     df = runs.pandas(description='cat/nodes')
-
         
     names = []
     for r in df.index:
         snaps = storage.snapshots(r)
         for i in snaps:
             names.append((r, i))
+    names = names[:12]
             
     games = pd.DataFrame(0, names, names)
 
     from IPython import display
 
     start = time.time()
+    results = []
     moves, matches = 0, 0
-    for rs in evaluate(worldfunc, agentfunc, games, chunksize=64):
+    for rs in evaluate(worldfunc, agentfunc, games, chunksize=4, n_envs_per=n_envs_per):
+        results.extend(rs)
         moves += sum(r.moves for r in rs)
         matches += len(rs)
         
@@ -366,3 +369,11 @@ def test_evaluator():
         display.clear_output(wait=True)
         print(f'{moves/duration:.0f} moves/s, {60*matches/duration:.0f} matches/min')
         
+    from collections import defaultdict
+    counts = defaultdict(lambda: 0)
+    for r in results:
+        counts[r.names] += r.games
+
+    assert len(counts) == len(names)*(len(names)-1)
+    assert set(counts.values()) == {n_envs_per}
+    
