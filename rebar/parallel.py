@@ -4,6 +4,7 @@ import multiprocessing
 import types
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, Future, _base, as_completed
 import logging
+from loky.process_executor import ProcessPoolExecutor as LokyPoolExecutor, _CURRENT_DEPTH, _process_worker, mp
 
 log = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ class SerialExecutor(_base.Executor):
         future.set_result(f(*args, **kwargs))
         return future
 
-class CUDAPoolExecutor(ProcessPoolExecutor):
+class CUDAPoolExecutor(LokyPoolExecutor):
     # Passes the index of the process to the init, so that we can balance CUDA jobs
 
     @staticmethod
@@ -32,16 +33,25 @@ class CUDAPoolExecutor(ProcessPoolExecutor):
 
     def _adjust_process_count(self):
         assert self._initargs == (), 'Device executor doesn\'t currently support custom initializers'
-        from concurrent.futures.process import _process_worker
         for i in range(len(self._processes), self._max_workers):
-            p = self._mp_context.Process(
-                target=_process_worker,
-                args=(self._call_queue,
-                      self._result_queue,
-                      self._device_init,
-                      (i,)))
+            worker_exit_lock = self._context.BoundedSemaphore(1)
+            args = (self._call_queue, self._result_queue, self._device_init,
+                    (i,), self._processes_management_lock,
+                    self._timeout, worker_exit_lock, _CURRENT_DEPTH + 1)
+            worker_exit_lock.acquire()
+            try:
+                # Try to spawn the process with some environment variable to
+                # overwrite but it only works with the loky context for now.
+                p = self._context.Process(target=_process_worker, args=args,
+                                          env=self._env)
+            except TypeError:
+                p = self._context.Process(target=_process_worker, args=args)
+            p._worker_exit_lock = worker_exit_lock
             p.start()
             self._processes[p.pid] = p
+        mp.util.debug('Adjust process count : {}'.format(self._processes))
+
+
 
 @contextmanager
 def VariableExecutor(N=None, executor='process', **kwargs):
@@ -55,6 +65,7 @@ def VariableExecutor(N=None, executor='process', **kwargs):
         executor = 'serial'
 
     executors = {
+        'loky': LokyPoolExecutor,
         'serial': SerialExecutor,
         'process': ProcessPoolExecutor,
         'thread': ThreadPoolExecutor,
