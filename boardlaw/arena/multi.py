@@ -81,12 +81,12 @@ class Tracker:
             counts = torch.zeros((len(self.names),), device=seats.device)
             indices = self.live[self.live > -1]
             counts.scatter_add_(0, indices, counts.new_ones(indices.shape))
-            efficiency = counts.div(8*1024).clamp(0, 1)
-            efficiency = (efficiency[:, None] + efficiency[None, :])/2.
-            efficiency[efficiency == 0] = 1
-            efficiency[~remaining] = 2
+            priority = counts/(16*1024)
+            priority[priority >= 1] = 0
+            priority = (priority[:, None] + priority[None, :])/2
+            priority[~remaining] = -1.
 
-            choice = efficiency.argmin()
+            choice = priority.argmax()
             choice = (choice // len(self.names), choice % len(self.names))
 
             residual = self.n_envs_per - self.games[choice]
