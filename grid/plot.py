@@ -50,6 +50,21 @@ def plot_data_frontier(snaps, var='params'):
         + mpl_theme()
         + poster_sizes())
 
+def plot_sample_efficiency(snaps):
+    return (pn.ggplot(snaps, pn.aes(x='samples', y='400/np.log(10)*μ', group='run', color='params'))
+            + pn.geom_line()
+            + pn.geom_point(size=.5)
+            + pn.scale_x_continuous(trans='log10')
+            + pn.scale_color_continuous(trans='log10')
+            + pn.labs(
+                x='training samples', 
+                y='elo v. perfect play',
+                title='all agents\' performance in terms of samples')
+            + pn.facet_wrap('boardsize', labeller='both')
+            + pn.guides(color=pn.guide_colorbar(ticks=False))
+            + mpl_theme()
+            + poster_sizes())
+
 def plot_flops_frontier(snaps):
     return (plot_data_frontier(snaps, 'flops')
         + pn.labs(title='performance frontier in terms of compute'))

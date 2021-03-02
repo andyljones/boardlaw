@@ -23,12 +23,11 @@ def scatter_add_(totals, indices, vals=None):
 
 class Tracker:
 
-    def __init__(self, n_envs, n_envs_per, names, max_simultaneous=32*1024, device='cuda', verbose=False):
-        assert n_envs % n_envs_per == 0
-        self.n_envs = n_envs
+    def __init__(self, n_envs_per, games, max_simultaneous=32*1024, device='cuda', verbose=False):
+        assert (games.index == games.columns).all()
         self.n_envs_per = n_envs_per
         self.max_simultaneous = max_simultaneous
-        self.names = np.random.permutation(list(names))
+        self.names = list(games.index)
 
         # Counts games that are either in-progress or that have been completed
         # self.games = torch.zeros((len(names), len(names)), dtype=torch.int, device=device)
