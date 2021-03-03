@@ -64,3 +64,26 @@ def pandas(boardsize):
         return pd.DataFrame(contents).set_index(KEYS)
     else:
         return pd.DataFrame(columns=['black_name', 'white_name', 'black_wins', 'white_wins', 'moves']).set_index(KEYS)
+
+def pandas_elos(boardsize):
+    from . import data
+    import activelo
+
+    snaps = data.snapshot_solns(5, solve=False)
+
+    raw = pandas(5)
+    raw['games'] = raw.black_wins + raw.white_wins
+
+    games = raw.games.unstack().reindex(index=snaps.index, columns=snaps.index).fillna(0)
+
+    black_wins = raw.black_wins.unstack().reindex_like(games)
+    white_wins = raw.white_wins.unstack().reindex_like(games).T
+
+    ws = (black_wins/games + white_wins/games.T)/2*(games + games.T)/2.
+    gs = (games + games.T)/2.
+
+    soln = activelo.solve(gs.fillna(0), ws.fillna(0))
+
+    snaps['μ'] = soln.μ - soln.μ.max()
+
+    return snaps
