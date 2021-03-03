@@ -37,9 +37,7 @@ RUN apt-get install -y --no-install-recommends \
         # Needed for sanity
         neovim gdb wget man-db tree silversearcher-ag build-essential htop \
         # Needed for git installs
-        git ssh-client \
-        # Needed for papers
-        texlive latexmk
+        git ssh-client 
 
 # Grab tini so that Jupyter doesn't spray zombies everywhere
 ADD https://github.com/krallin/tini/releases/download/v0.18.0/tini /usr/bin/tini
@@ -143,6 +141,14 @@ RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.c
     apt-get update -y && \
     apt-get install google-cloud-sdk -y
     
+
+RUN mkdir /tmp/texlive && \
+    cd /tmp/texlive && \
+    wget http://mirror.ctan.org/systems/texlive/tlnet/install-tl.zip && \
+    unzip ./install-tl.zip -d install-tl && \
+    cd install-tl/install-tl-$(date +%Y%m%d) && \
+    perl ./install-tl
+ENV PATH /usr/local/texlive/2020/bin/x86_64-linux:$PATH
 
 # Set up the rsync daemon
 ADD rsyncd.conf /etc/
