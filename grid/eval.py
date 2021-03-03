@@ -230,12 +230,12 @@ def structured_eval(n_workers=12, suggester=FullSuggester, **kwargs):
 def format_seconds(s):
     td = pd.to_timedelta(s, unit='s')
     h = td.components.days*24 + td.components.hours
-    return f'{h}h{td.components.minutes}m{td.components.seconds}s'
+    return f'{h}h{td.components.minutes:02d}m{td.components.seconds:02d}s'
     
 def print_stats(stats):
     duration = stats.end - stats.start
     remaining = (stats.total - stats.finished)/(stats.finished + 1)*(stats.end - stats.start)
-    end = pd.to_datetime(stats.start + remaining, unit='s')
+    end = pd.to_datetime(stats.end + remaining, unit='s')
     print(
         f'{stats.finished}/{stats.total}:\n'
         f'  {format_seconds(duration)} so far. {format_seconds(remaining)} remaining, end {end:%a %d %b %H:%M}.\n'

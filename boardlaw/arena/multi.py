@@ -6,6 +6,7 @@ from rebar import arrdict, dotdict, parallel
 from logging import getLogger
 from itertools import combinations
 import rebar
+from random import shuffle
 from multiprocessing import set_start_method
 
 log = getLogger(__name__)
@@ -15,7 +16,7 @@ def scatter_add_(totals, indices, vals=None):
     rows, cols = indices.T
 
     width = totals.shape[1]
-    raveled = rows + width*cols
+    raveled = width*rows + cols
 
     if vals is None:
         vals = totals.new_ones((len(rows),))
@@ -200,7 +201,6 @@ def initial_stats(n_jobs):
     return dotdict.dotdict(finished=0, total=n_jobs, moves=0, games=0, matchups=0, start=time.time(), end=time.time()+1)
 
 def update_stats(stats, results):
-    stats = stats.copy()
     stats['finished'] += 1 
     stats['end'] = time.time()
     stats['duration'] = stats.end - stats.start
@@ -208,7 +208,6 @@ def update_stats(stats, results):
         stats['moves'] += r.moves
         stats['games'] += r.games
         stats['matchups'] += 1
-    return stats
 
 def evaluate(worldfunc, agentfunc, games, n_envs_per=512, chunksize=64, n_workers=4):
     assert list(games.index) == list(games.columns)
@@ -219,9 +218,12 @@ def evaluate(worldfunc, agentfunc, games, n_envs_per=512, chunksize=64, n_worker
     jobs = {}
     # Diagonal pieces
     for i, chunk in enumerate(chunks):
-        jobs[i, i] = games.loc[chunk, chunk]
+        subgames = games.loc[chunk, chunk]
+        subgames.values[np.diag_indices_from(subgames)] = n_envs_per
+        if (subgames < n_envs_per).any().any():
+            jobs[i, i] = subgames
     
-    log.info('Generated diagonal pieces')
+    log.info(f'Generated diagonal pieces; {len(jobs)} total')
     
     # Skew pieces
     for (i, first), (j, second) in combinations(enumerate(chunks), 2):
@@ -229,22 +231,28 @@ def evaluate(worldfunc, agentfunc, games, n_envs_per=512, chunksize=64, n_worker
         subgames = games.loc[combined, combined].copy()
         subgames.loc[first, first] = n_envs_per
         subgames.loc[second, second] = n_envs_per
-        jobs[i, j] = subgames
+        if (subgames < n_envs_per).any().any():
+            jobs[i, j] = subgames
         
-    log.info('Generated skew pieces')
+    log.info(f'Generated skew pieces; {len(jobs)} total')
 
     set_start_method('spawn', True)
     stats = initial_stats(len(jobs))
     with parallel.parallel(_evaluate, N=n_workers, executor='cuda') as pool:
-        jobs = {k: pool(worldfunc, agentfunc, jobs[k], n_envs_per) for k in np.random.permutation(jobs)}
+        idxs = list(jobs)
+        shuffle(idxs)
+
+        jobs = {k: pool(worldfunc, agentfunc, jobs[k], n_envs_per) for k in idxs}
         while jobs:
             for k, future in list(jobs.items()):
                 if future.done():
                     results = future.result()
-                    stats = update_stats(stats, results)
-                    yield results, stats
+                    update_stats(stats, results)
+                    yield results, stats.copy()
                     del jobs[k]
-            yield [], stats
+            
+            stats['end'] = time.time()
+            yield [], stats.copy()
             time.sleep(.1)
 
 class MockAgent:
