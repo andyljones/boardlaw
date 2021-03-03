@@ -232,12 +232,12 @@ def format_seconds(s):
     h = td.components.days*24 + td.components.hours
     return f'{h}h{td.components.minutes:02d}m{td.components.seconds:02d}s'
     
-def print_stats(stats):
+def print_stats(boardsize, stats):
     duration = stats.end - stats.start
     remaining = (stats.total - stats.finished)/(stats.finished + 1)*(stats.end - stats.start)
     end = pd.to_datetime(stats.end + remaining, unit='s')
     print(
-        f'{stats.finished}/{stats.total}:\n'
+        f'{boardsize}x{boardsize}, {stats.finished}/{stats.total}:\n'
         f'  {format_seconds(duration)} so far. {format_seconds(remaining)} remaining, end {end:%a %d %b %H:%M}.\n'
         f'  {stats.moves/duration:.0f} moves/sec, {60*stats.matchups/duration:.0f} matchups/min.')
 
@@ -264,4 +264,4 @@ def fast_eval(boardsize=5, **kwargs):
         asymdata.save(rs)
 
         display.clear_output(wait=True)
-        print_stats(stats)
+        print_stats(boardsize, stats)

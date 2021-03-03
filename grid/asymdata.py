@@ -69,9 +69,9 @@ def pandas_elos(boardsize):
     from . import data
     import activelo
 
-    snaps = data.snapshot_solns(5, solve=False)
+    snaps = data.snapshot_solns(boardsize, solve=False)
 
-    raw = pandas(5)
+    raw = pandas(boardsize)
     raw['games'] = raw.black_wins + raw.white_wins
 
     games = raw.games.unstack().reindex(index=snaps.index, columns=snaps.index).fillna(0)
