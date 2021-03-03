@@ -140,15 +140,6 @@ RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.c
     apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add - && \
     apt-get update -y && \
     apt-get install google-cloud-sdk -y
-    
-
-RUN mkdir /tmp/texlive && \
-    cd /tmp/texlive && \
-    wget http://mirror.ctan.org/systems/texlive/tlnet/install-tl.zip && \
-    unzip ./install-tl.zip -d install-tl && \
-    cd install-tl/install-tl-$(date +%Y%m%d) && \
-    perl ./install-tl
-ENV PATH /usr/local/texlive/2020/bin/x86_64-linux:$PATH
 
 # Set up the rsync daemon
 ADD rsyncd.conf /etc/
