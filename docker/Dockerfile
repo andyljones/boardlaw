@@ -37,7 +37,9 @@ RUN apt-get install -y --no-install-recommends \
         # Needed for sanity
         neovim gdb wget man-db tree silversearcher-ag build-essential htop \
         # Needed for git installs
-        git ssh-client 
+        git ssh-client \
+        # Needed for papers
+        texlive latexmk
 
 # Grab tini so that Jupyter doesn't spray zombies everywhere
 ADD https://github.com/krallin/tini/releases/download/v0.18.0/tini /usr/bin/tini

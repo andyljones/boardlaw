@@ -14,3 +14,11 @@ dist
 .cubicasa-confirmed
 credentials.json
 .jittens*
+
+# Latex stuff
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.pdf
+*.synctex.gz
