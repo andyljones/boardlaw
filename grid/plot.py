@@ -160,3 +160,16 @@ def plot_network_arch(snaps):
             + mpl_theme()
             + no_colorbar_ticks()
             + poster_sizes())
+
+def plot_nodes(snaps):
+    (pn.ggplot(snaps, pn.aes(x='flops', y='400/np.log(10)*μ', group='run', color='factor(nodes.fillna(64))'))
+            + pn.geom_line()
+            + pn.geom_point(size=.5)
+            + pn.scale_x_continuous(trans='log10')
+            + pn.scale_color_discrete(name='boardsize')
+            + pn.labs(
+                x='training flops', 
+                y='elo v. perfect play',
+                title='all agents\' performance in terms of compute')
+            + mpl_theme()
+            + poster_sizes())

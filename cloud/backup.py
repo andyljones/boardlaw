@@ -67,6 +67,7 @@ def download(local, remote):
 def backup():
     sync_up('./output/pavlov', 'boardlaw:output/pavlov')
     sync_up('./output/experiments/bee', 'boardlaw:output/experiments/bee')
+    sync_up('./output/experiments/eval', 'boardlaw:output/experiments/eval')
     sync_up('./output/experiments/architecture/results', 'boardlaw:output/experiments/architecture/results')
 
 def fetch():
