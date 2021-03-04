@@ -111,7 +111,7 @@ def plot_interp_frontier(snaps):
     return (pn.ggplot(df, pn.aes(x='flops', color='factor(boardsize)', group='boardsize'))
             + pn.geom_line(pn.aes(y='400/np.log(10)*μ'), size=2)
             + pn.geom_line(pn.aes(y='400/np.log(10)*μhat'), size=1, linetype='dashed')
-            + pn.annotate('text', 5e14, -2500, label=s, size=20)
+            + pn.annotate('text', 1e14, -1700, label=s, size=20)
             + pn.labs(
                 x='training flops', 
                 y='elo v. perfect play',

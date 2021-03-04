@@ -1,3 +1,4 @@
+import torch
 from contextlib import contextmanager
 import pandas as pd
 from pkg_resources import resource_filename
@@ -65,16 +66,8 @@ def pandas(boardsize):
     else:
         return pd.DataFrame(columns=['black_name', 'white_name', 'black_wins', 'white_wins', 'moves']).set_index(KEYS)
 
-def pandas_elos(boardsize):
-    from . import data
-    import activelo
-
-    snaps = data.snapshot_solns(boardsize, solve=False)
-
-    raw = pandas(boardsize)
-    raw['games'] = raw.black_wins + raw.white_wins
-
-    games = raw.games.unstack().reindex(index=snaps.index, columns=snaps.index).fillna(0)
+def add_elos(snaps, raw, prior=.1):
+    games = (raw.black_wins + raw.white_wins).unstack().reindex(index=snaps.index, columns=snaps.index).fillna(0)
 
     black_wins = raw.black_wins.unstack().reindex_like(games)
     white_wins = raw.white_wins.unstack().reindex_like(games).T
@@ -82,8 +75,37 @@ def pandas_elos(boardsize):
     ws = (black_wins/games + white_wins/games.T)/2*(games + games.T)/2.
     gs = (games + games.T)/2.
 
-    soln = activelo.solve(gs.fillna(0), ws.fillna(0))
+    W = torch.as_tensor(ws.fillna(0).values) + prior
+    N = torch.as_tensor(gs.fillna(0).values) + 2*prior
 
-    snaps['μ'] = soln.μ - soln.μ.max()
+    n = N.shape[0]
+    r = torch.nn.Parameter(torch.zeros(n))
+
+    def loss():
+        d = r[:, None] - r[None, :]
+        s = 1/(1 + torch.exp(-d))
+        
+        l = W*s.log() + (N - W)*(1 - s).log()
+        return -l.mean() + r.sum().pow(2)
+
+    optim = torch.optim.LBFGS([r], line_search_fn='strong_wolfe')
+
+    def closure():
+        l = loss()
+        optim.zero_grad()
+        l.backward()
+        return l
+        
+    optim.step(closure)
+    closure()
+
+    snaps['μ'] = (r - r.max()).detach().cpu().numpy()
+
+def pandas_elos(boardsize, **kwargs):
+    from . import data
+
+    snaps = data.snapshot_solns(boardsize, solve=False)
+    raw = pandas(boardsize)
+    add_elos(snaps, raw, **kwargs)
 
     return snaps
