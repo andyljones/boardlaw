@@ -133,7 +133,9 @@ def elo_errors(snaps):
         diffs = pd.DataFrame(μ.values[:, None] - μ.values[None, :], μ.index, μ.index)
         expected = 1/(1 + np.exp(-diffs))
 
-        errs.append((rates - expected).abs().mean())
+        err = rates - expected
+        err = (err + err.T).div(2)
+        errs.append(err.abs().mean())
     return pd.concat(errs)
 
 def plot_elo_errors(snaps):

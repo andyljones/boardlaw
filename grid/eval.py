@@ -241,7 +241,7 @@ def print_stats(boardsize, stats):
         f'  {format_seconds(duration)} so far. {format_seconds(remaining)} remaining, end {end:%a %d %b %H:%M}.\n'
         f'  {stats.moves/duration:.0f} moves/sec, {60*stats.matchups/duration:.0f} matchups/min.')
 
-def fast_eval(boardsize=5, **kwargs):
+def fast_eval(boardsize=5, n_workers=2, **kwargs):
     from boardlaw.arena import multi, common
 
     snaps = data.snapshot_solns(boardsize, solve=False)
@@ -260,7 +260,7 @@ def fast_eval(boardsize=5, **kwargs):
 
     from IPython import display
 
-    for rs, stats in multi.evaluate(worldfunc, agentfunc, games, chunksize=64):
+    for rs, stats in multi.evaluate(worldfunc, agentfunc, games, chunksize=64, n_workers=n_workers):
         asymdata.save(rs)
 
         display.clear_output(wait=True)

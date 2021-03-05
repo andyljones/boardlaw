@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from contextlib import contextmanager
 import pandas as pd
@@ -66,14 +67,19 @@ def pandas(boardsize):
     else:
         return pd.DataFrame(columns=['black_name', 'white_name', 'black_wins', 'white_wins', 'moves']).set_index(KEYS)
 
-def add_elos(snaps, raw, prior=.1):
-    games = (raw.black_wins + raw.white_wins).unstack().reindex(index=snaps.index, columns=snaps.index).fillna(0)
+def symmetrize(raw, agents=None):
+    games = (raw.black_wins + raw.white_wins).unstack().reindex(index=agents, columns=agents).fillna(0)
 
     black_wins = raw.black_wins.unstack().reindex_like(games)
     white_wins = raw.white_wins.unstack().reindex_like(games).T
 
     ws = (black_wins/games + white_wins/games.T)/2*(games + games.T)/2.
     gs = (games + games.T)/2.
+
+    return ws, gs
+
+def fast_elos(snaps, raw, prior=1):
+    ws, gs = symmetrize(raw, snaps.index)
 
     W = torch.as_tensor(ws.fillna(0).values) + prior
     N = torch.as_tensor(gs.fillna(0).values) + 2*prior
@@ -99,13 +105,26 @@ def add_elos(snaps, raw, prior=.1):
     optim.step(closure)
     closure()
 
-    snaps['μ'] = (r - r.max()).detach().cpu().numpy()
+    return (r - r.max()).detach().cpu().numpy()
+
+def elo_errors(snaps, raw):
+    μ = snaps.μ
+
+    ws, gs = symmetrize(raw, snaps.index)
+    rates = (ws/gs).reindex(index=μ.index, columns=μ.index)
+
+    diffs = pd.DataFrame(μ.values[:, None] - μ.values[None, :], μ.index, μ.index)
+    expected = 1/(1 + np.exp(-diffs))
+
+    err = (rates - expected).abs()
+    return pd.concat([err.max(), err.T.max()], 1).max(1)
 
 def pandas_elos(boardsize, **kwargs):
     from . import data
 
     snaps = data.snapshot_solns(boardsize, solve=False)
     raw = pandas(boardsize)
-    add_elos(snaps, raw, **kwargs)
+    snaps['μ'] = fast_elos(snaps, raw, **kwargs)
+    snaps['err'] = elo_errors(snaps, raw)
 
     return snaps
