@@ -189,7 +189,7 @@ def plot_nash_elos(joint):
     ps = model.params.mul(400/np.log(10)).apply(lambda x: f'{float(f"{x:.2g}"):g}')
     s = f'$\mathrm{{elo}} = {ps.boardsize} \cdot \mathrm{{boardsize}} + {ps["np.log10(flops)"]} \cdot \ln_{{10}}(\mathrm{{flops}}) + C$'
 
-    (pn.ggplot(df)
+    return (pn.ggplot(df)
         + pn.geom_line(pn.aes(x='flops', y='400/np.log(10)*elo', group='boardsize', color='factor(boardsize)'), size=2)
         + pn.geom_line(pn.aes(x='flops', y='400/np.log(10)*elohat', color='factor(boardsize)'), size=1, linetype='dashed')
         + pn.scale_x_continuous(trans='log10')
@@ -215,4 +215,40 @@ def run_nash_elos():
     flops = snaps.groupby(['boardsize', 'idx']).flops.mean().reset_index()
     joint = pd.merge(elos, flops)
 
-    plot_nash_elos(joint)
+    return plot_nash_elos(joint)
+
+def plot_adv_v_flops(snaps):
+    import plotnine as pn
+    from . import plot
+    
+    diffs = {}
+    for b in range(3, 10):
+        print(b)
+        raw = pandas(b)
+        ws, gs = symmetrize(raw)
+
+        rate = (ws/gs).fillna(.5)
+
+        strats = {}
+        payoffs = {}
+        for i, i_group in snaps.reindex(rate.index).groupby('idx'):
+            for j, j_group in snaps.reindex(rate.index).groupby('idx'):
+                if i != j:
+                    A = rate.reindex(index=i_group.index, columns=j_group.index)
+                    x, y = equilibrium(A)
+                    strats[i, j] = x, y 
+                    payoffs[i, j] = x @ A @ y
+        payoffs = pd.Series(payoffs).unstack()
+        
+        log_flops = snaps[snaps.boardsize == b].groupby('idx').flops.apply(lambda g: np.log10(g).mean())
+        index = (log_flops.values[1:] + log_flops.values[:-1])/2
+        diffs[b] = pd.Series((np.diag(payoffs, -1) - np.diag(payoffs, 1))/2, 10**index)
+        
+    df = pd.concat(diffs).reset_index()
+    df.columns = ['boardsize', 'flops', 'adv']
+
+    return (pn.ggplot(df)
+        + pn.geom_line(pn.aes(x='flops', y='adv', color='factor(boardsize)'), size=2)
+        + pn.scale_x_continuous(trans='log10')
+        + plot.mpl_theme()
+        + plot.poster_sizes())
