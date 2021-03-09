@@ -1,3 +1,4 @@
+import cvxpy as cp
 import numpy as np
 import torch
 from contextlib import contextmanager
@@ -78,8 +79,7 @@ def symmetrize(raw, agents=None):
 
     return ws, gs
 
-def fast_elos(snaps, raw, prior=1):
-    ws, gs = symmetrize(raw, snaps.index)
+def fast_elos(ws, gs, prior=1):
 
     W = torch.as_tensor(ws.fillna(0).values) + prior
     N = torch.as_tensor(gs.fillna(0).values) + 2*prior
@@ -124,7 +124,68 @@ def pandas_elos(boardsize, **kwargs):
 
     snaps = data.snapshot_solns(boardsize, solve=False)
     raw = pandas(boardsize)
-    snaps['μ'] = fast_elos(snaps, raw, **kwargs)
+    ws, gs = symmetrize(raw, snaps.index)
+    snaps['μ'] = fast_elos(ws, gs, **kwargs)
     snaps['err'] = elo_errors(snaps, raw)
 
     return snaps
+
+def equilibrium(A):
+    # https://www.cs.cmu.edu/~ggordon/780-spring09/slides/Game%20theory%20lecture2-algs%20for%20normal%20form.pdf
+    x = cp.Variable(A.shape[0])
+    z = cp.Variable()
+
+    bounds = [
+        z - A.values.T @ x <= 0, 
+        cp.sum(x) == 1, 
+        x >= 0]
+
+    cp.Problem(cp.Maximize(z), bounds).solve()
+
+    x = pd.Series(x.value, A.index)
+    y = pd.Series(bounds[0].dual_value, A.columns)
+    return x, y
+
+def nash_elos(snaps, rate):
+    strats = {}
+    payoffs = {}
+    for i, i_group in snaps.reindex(rate.index).groupby('idx'):
+        for j, j_group in snaps.reindex(rate.index).groupby('idx'):
+            if i != j:
+                A = rate.reindex(index=i_group.index, columns=j_group.index)
+                x, y = equilibrium(A)
+                strats[i, j] = x, y 
+                payoffs[i, j] = x @ A @ y
+    payoffs = pd.Series(payoffs).unstack()
+
+    ws = 1000*payoffs.fillna(.5)
+    gs = 0*ws + 1000
+
+    return pd.Series(fast_elos(ws, gs), payoffs.index)
+
+def plot_nash_elos(joint):
+    from grid import plot
+    import plotnine as pn
+    (pn.ggplot(joint)
+        + pn.geom_line(pn.aes(x='flops', y='elo', group='boardsize', color='factor(boardsize)'), size=2)
+        + pn.scale_x_continuous(trans='log10')
+        + pn.scale_color_discrete(name='boardsize')
+        + pn.labs(title='elos of nash equilibiria')
+        + plot.mpl_theme()
+        + plot.poster_sizes())
+
+def run_nash_elos():
+    snaps = pd.concat([pandas_elos(b) for b in range(3, 10)])
+    snaps = snaps[snaps.nodes.isnull()]
+
+    elos = {}
+    for b in snaps.boardsize.unique():
+        print(b)
+        raw = pandas(b)
+        ws, gs = symmetrize(raw)
+        elos[b] = nash_elos(snaps, (ws/gs).fillna(.5))
+    elos = pd.concat(elos).rename('elo').reset_index().rename(columns={'level_0': 'boardsize', 'level_1': 'idx'})
+    flops = snaps.groupby(['boardsize', 'idx']).flops.mean().reset_index()
+    joint = pd.merge(elos, flops)
+
+    plot_nash_elos(joint)
