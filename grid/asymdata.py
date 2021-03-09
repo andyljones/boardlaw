@@ -164,15 +164,42 @@ def nash_elos(snaps, rate):
     return pd.Series(fast_elos(ws, gs), payoffs.index)
 
 def plot_nash_elos(joint):
-    from grid import plot
     import plotnine as pn
-    (pn.ggplot(joint)
-        + pn.geom_line(pn.aes(x='flops', y='elo', group='boardsize', color='factor(boardsize)'), size=2)
+    from . import plot
+    import statsmodels.formula.api as smf
+
+    cutoffs = {
+        3: (5e10, 2e11),
+        4: (1e11, 2e12),
+        5: (2e11, 8e12),
+        6: (7e11, 2e14),
+        7: (1e12, 3e15),
+        8: (3e12, 1e16),
+        9: (6e12, 1e17)}
+    cutoffs = pd.DataFrame.from_dict(cutoffs, orient='index', columns=('lower', 'upper')).rename_axis(index='boardsize')
+
+    df =(
+        joint
+        .join(cutoffs, on='boardsize')
+        .query('lower <= flops <= upper'))
+
+    model = smf.ols('elo ~ boardsize + np.log10(flops) + 1', df).fit()
+    df['elohat'] = model.predict(df)
+
+    ps = model.params.mul(400/np.log(10)).apply(lambda x: f'{float(f"{x:.2g}"):g}')
+    s = f'$\mathrm{{elo}} = {ps.boardsize} \cdot \mathrm{{boardsize}} + {ps["np.log10(flops)"]} \cdot \ln_{{10}}(\mathrm{{flops}}) + C$'
+
+    (pn.ggplot(df)
+        + pn.geom_line(pn.aes(x='flops', y='400/np.log(10)*elo', group='boardsize', color='factor(boardsize)'), size=2)
+        + pn.geom_line(pn.aes(x='flops', y='400/np.log(10)*elohat', color='factor(boardsize)'), size=1, linetype='dashed')
         + pn.scale_x_continuous(trans='log10')
         + pn.scale_color_discrete(name='boardsize')
         + pn.labs(title='elos of nash equilibiria')
+        + pn.annotate('text', 3e14, -2000, label=s, size=20)
+        + pn.coord_cartesian(None, (None, 0))
         + plot.mpl_theme()
         + plot.poster_sizes())
+
 
 def run_nash_elos():
     snaps = pd.concat([pandas_elos(b) for b in range(3, 10)])
