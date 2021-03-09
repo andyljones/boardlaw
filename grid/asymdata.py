@@ -146,7 +146,9 @@ def equilibrium(A):
     y = pd.Series(bounds[0].dual_value, A.columns)
     return x, y
 
-def nash_elos(snaps, rate):
+def nash_solns(snaps, ws, gs):
+    rate = (ws/gs).fillna(.5)
+
     strats = {}
     payoffs = {}
     for i, i_group in snaps.reindex(rate.index).groupby('idx'):
@@ -157,7 +159,9 @@ def nash_elos(snaps, rate):
                 strats[i, j] = x, y 
                 payoffs[i, j] = x @ A @ y
     payoffs = pd.Series(payoffs).unstack()
+    return strats, payoffs
 
+def nash_elos(payoffs):
     ws = 1000*payoffs.fillna(.5)
     gs = 0*ws + 1000
 
@@ -210,7 +214,8 @@ def run_nash_elos():
         print(b)
         raw = pandas(b)
         ws, gs = symmetrize(raw)
-        elos[b] = nash_elos(snaps, (ws/gs).fillna(.5))
+        strats, payoffs = nash_solns(snaps, ws, gs)
+        elos[b] = nash_elos(payoffs)
     elos = pd.concat(elos).rename('elo').reset_index().rename(columns={'level_0': 'boardsize', 'level_1': 'idx'})
     flops = snaps.groupby(['boardsize', 'idx']).flops.mean().reset_index()
     joint = pd.merge(elos, flops)
@@ -227,19 +232,8 @@ def plot_adv_v_flops(snaps):
         raw = pandas(b)
         ws, gs = symmetrize(raw)
 
-        rate = (ws/gs).fillna(.5)
+        strats, payoffs = nash_solns(snaps, ws, gs)
 
-        strats = {}
-        payoffs = {}
-        for i, i_group in snaps.reindex(rate.index).groupby('idx'):
-            for j, j_group in snaps.reindex(rate.index).groupby('idx'):
-                if i != j:
-                    A = rate.reindex(index=i_group.index, columns=j_group.index)
-                    x, y = equilibrium(A)
-                    strats[i, j] = x, y 
-                    payoffs[i, j] = x @ A @ y
-        payoffs = pd.Series(payoffs).unstack()
-        
         log_flops = snaps[snaps.boardsize == b].groupby('idx').flops.apply(lambda g: np.log10(g).mean())
         index = (log_flops.values[1:] + log_flops.values[:-1])/2
         diffs[b] = pd.Series((np.diag(payoffs, -1) - np.diag(payoffs, 1))/2, 10**index)
