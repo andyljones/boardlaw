@@ -1,6 +1,67 @@
 import plotnine as pn
 import pandas as pd
 from . import eval, plot, asymdata, data
+import numpy as np
+import time
+
+def node_eval(boardsize, nodes, n_workers=4):
+    from boardlaw.arena import multi, common
+    n_envs_per = 512
+
+    snaps = data.snapshot_solns(boardsize, solve=False)
+    if 'nodes' in snaps:
+        snaps = snaps[snaps.nodes.isnull()]
+
+    raw = asymdata.pandas(boardsize)
+    raw['games'] = raw.black_wins + raw.white_wins
+
+    games = raw.games.unstack().reindex(index=snaps.index, columns=snaps.index).fillna(0)
+
+    def worldfunc(n_envs):
+        return common.worlds(snaps.run.iloc[0], n_envs, device='cuda')
+
+    def agentfunc(name):
+        shortrun, idx, nodes = name.split('.')
+        row = snaps.loc[f'{shortrun}.{idx}']
+        agent = common.agent(row.run, row.idx, device='cuda')
+        agent.kwargs['n_nodes'] = int(nodes)
+        return agent
+        
+    from IPython import display
+
+    jobs = {}
+    for nickname in snaps.index:
+        names = [f'{nickname}.{n}' for n in nodes]
+        subgames = games.reindex(index=names, columns=names).fillna(0)
+        subgames.values[np.diag_indices_from(subgames)] = n_envs_per
+        jobs[nickname] = subgames
+        
+    from boardlaw.arena import multi
+    from rebar import parallel
+    from random import shuffle
+
+    multi.set_start_method('spawn', True)
+    stats = multi.initial_stats(len(jobs))
+    with parallel.parallel(multi.evaluate_chunk, N=n_workers, executor='cuda') as pool:
+        keys = list(jobs)
+        shuffle(keys)
+
+        jobs = {k: pool(worldfunc, agentfunc, jobs[k], n_envs_per) for k in keys}
+        while jobs:
+            for k, future in list(jobs.items()):
+                if future.done():
+                    results = future.result()
+                    multi.update_stats(stats, results)
+                    asymdata.save(results)
+                    del jobs[k]
+
+            stats['end'] = time.time()
+            #yield [], stats.copy()
+
+            display.clear_output(wait=True)
+            multi.print_stats(boardsize, stats)
+            time.sleep(.1)
+
 
 def run(boardsize=9):
     snaps = data.snapshot_solns(9, solve=False)
@@ -37,7 +98,14 @@ def run(boardsize=9):
     info['elo'] = elos.values
     info = pd.merge(info[['nodes', 'nickname', 'elo']], snaps, left_on='nickname', right_on='nickname')    
 
-    return (pn.ggplot(info)
-        + pn.geom_point(pn.aes(x='flops', y='elo', color='nodes'))
-        + pn.scale_x_continuous(trans='log10')
-        + plot.mpl_theme())
+    info['test_flops'] = info.nodes*info.flops/info.samples
+
+    return info
+
+def plot_frontier(info):
+    frontiers = {}
+    for e in np.linspace(-10, 0, 11):
+        frontiers[e] = info[info.elo > e].set_index('flops').sort_index().test_flops.expanding().min().groupby(level=0).min()
+    frontiers = pd.concat(frontiers).unstack().T
+
+    frontiers.ffill().plot(logx=True, logy=True, marker='.', cmap='viridis')
