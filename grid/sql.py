@@ -5,16 +5,17 @@
 #
 # Pandas SQL: https://pandas.pydata.org/docs/user_guide/io.html#io-sql-method
 
+import pandas as pd
 import sqlalchemy
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, Float, String, ForeignKey, create_engine
+from pavlov import runs
 
 Base = declarative_base()
 class Run(Base):
     __tablename__ = 'runs'
 
-    id = Column(Integer, primary_key=True)
-    name = Column(String)
+    name = Column(String, primary_key=True)
     description = Column(String)
     boardsize = Column(Integer)
     width = Column(Integer)
@@ -22,24 +23,41 @@ class Run(Base):
     nodes = Column(Integer)
 
 class Snap(Base):
-    __tablename__ = 'snap'
+    __tablename__ = 'snaps'
 
-    id = Column(Integer, primary_key=True)
-    run = Column(String, ForeignKey('run.id'))
-    idx = Column(Integer)
+    run = Column(String, ForeignKey('runs.id'), primary_key=True)
+    idx = Column(Integer, primary_key=True)
+    samples = Column(Float)
+    flops = Column(Float)
 
 class Agent(Base):
-    __tablename__ = 'agent'
+    __tablename__ = 'agents'
 
     id = Column(Integer, primary_key=True)
-    snap = Column(Integer, ForeignKey('snap.id'))
+    snap = Column(Integer, ForeignKey('snaps.id'))
     nodes = Column(Integer)
+    c = Column(Float)
 
 class Trial(Base):
-    __tablename__ = 'trial'
+    __tablename__ = 'trials'
 
     id = Column(Integer, primary_key=True)
-    black_agent = Column(Integer, ForeignKey('agent.id'))
-    white_agent = Column(Integer, ForeignKey('agent.id'))
+    black_agent = Column(Integer, ForeignKey('agents.id'))
+    white_agent = Column(Integer, ForeignKey('agents.id'))
     black_wins = Column(Integer)
     white_wins = Column(Integer)
+    moves = Column(Integer)
+    times = Column(Integer)
+
+def create():
+    engine = create_engine('sqlite:///:memory')
+    with engine.connect() as conn:
+        rs = runs.pandas()
+        params = rs.params.dropna().apply(pd.Series).reindex(rs.index)
+        insert = pd.concat([rs.index.to_series().to_frame('name'), params[['boardsize', 'width', 'depth', 'nodes']]], 1)
+        insert.to_sql('runs', conn, if_exists='append')
+
+
+
+
+
