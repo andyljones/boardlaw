@@ -83,6 +83,7 @@ def fast_elos(ws, gs, prior=1):
 
     W = torch.as_tensor(ws.fillna(0).values) + prior
     N = torch.as_tensor(gs.fillna(0).values) + 2*prior
+    mask = torch.as_tensor(gs.isnull().values)
 
     n = N.shape[0]
     r = torch.nn.Parameter(torch.zeros(n))
@@ -92,7 +93,7 @@ def fast_elos(ws, gs, prior=1):
         s = 1/(1 + torch.exp(-d))
         
         l = W*s.log() + (N - W)*(1 - s).log()
-        return -l.mean() + r.sum().pow(2)
+        return -l[~mask].mean() + .01*r.sum().pow(2)
 
     optim = torch.optim.LBFGS([r], line_search_fn='strong_wolfe')
 
