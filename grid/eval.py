@@ -227,20 +227,6 @@ def structured_eval(n_workers=12, suggester=FullSuggester, **kwargs):
 
             time.sleep(.1)
 
-def format_seconds(s):
-    td = pd.to_timedelta(s, unit='s')
-    h = td.components.days*24 + td.components.hours
-    return f'{h}h{td.components.minutes:02d}m{td.components.seconds:02d}s'
-    
-def print_stats(boardsize, stats):
-    duration = stats.end - stats.start
-    remaining = (stats.total - stats.finished)/(stats.finished + 1)*(stats.end - stats.start)
-    end = pd.to_datetime(stats.end + remaining, unit='s')
-    print(
-        f'{boardsize}x{boardsize}, {stats.finished}/{stats.total}:\n'
-        f'  {format_seconds(duration)} so far. {format_seconds(remaining)} remaining, end {end:%a %d %b %H:%M}.\n'
-        f'  {stats.moves/duration:.0f} moves/sec, {60*stats.matchups/duration:.0f} matchups/min.')
-
 def fast_eval(boardsize=5, n_workers=2, **kwargs):
     from boardlaw.arena import multi, common
 
@@ -264,4 +250,64 @@ def fast_eval(boardsize=5, n_workers=2, **kwargs):
         asymdata.save(rs)
 
         display.clear_output(wait=True)
-        print_stats(boardsize, stats)
+        multi.print_stats(boardsize, stats)
+
+def node_eval(boardsize=5, n_workers=4):
+    from boardlaw.arena import multi, common
+    n_envs_per = 512
+
+    snaps = data.snapshot_solns(boardsize, solve=False)
+    if 'nodes' in snaps:
+        snaps = snaps[snaps.nodes.isnull()]
+
+    raw = asymdata.pandas(boardsize)
+    raw['games'] = raw.black_wins + raw.white_wins
+
+    games = raw.games.unstack().reindex(index=snaps.index, columns=snaps.index).fillna(0)
+
+    def worldfunc(n_envs):
+        return common.worlds(snaps.run.iloc[0], n_envs, device='cuda')
+
+    def agentfunc(name):
+        shortrun, idx, nodes = name.split('.')
+        row = snaps.loc[f'{shortrun}.{idx}']
+        agent = common.agent(row.run, row.idx, device='cuda')
+        agent.kwargs['n_nodes'] = int(nodes)
+        return agent
+        
+    from IPython import display
+
+    nodes = [2, 4, 8, 16, 32, 64, 128]
+    jobs = {}
+    for nickname in snaps.index:
+        names = [f'{nickname}.{n}' for n in nodes]
+        subgames = games.reindex(index=names, columns=names).fillna(0)
+        subgames.values[np.diag_indices_from(subgames)] = n_envs_per
+        jobs[nickname] = subgames
+        
+    from boardlaw.arena import multi
+    from rebar import parallel
+    from random import shuffle
+
+    multi.set_start_method('spawn', True)
+    stats = multi.initial_stats(len(jobs))
+    with parallel.parallel(multi.evaluate_chunk, N=n_workers, executor='cuda') as pool:
+        keys = list(jobs)
+        shuffle(keys)
+
+        jobs = {k: pool(worldfunc, agentfunc, jobs[k], n_envs_per) for k in keys}
+        while jobs:
+            for k, future in list(jobs.items()):
+                if future.done():
+                    results = future.result()
+                    multi.update_stats(stats, results)
+                    asymdata.save(results)
+                    del jobs[k]
+
+            stats['end'] = time.time()
+            #yield [], stats.copy()
+
+            display.clear_output(wait=True)
+            multi.print_stats(boardsize, stats)
+            time.sleep(.1)
+

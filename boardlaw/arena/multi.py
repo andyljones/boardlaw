@@ -187,7 +187,7 @@ class ChunkEvaluator:
         results = self.record(transitions, live, start, end)
         return results
 
-def _evaluate(worldfunc, agentfunc, subgames, n_envs_per):
+def evaluate_chunk(worldfunc, agentfunc, subgames, n_envs_per):
     agents = {n: agentfunc(n) for n in subgames.index}
     evaluator = ChunkEvaluator(worldfunc, agents, subgames, n_envs_per=n_envs_per)
 
@@ -208,6 +208,20 @@ def update_stats(stats, results):
         stats['moves'] += r.moves
         stats['games'] += r.games
         stats['matchups'] += 1
+
+def format_seconds(s):
+    td = pd.to_timedelta(s, unit='s')
+    h = td.components.days*24 + td.components.hours
+    return f'{h}h{td.components.minutes:02d}m{td.components.seconds:02d}s'
+    
+def print_stats(boardsize, stats):
+    duration = stats.end - stats.start
+    remaining = (stats.total - stats.finished)/(stats.finished + 1)*(stats.end - stats.start)
+    end = pd.to_datetime(stats.end + remaining, unit='s')
+    print(
+        f'{boardsize}x{boardsize}, {stats.finished}/{stats.total}:\n'
+        f'  {format_seconds(duration)} so far. {format_seconds(remaining)} remaining, end {end:%a %d %b %H:%M}.\n'
+        f'  {stats.moves/duration:.0f} moves/sec, {60*stats.matchups/duration:.0f} matchups/min.')
 
 def evaluate(worldfunc, agentfunc, games, n_envs_per=512, chunksize=64, n_workers=4):
     assert list(games.index) == list(games.columns)
@@ -238,7 +252,7 @@ def evaluate(worldfunc, agentfunc, games, n_envs_per=512, chunksize=64, n_worker
 
     set_start_method('spawn', True)
     stats = initial_stats(len(jobs))
-    with parallel.parallel(_evaluate, N=n_workers, executor='cuda') as pool:
+    with parallel.parallel(evaluate_chunk, N=n_workers, executor='cuda') as pool:
         idxs = list(jobs)
         shuffle(idxs)
 
