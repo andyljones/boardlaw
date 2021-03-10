@@ -95,7 +95,7 @@ def fast_elos(ws, gs, prior=1):
         l = W*s.log() + (N - W)*(1 - s).log()
         return -l[~mask].mean() + .01*r.sum().pow(2)
 
-    optim = torch.optim.LBFGS([r], line_search_fn='strong_wolfe')
+    optim = torch.optim.LBFGS([r], line_search_fn='strong_wolfe', max_iter=100)
 
     def closure():
         l = loss()
