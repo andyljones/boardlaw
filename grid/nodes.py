@@ -42,7 +42,7 @@ def node_eval(boardsize, nodes=[1, 2, 4, 8, 16, 32, 64, 128, 256, 512], n_worker
 
     multi.set_start_method('spawn', True)
     stats = multi.initial_stats(len(jobs))
-    with parallel.parallel(multi.evaluate_chunk, N=n_workers, executor='cuda') as pool:
+    with parallel.parallel(multi.evaluate_chunk, N=0, executor='cuda') as pool:
         keys = list(jobs)
         shuffle(keys)
 

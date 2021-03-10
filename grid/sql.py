@@ -11,6 +11,9 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, Float, String, ForeignKey, create_engine
 from pavlov import runs
 
+# First modern run
+FIRST_RUN = pd.Timestamp('2021-02-03 12:47:26.557749+00:00')
+
 Base = declarative_base()
 class Run(Base):
     __tablename__ = 'runs'
@@ -52,9 +55,10 @@ class Trial(Base):
 def create():
     engine = create_engine('sqlite:///:memory')
     with engine.connect() as conn:
-        rs = runs.pandas()
+        rs = runs.pandas().loc[lambda df: df._created >= FIRST_RUN]
         params = rs.params.dropna().apply(pd.Series).reindex(rs.index)
         insert = pd.concat([rs.index.to_series().to_frame('name'), params[['boardsize', 'width', 'depth', 'nodes']]], 1)
+        insert['nodes'] = insert.nodes.fillna(64)
         insert.to_sql('runs', conn, if_exists='append')
 
 
