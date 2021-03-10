@@ -4,7 +4,7 @@ from . import eval, plot, asymdata, data
 import numpy as np
 import time
 
-def node_eval(boardsize, nodes, n_workers=4):
+def node_eval(boardsize, nodes=[1, 2, 4, 8, 16, 32, 64, 128, 256, 512], n_workers=4):
     from boardlaw.arena import multi, common
     n_envs_per = 512
 
@@ -15,7 +15,7 @@ def node_eval(boardsize, nodes, n_workers=4):
     raw = asymdata.pandas(boardsize)
     raw['games'] = raw.black_wins + raw.white_wins
 
-    games = raw.games.unstack().reindex(index=snaps.index, columns=snaps.index).fillna(0)
+    games = raw.games.unstack()
 
     def worldfunc(n_envs):
         return common.worlds(snaps.run.iloc[0], n_envs, device='cuda')
@@ -64,8 +64,8 @@ def node_eval(boardsize, nodes, n_workers=4):
 
 
 def run(boardsize=9):
-    snaps = data.snapshot_solns(9, solve=False)
-    raw = asymdata.pandas(9).reset_index()
+    snaps = data.snapshot_solns(boardsize, solve=False)
+    raw = asymdata.pandas(boardsize).reset_index()
     raw['games'] = raw.black_wins + raw.white_wins
 
     regex = r'(?P<run>[\w-]+)\.(?P<idx>\d+)(?:\.(?P<nodes>\d+))?'
@@ -81,10 +81,7 @@ def run(boardsize=9):
     raw['black_name'] = raw.black_nickname + '.' + raw.black_nodes.astype(int).astype(str)
     raw['white_name'] = raw.white_nickname + '.' + raw.white_nodes.astype(int).astype(str)    
 
-    runs = raw.black_run.unique()
-    subset = raw[raw.black_run.isin(runs) & raw.white_run.isin(runs)]
-
-    df = subset.pivot('black_name', 'white_name', ['black_wins', 'white_wins'])
+    df = raw.pivot('black_name', 'white_name', ['black_wins', 'white_wins'])
     wins = (df.black_wins + df.white_wins.T)
     games = wins + wins.T
 
@@ -99,13 +96,16 @@ def run(boardsize=9):
     info = pd.merge(info[['nodes', 'nickname', 'elo']], snaps, left_on='nickname', right_on='nickname')    
 
     info['test_flops'] = info.nodes*info.flops/info.samples
+    # Round the train flops so that the frontier is smooth
+    info['train_flops'] = info['flops'].pipe(np.log10).round(1).pipe(lambda s: 10**s) 
 
     return info
 
 def plot_frontier(info):
     frontiers = {}
     for e in np.linspace(-10, 0, 11):
-        frontiers[e] = info[info.elo > e].set_index('flops').sort_index().test_flops.expanding().min().groupby(level=0).min()
+        frontiers[e] = info[info.elo > e].groupby('train_flops').test_flops.min().expanding().min()
+        
     frontiers = pd.concat(frontiers).unstack().T
 
-    frontiers.ffill().plot(logx=True, logy=True, marker='.', cmap='viridis')
+    frontiers.ffill().plot(logx=True, logy=True, cmap='viridis', grid=True)
