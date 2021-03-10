@@ -35,7 +35,7 @@ class MCTS:
         self.n_envs = world.n_envs
         self.n_nodes = n_nodes
         self.n_seats = world.n_seats
-        assert n_nodes > 1, 'MCTS requires at least two nodes'
+        assert n_nodes > 1, 'MCTS requires at least one node'
 
         self.envs = torch.arange(world.n_envs, device=self.device)
 
