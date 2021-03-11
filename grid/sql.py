@@ -6,17 +6,18 @@ from pavlov import runs, storage
 import ast
 from tqdm.auto import tqdm
 from . import asymdata
+from pathlib import Path
 
 # First modern run
 FIRST_RUN = pd.Timestamp('2021-02-03 12:47:26.557749+00:00')
 
-DATABASE = 'output/experiments/eval/database.sql'
+DATABASE = Path('output/experiments/eval/database.sql')
 
 Base = declarative_base()
 class Run(Base):
     __tablename__ = 'runs'
 
-    name = Column(String, primary_key=True)
+    run = Column(String, primary_key=True)
     description = Column(String)
     boardsize = Column(Integer)
     width = Column(Integer)
@@ -27,7 +28,7 @@ class Snap(Base):
     __tablename__ = 'snaps'
 
     id = Column(Integer, primary_key=True)
-    run = Column(String, ForeignKey('runs.name'))
+    run = Column(String, ForeignKey('runs.run'))
     idx = Column(Integer)
     samples = Column(Float)
     flops = Column(Float)
@@ -54,17 +55,17 @@ class Trial(Base):
 def run_data():
     r = runs.pandas().loc[lambda df: df._created >= FIRST_RUN]
     params = r.params.dropna().apply(pd.Series).reindex(r.index)
-    insert = pd.concat([r.index.to_series().to_frame('name'), params[['boardsize', 'width', 'depth', 'nodes']]], 1)
+    insert = pd.concat([r.index.to_series().to_frame('run'), params[['boardsize', 'width', 'depth', 'nodes']]], 1)
     insert['nodes'] = insert.nodes.fillna(64)
-    return insert
+    return insert.reset_index(drop=True)
 
 def snapshot_data(r):
     snapshots = {}
-    for r, _ in tqdm(list(r.iterrows()), desc='snapshots'):
-        for i, s in storage.snapshots(r).items():
-            stored = storage.load_snapshot(r, i)
+    for _, r in tqdm(list(r.iterrows()), desc='snapshots'):
+        for i, s in storage.snapshots(r.run).items():
+            stored = storage.load_snapshot(r.run, i)
             if 'n_samples' in stored:
-                snapshots[r, i] = {
+                snapshots[r.run, i] = {
                     'samples': stored['n_samples'], 
                     'flops': stored['n_flops']}
     snapshots = (pd.DataFrame.from_dict(snapshots, orient='index')
@@ -104,19 +105,22 @@ def trial_agent_data(s):
 
 
 def create():
-    engine = create_engine('sqlite:///' + DATABASE)
+    if not DATABASE.parent.exists():
+        DATABASE.parent.mkdir(exist_ok=True, parents=True)
+
+    engine = create_engine('sqlite:///' + str(DATABASE))
     with engine.connect() as conn:
         Base.metadata.create_all(engine)
 
         r = run_data()
-        r.to_sql('runs', conn, if_exists='replace')
+        r.to_sql('runs', conn, index=False, if_exists='append')
 
         s = snapshot_data(r)
-        s.to_sql('snaps', conn, if_exists='replace')
+        s.to_sql('snaps', conn, index=False, if_exists='append')
 
         a, t = trial_agent_data(s)
-        a.to_sql('agents', conn, if_exists='replace')
-        t.to_sql('trials', conn, if_exists='replace')
+        a.to_sql('agents', conn, index=False, if_exists='append')
+        t.to_sql('trials', conn, index=False, if_exists='append')
 
 
 
