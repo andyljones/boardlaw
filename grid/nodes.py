@@ -1,3 +1,4 @@
+import statsmodels.formula.api as smf
 import plotnine as pn
 import pandas as pd
 from . import eval, plot, asymdata, data
@@ -42,7 +43,7 @@ def node_eval(boardsize, nodes=[1, 2, 4, 8, 16, 32, 64, 128, 256, 512], n_worker
 
     multi.set_start_method('spawn', True)
     stats = multi.initial_stats(len(jobs))
-    with parallel.parallel(multi.evaluate_chunk, N=0, executor='cuda') as pool:
+    with parallel.parallel(multi.evaluate_chunk, N=n_workers, executor='cuda') as pool:
         keys = list(jobs)
         shuffle(keys)
 
@@ -108,4 +109,30 @@ def plot_frontier(info):
         
     frontiers = pd.concat(frontiers).unstack().T
 
-    frontiers.ffill().plot(logx=True, logy=True, cmap='viridis', grid=True)
+    distinct = frontiers.pipe(np.log10).round(1).pipe(lambda df: 10**df)
+    distinct = distinct.where(distinct.iloc[-1].eq(distinct).cumsum().le(1))
+    distinct = distinct.stack().reset_index()
+    distinct.columns = ['train_flops', 'elo', 'test_flops']
+
+    model = smf.ols('np.log10(test_flops) ~ np.log10(train_flops) + elo + 1', distinct).fit()
+    distinct['test_flops_hat'] = 10**model.predict(distinct)
+
+    df = frontiers.stack().reset_index()
+    df.columns = ['train_flops', 'elo', 'test_flops']
+    df = pd.merge(df, distinct.drop('test_flops', 1), on=['train_flops', 'elo'], how='left')
+
+    ps = model.params.copy()
+    ps['elo'] = ps.elo*400/np.log(10)
+    ps = ps.apply(lambda x: f'{float(f"{x:.2g}"):g}')
+    s = f'$\ln_{{10}}\mathrm{{test}} = {ps["np.log10(train_flops)"]} \cdot \ln_{{10}}\mathrm{{train}} + C$'
+
+    return (pn.ggplot(df, pn.aes(x='train_flops', color='factor(elo)'))
+        + pn.geom_line(pn.aes(y='test_flops'), size=2)
+        + pn.geom_line(pn.aes(y='test_flops_hat'), size=2, linetype='dashed')
+        + pn.scale_x_continuous(trans='log10')
+        + pn.scale_y_continuous(trans='log10')
+        + pn.annotate('text', 3e13, 1.5e9, label=s, size=20)
+        + pn.scale_color_discrete(name='elo')
+        + pn.labs(title='tradeoff between train and test compute is roughly even')
+        + plot.mpl_theme()
+        + plot.poster_sizes())

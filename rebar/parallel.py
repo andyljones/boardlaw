@@ -5,6 +5,10 @@ import types
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, Future, _base, as_completed
 import logging
 from loky.process_executor import ProcessPoolExecutor as LokyPoolExecutor, _CURRENT_DEPTH, _process_worker, mp
+import loky.process_executor
+
+# Disable the extraordinarily frustrating memory leak protection.
+loky.process_executor._USE_PSUTIL = False
 
 log = logging.getLogger(__name__)
 
