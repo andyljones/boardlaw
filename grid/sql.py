@@ -5,6 +5,7 @@ from sqlalchemy import Column, Integer, Float, String, ForeignKey, create_engine
 from pavlov import runs, storage
 import ast
 from tqdm.auto import tqdm
+from . import asymdata
 
 # First modern run
 FIRST_RUN = pd.Timestamp('2021-02-03 12:47:26.557749+00:00')
@@ -23,8 +24,9 @@ class Run(Base):
 class Snap(Base):
     __tablename__ = 'snaps'
 
-    run = Column(String, ForeignKey('runs.id'), primary_key=True)
-    idx = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True)
+    run = Column(String, ForeignKey('runs.name'))
+    idx = Column(Integer)
     samples = Column(Float)
     flops = Column(Float)
 
@@ -47,9 +49,16 @@ class Trial(Base):
     moves = Column(Integer)
     times = Column(Integer)
 
-def snaps(rs):
+def run_data():
+    r = runs.pandas().loc[lambda df: df._created >= FIRST_RUN]
+    params = r.params.dropna().apply(pd.Series).reindex(r.index)
+    insert = pd.concat([r.index.to_series().to_frame('name'), params[['boardsize', 'width', 'depth', 'nodes']]], 1)
+    insert['nodes'] = insert.nodes.fillna(64)
+    return insert
+
+def snapshot_data(r):
     snapshots = {}
-    for r, _ in tqdm(list(rs.iterrows()), desc='snapshots'):
+    for r, _ in tqdm(list(r.iterrows()), desc='snapshots'):
         for i, s in storage.snapshots(r).items():
             stored = storage.load_snapshot(r, i)
             if 'n_samples' in stored:
@@ -61,17 +70,50 @@ def snaps(rs):
                     .reset_index())
     return snapshots
 
+def trial_agent_data(s):
+    trials = pd.concat([asymdata.pandas(b) for b in range(3, 10)]).reset_index()
+
+    regex = r'(?P<run>[\w-]+)\.(?P<idx>\d+)(?:\.(?P<nodes>\d+))?'
+    black_agents = trials.black_name.str.extract(regex).fillna(64)
+    white_agents = trials.white_name.str.extract(regex).fillna(64)
+
+    agents = (pd.concat([black_agents, white_agents])
+                .drop_duplicates(['run', 'idx', 'nodes'])
+                .reset_index(drop=True)
+                .rename_axis(index='id')
+                .reset_index('id'))
+
+    short = pd.concat({
+            'run': s.run.str.extract(r'.* (?P<nickname>[\w-]+)$', expand=False), 
+            'idx': s.idx.astype(str), 
+            'id': s.index.to_series()}, 1)
+    agents = (pd.merge(agents, short, how='left', on=['run', 'idx'], suffixes=('', '_'))
+                .rename(columns={'id_': 'snap'}))
+    agents['c'] = 1/16
+
+    trials['black_agent'] = pd.merge(black_agents, agents, on=['run', 'idx', 'nodes'], how='left')['id']
+    trials['white_agent'] = pd.merge(white_agents, agents, on=['run', 'idx', 'nodes'], how='left')['id']
+    trials = (trials
+                .rename_axis(index='id')
+                .reset_index()
+                [['id', 'black_agent', 'white_agent', 'black_wins', 'white_wins', 'moves', 'times']])
+
+    return agents[['id', 'snap', 'nodes', 'c']], trials
+
+
 def create():
     engine = create_engine('sqlite:///:memory:')
     with engine.connect() as conn:
-        rs = runs.pandas().loc[lambda df: df._created >= FIRST_RUN]
-        params = rs.params.dropna().apply(pd.Series).reindex(rs.index)
-        insert = pd.concat([rs.index.to_series().to_frame('name'), params[['boardsize', 'width', 'depth', 'nodes']]], 1)
-        insert['nodes'] = insert.nodes.fillna(64)
-        insert.to_sql('runs', conn, if_exists='replace')
+        r = run_data()
+        r.to_sql('runs', conn, if_exists='replace')
 
-        ss = snaps(rs)
-        ss.to_sql('snaps', conn, if_exists='replace')
+        s = snapshot_data(r)
+        s.to_sql('snaps', conn, if_exists='replace')
+
+        a, t = trial_agent_data(s)
+        a.to_sql('agents', conn)
+        t.to_sql('trials', conn)
+
 
 
 
