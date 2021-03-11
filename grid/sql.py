@@ -1,15 +1,10 @@
-# Right, time for a Serious Database for all this crap you've picked up
-# * `run` table, with the run-specific stuff
-# * `snapshot` table, with snapshot-specific stuff
-# * `match` table, with results of matchups between tables. extra columns for extra arguments.
-#
-# Pandas SQL: https://pandas.pydata.org/docs/user_guide/io.html#io-sql-method
-
 import pandas as pd
 import sqlalchemy
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, Float, String, ForeignKey, create_engine
-from pavlov import runs
+from pavlov import runs, storage
+import ast
+from tqdm.auto import tqdm
 
 # First modern run
 FIRST_RUN = pd.Timestamp('2021-02-03 12:47:26.557749+00:00')
@@ -52,15 +47,31 @@ class Trial(Base):
     moves = Column(Integer)
     times = Column(Integer)
 
+def snaps(rs):
+    snapshots = {}
+    for r, _ in tqdm(list(rs.iterrows()), desc='snapshots'):
+        for i, s in storage.snapshots(r).items():
+            stored = storage.load_snapshot(r, i)
+            if 'n_samples' in stored:
+                snapshots[r, i] = {
+                    'samples': stored['n_samples'], 
+                    'flops': stored['n_flops']}
+    snapshots = (pd.DataFrame.from_dict(snapshots, orient='index')
+                    .rename_axis(index=('run', 'idx'))
+                    .reset_index())
+    return snapshots
+
 def create():
-    engine = create_engine('sqlite:///:memory')
+    engine = create_engine('sqlite:///:memory:')
     with engine.connect() as conn:
         rs = runs.pandas().loc[lambda df: df._created >= FIRST_RUN]
         params = rs.params.dropna().apply(pd.Series).reindex(rs.index)
         insert = pd.concat([rs.index.to_series().to_frame('name'), params[['boardsize', 'width', 'depth', 'nodes']]], 1)
         insert['nodes'] = insert.nodes.fillna(64)
-        insert.to_sql('runs', conn, if_exists='append')
+        insert.to_sql('runs', conn, if_exists='replace')
 
+        ss = snaps(rs)
+        ss.to_sql('snaps', conn, if_exists='replace')
 
 
 
