@@ -10,6 +10,8 @@ from . import asymdata
 # First modern run
 FIRST_RUN = pd.Timestamp('2021-02-03 12:47:26.557749+00:00')
 
+DATABASE = 'output/experiments/eval/database.sql'
+
 Base = declarative_base()
 class Run(Base):
     __tablename__ = 'runs'
@@ -102,8 +104,10 @@ def trial_agent_data(s):
 
 
 def create():
-    engine = create_engine('sqlite:///:memory:')
+    engine = create_engine('sqlite:///' + DATABASE)
     with engine.connect() as conn:
+        Base.metadata.create_all(engine)
+
         r = run_data()
         r.to_sql('runs', conn, if_exists='replace')
 
@@ -111,8 +115,8 @@ def create():
         s.to_sql('snaps', conn, if_exists='replace')
 
         a, t = trial_agent_data(s)
-        a.to_sql('agents', conn)
-        t.to_sql('trials', conn)
+        a.to_sql('agents', conn, if_exists='replace')
+        t.to_sql('trials', conn, if_exists='replace')
 
 
 
