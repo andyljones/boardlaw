@@ -64,7 +64,7 @@ def node_eval(boardsize, nodes=[1, 2, 4, 8, 16, 32, 64, 128, 256, 512], n_worker
             time.sleep(.1)
 
 
-def run(boardsize=9):
+def summarize(boardsize=9):
     snaps = data.snapshot_solns(boardsize, solve=False)
     raw = asymdata.pandas(boardsize).reset_index()
     raw['games'] = raw.black_wins + raw.white_wins
@@ -103,6 +103,8 @@ def run(boardsize=9):
     return info
 
 def plot_frontier(info):
+    info = info[info.nodes > 1]
+
     frontiers = {}
     for e in np.linspace(-10, 0, 11):
         frontiers[e] = info[info.elo > e].groupby('train_flops').test_flops.min().expanding().min()
@@ -114,7 +116,7 @@ def plot_frontier(info):
     distinct = distinct.stack().reset_index()
     distinct.columns = ['train_flops', 'elo', 'test_flops']
 
-    model = smf.ols('np.log10(test_flops) ~ np.log10(train_flops) + elo + 1', distinct).fit()
+    model = smf.ols('np.log10(test_flops) ~ np.log10(train_flops) + C(elo) + 1', distinct).fit()
     distinct['test_flops_hat'] = 10**model.predict(distinct)
 
     df = frontiers.stack().reset_index()
@@ -122,8 +124,7 @@ def plot_frontier(info):
     df = pd.merge(df, distinct.drop('test_flops', 1), on=['train_flops', 'elo'], how='left')
 
     ps = model.params.copy()
-    ps['elo'] = ps.elo*400/np.log(10)
-    ps = ps.apply(lambda x: f'{float(f"{x:.2g}"):g}')
+    ps = ps.apply(lambda x: f'{float(f"{x:.3g}"):g}')
     s = f'$\ln_{{10}}\mathrm{{test}} = {ps["np.log10(train_flops)"]} \cdot \ln_{{10}}\mathrm{{train}} + C$'
 
     return (pn.ggplot(df, pn.aes(x='train_flops', color='factor(elo)'))
