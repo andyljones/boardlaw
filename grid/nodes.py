@@ -102,7 +102,7 @@ def summarize(boardsize=9):
 
     return info
 
-def plot_frontier(info):
+def plot_train_test_frontiers(info):
     info = info[info.nodes > 1]
 
     frontiers = {}
@@ -135,5 +135,19 @@ def plot_frontier(info):
         + pn.annotate('text', 3e13, 1.5e9, label=s, size=20)
         + pn.scale_color_discrete(name='elo')
         + pn.labs(title='tradeoff between train and test compute is roughly even')
+        + plot.mpl_theme()
+        + plot.poster_sizes())
+
+def plot_test_perf(info):
+    finals = info.sort_values('idx').groupby(['run', 'nodes']).last().reset_index()
+    finals['arch'] = finals['width'].astype(str) + '/' + finals['depth'].astype(str)
+
+    return (pn.ggplot(finals)
+        + pn.geom_point(pn.aes(x='test_flops', y='400/np.log(10)*elo', color='params', label='arch'))
+        + pn.geom_line(pn.aes(x='test_flops', y='400/np.log(10)*elo', color='params', label='arch', group='run'))
+        + pn.scale_x_continuous(trans='log10')
+        + pn.scale_color_continuous(trans='log10')
+        + pn.labs(title='test-flops-v-perf tradeoff, one snapshot per line', y='elo')
+        + plot.no_colorbar_ticks()
         + plot.mpl_theme()
         + plot.poster_sizes())
