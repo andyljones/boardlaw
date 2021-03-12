@@ -27,6 +27,29 @@ def color_obs(obs):
     keyed[obs[..., 1] == 1.] = 2
     return color_board(keyed)
 
+def edge(width, k=.2):
+    sin30 = np.sin(np.pi/6)
+    cos30 = np.cos(np.pi/6)
+    sin60 = np.sin(np.pi/3)
+    cos60 = np.cos(np.pi/3)
+
+    left_center = np.array([0, 0])
+    left_point = (1/2/cos30 + k/cos30)*np.array([-cos30, sin30])
+    left = np.stack([left_center, left_point])
+
+    top = np.full((2*width-1, 2), np.nan)
+    top[::2, 0] = np.arange(width)
+    top[::2, 1] = np.full(width, 1/2/cos30 + k/cos30)
+
+    top[1::2, 0] = .5 + np.arange(width-1)
+    top[1::2, 1] = np.full(width-1, sin30/2/cos30 + k/cos30)
+
+    right_point = np.array([width - 1, 0]) + (1/2 + k)*np.array([cos60, sin60])
+    right_center = np.array([width - 1, 0])
+    right = np.stack([right_point, right_center])
+
+    return np.concatenate([left, top, right])
+
 def plot_board(colors, ax=None, black='dimgray', white='lightgray', edges=True):
     ax = plt.subplots()[1] if ax is None else ax
     ax.set_aspect(1)
@@ -37,6 +60,7 @@ def plot_board(colors, ax=None, black='dimgray', white='lightgray', edges=True):
     ax.set_xlim(-1.5, 1.5*width)
     ax.set_ylim(-sin60, sin60*width)
 
+    # Find Hex centers
     size = width*width
     rows, cols = np.indices((width, width))
     coords = np.stack([
@@ -44,12 +68,20 @@ def plot_board(colors, ax=None, black='dimgray', white='lightgray', edges=True):
         # Hex centers are 1 apart, so distances between rows are sin(60)
         sin60*(width - 1 - rows)], -1).reshape(-1, 2)
 
-    tl, tr = (-1.5, (width)*sin60), (width-.5, (width)*sin60)
-    bl, br = (width/2-1, -sin60), (1.5*width, -sin60)
-    if edges:
-        ax.add_patch(mpl.patches.Polygon(np.array([tl, tr, bl, br]), linewidth=1, edgecolor='k', facecolor=black, zorder=1))
-        ax.add_patch(mpl.patches.Polygon(np.array([tl, bl, tr, br]), linewidth=1, edgecolor='k', facecolor=white, zorder=1))
+    # Generate board edges
+    rots = [0, 120, 180, 300]
+    origins = [coords[0], coords[0], coords[-1], coords[-1]]
+    cols = [black, white, black, white]
+    for rot, origin, color in zip(rots, origins, cols):
+        rot = np.pi/180*rot
+        rot = np.array([[np.cos(rot), -np.sin(rot)], [np.sin(rot), np.cos(rot)]])
+        ref = 1 if color == black else -1
+        rot[:, 1] = ref*rot[:, 1] 
+        
+        points = edge(width)*ref @ rot + origin
+        ax.add_patch(mpl.patches.Polygon(points, linewidth=1, edgecolor='k', facecolor=color, zorder=1))
 
+    # Generate hexes
     radius = .5/sin60
     data_to_pixels = ax.transData.get_matrix()[0, 0]
     pixels_to_points = 1/ax.figure.get_dpi()*72.
