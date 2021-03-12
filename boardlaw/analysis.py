@@ -96,7 +96,8 @@ def plot_all(f):
         assert B < 65, f'Plotting {B} traces will be prohibitively slow' 
         n_rows = int(B**.5)
         n_cols = int(np.ceil(B/n_rows))
-        fig, axes = plt.subplots(n_rows, n_cols, sharex=True, sharey=True, squeeze=False)
+        # Overlapping any more than this seems to distort the hexes. No clue why.
+        fig, axes = plt.subplots(n_rows, n_cols, sharex=True, sharey=True, squeeze=False, gridspec_kw={'wspace': 0})
 
         for e in range(B):
             f(state, e, ax=axes.flatten()[e])
