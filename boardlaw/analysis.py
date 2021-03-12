@@ -165,11 +165,11 @@ def load(run):
 
 
 def demo_record(run=-1):
-    from boardlaw import mohex, analysis
+    from boardlaw import analysis
 
-    worlds, agent = load(run)
-    mhx = mohex.MoHexAgent()
-    analysis.record(worlds, [agent, agent], n_reps=1, N=0).notebook()
+    world = arena.common.worlds(run, 1)
+    agent = arena.common.agent(run)
+    return analysis.record(world, [agent, agent], n_trajs=1).notebook()
 
 def demo_rollout(run=-1):
     from boardlaw import mohex, analysis
