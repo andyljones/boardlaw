@@ -2,17 +2,21 @@ import torch
 import numpy as np
 import pandas as pd
 
-def symmetrize(trials, agents=None):
+def symmetrize(trials):
     df = (trials
             .assign(games=lambda df: df.black_wins + df.white_wins)
-            .pivot('black_agent', 'white_agent', ['games', 'white_wins', 'black_wins'])).fillna(0)
+            .pivot('black_agent', 'white_agent', ['games', 'white_wins', 'black_wins']))
+    ids = list(set(df.columns.get_level_values(1)))
+    df = df.reindex(index=ids).reindex(columns=ids, level=1).fillna(0)
 
-    ws = (df.black_wins/df.games + df.white_wins/df.games.T)/2*(df.games + df.games.T)/2.
+    ws = (df.black_wins/df.games + df.white_wins.T/df.games.T)/2*(df.games + df.games.T)/2.
     gs = (df.games + df.games.T)/2.
 
-    return ws, gs
+    return ws.where(gs > 0, 0), gs
 
 def fast_elos(wins, games, prior=1):
+    pd.testing.assert_index_equal(wins.index, games.index)
+    pd.testing.assert_index_equal(wins.columns, games.columns)
 
     W = torch.as_tensor(wins.fillna(0).values) + prior
     N = torch.as_tensor(games.fillna(0).values) + 2*prior
@@ -39,7 +43,7 @@ def fast_elos(wins, games, prior=1):
     optim.step(closure)
     closure()
 
-    return (r - r.max()).detach().cpu().numpy()
+    return pd.Series((r - r.max()).detach().cpu().numpy(), wins.index, name='elo')
 
 def elo_errors(snaps, trials):
     μ = snaps.μ

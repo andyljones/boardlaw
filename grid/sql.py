@@ -150,6 +150,8 @@ def trial_query(boardsize):
     return query('''
         select trials.* 
         from trials 
-            inner join agents_details 
-                on (trials.black_agent == agents_details.id)
-        where (agents_details.boardsize == ?)''', index_col='id', params=(boardsize,))
+            inner join agents_details as black
+                on (trials.black_agent == black.id)
+            inner join agents_details as white
+                on (trials.white_agent == white.id)
+        where (black.boardsize == ?) and (white.boardsize == ?)''', index_col='id', params=(boardsize, boardsize))
