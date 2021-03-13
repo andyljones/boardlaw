@@ -104,18 +104,20 @@ def trial_agent_data(s):
 
     return agents[['id', 'snap', 'nodes', 'c']], trials
 
+_engine = None
 @contextmanager
 def connection():
     if not DATABASE.parent.exists():
         DATABASE.parent.mkdir(exist_ok=True, parents=True)
 
-    engine = create_engine('sqlite:///' + str(DATABASE))
-    with engine.connect() as conn:
-        Base.metadata.create_all(engine)
+    global _engine
+    _engine = create_engine('sqlite:///' + str(DATABASE)) if _engine is None else _engine
+    with _engine.connect() as conn:
         yield conn
 
 def create():
     with connection() as conn:
+        Base.metadata.create_all(conn.engine)
 
         r = run_data()
         r.to_sql('runs', conn, index=False, if_exists='append')
@@ -127,19 +129,23 @@ def create():
         a.to_sql('agents', conn, index=False, if_exists='append')
         t.to_sql('trials', conn, index=False, if_exists='append')
 
+        conn.execute('''
+            create view agents_details as
+            select 
+                agents.id, agents.nodes as test_nodes, 
+                snaps.samples, snaps.flops as train_flops,       
+                runs.run, snaps.idx, runs.boardsize, runs.width, runs.depth, runs.nodes as train_nodes
+            from agents
+                inner join snaps on (agents.snap == snaps.id)
+                inner join runs on (snaps.run == runs.run)''')
+
 def query(sql, **kwargs):
     with connection() as conn:
         return pd.read_sql_query(sql, conn, **kwargs)
 
-def snapshot_query():
+def agent_query():
     return query('''
-        select 
-            agents.id, agents.nodes as test_nodes, 
-            snaps.samples, snaps.flops as train_flops,       
-            runs.run, snaps.idx, runs.boardsize, runs.width, runs.depth, runs.nodes as train_nodes
-        from agents
-            inner join snaps on (agents.snap == snaps.id)
-            inner join runs on (snaps.run == runs.run)''', index_col='id')
+        select * from agents_details''', index_col='id')
 
 def trial_query():
     return query('''select * from trials''', index_col='id')
