@@ -7,6 +7,7 @@ import ast
 from tqdm.auto import tqdm
 from . import asymdata
 from pathlib import Path
+from contextlib import contextmanager
 
 # First modern run
 FIRST_RUN = pd.Timestamp('2021-02-03 12:47:26.557749+00:00')
@@ -103,14 +104,18 @@ def trial_agent_data(s):
 
     return agents[['id', 'snap', 'nodes', 'c']], trials
 
-
-def create():
+@contextmanager
+def connection():
     if not DATABASE.parent.exists():
         DATABASE.parent.mkdir(exist_ok=True, parents=True)
 
     engine = create_engine('sqlite:///' + str(DATABASE))
     with engine.connect() as conn:
         Base.metadata.create_all(engine)
+        yield conn
+
+def create():
+    with connection() as conn:
 
         r = run_data()
         r.to_sql('runs', conn, index=False, if_exists='append')
@@ -122,7 +127,19 @@ def create():
         a.to_sql('agents', conn, index=False, if_exists='append')
         t.to_sql('trials', conn, index=False, if_exists='append')
 
+def query(sql, **kwargs):
+    with connection() as conn:
+        return pd.read_sql_query(sql, conn, **kwargs)
 
+def snapshot_query():
+    return query('''
+        select 
+            agents.id, agents.nodes as test_nodes, 
+            snaps.samples, snaps.flops as train_flops,       
+            runs.run, snaps.idx, runs.boardsize, runs.width, runs.depth, runs.nodes as train_nodes
+        from agents
+            inner join snaps on (agents.snap == snaps.id)
+            inner join runs on (snaps.run == runs.run)''', index_col='id')
 
-
-
+def trial_query():
+    return query('''select * from trials''', index_col='id')
