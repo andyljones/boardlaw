@@ -144,8 +144,12 @@ def query(sql, **kwargs):
         return pd.read_sql_query(sql, conn, **kwargs)
 
 def agent_query():
-    return query('''
-        select * from agents_details''', index_col='id')
+    return query('''select * from agents_details''', index_col='id')
 
-def trial_query():
-    return query('''select * from trials''', index_col='id')
+def trial_query(boardsize):
+    return query('''
+        select trials.* 
+        from trials 
+            inner join agents_details 
+                on (trials.black_agent == agents_details.id)
+        where (agents_details.boardsize == ?)''', index_col='id', params=(boardsize,))

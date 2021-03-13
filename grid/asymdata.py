@@ -68,57 +68,7 @@ def pandas(boardsize):
     else:
         return pd.DataFrame(columns=['black_name', 'white_name', 'black_wins', 'white_wins', 'moves']).set_index(KEYS)
 
-def symmetrize(raw, agents=None):
-    games = (raw.black_wins + raw.white_wins).unstack().reindex(index=agents, columns=agents).fillna(0)
 
-    black_wins = raw.black_wins.unstack().reindex_like(games)
-    white_wins = raw.white_wins.unstack().reindex_like(games).T
-
-    ws = (black_wins/games + white_wins/games.T)/2*(games + games.T)/2.
-    gs = (games + games.T)/2.
-
-    return ws, gs
-
-def fast_elos(ws, gs, prior=1):
-
-    W = torch.as_tensor(ws.fillna(0).values) + prior
-    N = torch.as_tensor(gs.fillna(0).values) + 2*prior
-    mask = torch.as_tensor(gs.isnull().values)
-
-    n = N.shape[0]
-    r = torch.nn.Parameter(torch.zeros(n))
-
-    def loss():
-        d = r[:, None] - r[None, :]
-        s = 1/(1 + torch.exp(-d))
-        
-        l = W*s.log() + (N - W)*(1 - s).log()
-        return -l[~mask].mean() + .01*r.sum().pow(2)
-
-    optim = torch.optim.LBFGS([r], line_search_fn='strong_wolfe', max_iter=100)
-
-    def closure():
-        l = loss()
-        optim.zero_grad()
-        l.backward()
-        return l
-        
-    optim.step(closure)
-    closure()
-
-    return (r - r.max()).detach().cpu().numpy()
-
-def elo_errors(snaps, raw):
-    μ = snaps.μ
-
-    ws, gs = symmetrize(raw, snaps.index)
-    rates = (ws/gs).reindex(index=μ.index, columns=μ.index)
-
-    diffs = pd.DataFrame(μ.values[:, None] - μ.values[None, :], μ.index, μ.index)
-    expected = 1/(1 + np.exp(-diffs))
-
-    err = (rates - expected).abs()
-    return pd.concat([err.max(), err.T.max()], 1).max(1)
 
 def pandas_elos(boardsize, **kwargs):
     from . import data
