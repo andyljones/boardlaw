@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import sqlalchemy
 from sqlalchemy.ext.declarative import declarative_base
@@ -160,4 +161,10 @@ def trial_query(boardsize, desc='%'):
                 on (trials.black_agent == black.id)
             inner join agents_details as white
                 on (trials.white_agent == white.id)
-        where (black.boardsize == ?) and (white.boardsize == ?) and (black.description like ?)''', index_col='id', params=(boardsize, boardsize, desc))
+        where (black.boardsize == ?) and (white.boardsize == ?) and (black.description like ?)''', index_col='id', params=(int(boardsize), int(boardsize), desc))
+
+def file_change_counter():
+    # https://www.sqlite.org/fileformat.html
+    counter = DATABASE.open('rb').read(30)[24:28]
+    dt = np.dtype('int32').newbyteorder('>')
+    return int(np.frombuffer(counter, dtype=dt))

@@ -14,7 +14,7 @@ def symmetrize(trials):
 
     return ws.where(gs > 0, np.nan), gs
 
-def fast_elos(wins, games, prior=1):
+def solve(wins, games, prior=1):
     pd.testing.assert_index_equal(wins.index, games.index)
     pd.testing.assert_index_equal(wins.columns, games.columns)
 

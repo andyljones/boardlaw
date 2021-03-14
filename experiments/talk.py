@@ -1,8 +1,14 @@
+import aljpy
+import hashlib
+import json
+import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import aljpy.plot
 from pavlov import runs
 from boardlaw import analysis, arena
+from grid import sql, plot, elos
+from tqdm.auto import tqdm
 
 def record_games():
     rs = runs.pandas().dropna()
@@ -28,3 +34,25 @@ def plot_elo_winrates():
         ax.set_yticks([0, .25, .5, .75, 1.])
         aljpy.plot.percent_axis(ax, axis='y')
         ax.set_title('win rate is a sigmoid in rating difference')
+
+@aljpy.autocache()
+def _trial_elos(boardsize, counter):
+    trials = sql.trial_query(boardsize, 'bee/%')
+    ws, gs = elos.symmetrize(trials)
+    return elos.solve(ws, gs)
+
+def trial_elos(boardsize):
+    counter = sql.file_change_counter()
+    return _trial_elos(boardsize, counter)
+
+def load():
+    ags = sql.agent_query()
+
+    es = []
+    for b in tqdm(ags.boardsize.unique()):
+        es.append(trial_elos(b))
+    es = pd.concat(es)
+
+    ags['elo'] = es
+
+    return ags
