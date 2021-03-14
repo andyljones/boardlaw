@@ -1,3 +1,4 @@
+import scipy as sp
 import torch
 from torch import nn
 import aljpy
@@ -162,6 +163,13 @@ def plot_flops_frontier(ags, b=np.inf):
                 + pn.coord_cartesian(None, (None, 0))
                 + plot.mpl_theme()
                 + plot.poster_sizes())
+    
+def perfect_play(model, target=-100):
+    perfect = {}
+    for b in range(3, 10):
+        f = lambda x: 400/np.log(10)*model(torch.as_tensor([[x, b]])).detach().numpy().squeeze() - target
+        perfect[b] = sp.optimize.bisect(f, 1, 18)
+    return pd.Series(perfect, name='perfect')
 
 def plot_resid_var_trends(ags):
     df = (ags.query('test_nodes == 64')
@@ -179,11 +187,23 @@ def plot_resid_var_trends(ags):
     denom = df.elo.pow(2).groupby(df.boardsize).mean()
     resid_var = (num/denom).stack().reset_index()
     resid_var.columns = ['predicted', 'seen', 'rv']
-    resid_var['dist'] = resid_var.predicted - resid_var.seen
 
-    return (pn.ggplot(resid_var, pn.aes(x='dist', y='rv', color='factor(predicted)', group='predicted'))
-        + pn.geom_line()
-        + pn.geom_point()
+    perfect = perfect_play(model)
+    resid_var = (resid_var
+        .join(perfect.rename('predicted_perfect'), on='predicted')
+        .join(perfect.rename('seen_perfect'), on='seen')
+        .assign(ratio=lambda df: 10**(df.seen_perfect - df.predicted_perfect)))
+
+    return (pn.ggplot(resid_var, pn.aes(x='ratio', y='rv', color='factor(predicted)', group='predicted'))
+        + pn.geom_line(size=2)
+        + pn.geom_text(pn.aes(label='seen'), nudge_y=-.1, size=14)
+        + pn.geom_point(size=4)
+        + pn.scale_x_continuous(trans='log10')
         + pn.scale_y_continuous(trans='log10')
+        + pn.scale_color_discrete(name='Predicted frontier')
+        + pn.labs(
+            x='(cost of observed frontier)/(cost of predicted frontier)',
+            y='residual variance in performance',
+            title='Frontiers of small problems are good, cheap proxies for frontiers of expensive problems')
         + plot.mpl_theme()
         + plot.poster_sizes())
