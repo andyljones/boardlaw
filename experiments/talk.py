@@ -9,6 +9,7 @@ from pavlov import runs
 from boardlaw import analysis, arena
 from grid import sql, plot, elos
 from tqdm.auto import tqdm
+import plotnine as pn
 
 def record_games():
     rs = runs.pandas().dropna()
@@ -53,6 +54,21 @@ def load():
         es.append(trial_elos(b))
     es = pd.concat(es)
 
-    ags['elo'] = es
+    return ags.join(es, how='inner')
 
-    return ags
+
+def plot_training_curves(ags):
+    df = ags[ags.test_nodes == 64].copy()
+    df['g'] = df.run + df.test_nodes.astype(str)
+
+    return (pn.ggplot(df, pn.aes(x='train_flops', y='400/np.log(10)*elo', group='g', color='factor(boardsize)'))
+            + pn.geom_line()
+            + pn.geom_point(size=.5)
+            + pn.scale_x_continuous(trans='log10')
+            + pn.scale_color_discrete(name='Boardsize')
+            + pn.labs(
+                x='Training FLOPS', 
+                y='Elo v. perfect play',
+                title='All agents\' training curves')
+            + plot.mpl_theme()
+            + plot.poster_sizes())

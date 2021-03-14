@@ -17,6 +17,7 @@ def symmetrize(trials):
 def solve(wins, games, prior=1):
     pd.testing.assert_index_equal(wins.index, games.index)
     pd.testing.assert_index_equal(wins.columns, games.columns)
+    pd.testing.assert_index_equal(wins.index, wins.columns, check_names=False)
 
     W = torch.as_tensor(wins.fillna(0).values) + prior
     N = torch.as_tensor(games.fillna(0).values) + 2*prior

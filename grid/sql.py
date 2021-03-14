@@ -161,7 +161,9 @@ def trial_query(boardsize, desc='%'):
                 on (trials.black_agent == black.id)
             inner join agents_details as white
                 on (trials.white_agent == white.id)
-        where (black.boardsize == ?) and (white.boardsize == ?) and (black.description like ?)''', index_col='id', params=(int(boardsize), int(boardsize), desc))
+        where 
+            (black.boardsize == ?) and (white.boardsize == ?) and 
+            (black.description like ?) and (white.description like ?)''', index_col='id', params=(int(boardsize), int(boardsize), desc, desc))
 
 def file_change_counter():
     # https://www.sqlite.org/fileformat.html
