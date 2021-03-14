@@ -72,6 +72,7 @@ def snapshot_data(r):
     snapshots = (pd.DataFrame.from_dict(snapshots, orient='index')
                     .rename_axis(index=('run', 'idx'))
                     .reset_index())
+    snapshots['id'] = snapshots.index.to_series()
     return snapshots
 
 def trial_agent_data(s):

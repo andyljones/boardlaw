@@ -32,7 +32,7 @@ def fast_elos(wins, games, prior=1):
         l = W*s.log() + (N - W)*(1 - s).log()
         return -l[~mask].mean() + .01*r.sum().pow(2)
 
-    optim = torch.optim.LBFGS([r], line_search_fn='strong_wolfe', max_iter=100)
+    optim = torch.optim.LBFGS([r], line_search_fn='strong_wolfe', max_iter=200)
 
     def closure():
         l = loss()
