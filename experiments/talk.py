@@ -88,7 +88,7 @@ def interp_frontier(g, x='train_flops', y='elo', group='run'):
 
 class Changepoint(nn.Module):
 
-    def __init__(self, D=2):
+    def __init__(self):
         super().__init__()
         self.lower = nn.Parameter(torch.as_tensor([-1.5, 3.]))
         self.linear = nn.Parameter(torch.as_tensor([2., -2, -16]))
@@ -99,14 +99,29 @@ class Changepoint(nn.Module):
         linear = X @ self.linear
         return torch.maximum(linear, lower).clamp(None, 0)
 
-def fit_changepoint(df):
+class Sigmoid(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.vscale = nn.Parameter(torch.as_tensor([1.3, -2.]))
+        self.hscale = nn.Parameter(torch.as_tensor([1/16., 0.]))
+        self.center = nn.Parameter(torch.as_tensor([.66, 9.]))
+        
+    def forward(self, X):
+        X = torch.cat([X, torch.ones_like(X[:, :1])], -1)
+        vscale = X[:, 1:] @ self.vscale
+        hscale = X[:, 1:] @ self.hscale
+        center = X[:, 1:] @ self.center
+        return vscale*(torch.sigmoid((X[:, 0] - center)/hscale) - 1)
+
+def fit_model(df):
     X = torch.stack([
         torch.as_tensor(df.train_flops).log10().float(),
         torch.as_tensor(df.boardsize).float(),], -1)
 
     y = torch.as_tensor(df.elo)
 
-    model = Changepoint()
+    model = Sigmoid()
     optim = torch.optim.LBFGS(model.parameters(), line_search_fn='strong_wolfe', max_iter=100)
 
     def closure():
@@ -114,11 +129,14 @@ def fit_changepoint(df):
         loss = (y - yhat).pow(2).mean()
         optim.zero_grad()
         loss.backward()
+        print(loss)
         return loss
         
     optim.step(closure)
 
-    return pd.Series(model(X).detach().cpu().numpy(), df.index)
+    elohat = pd.Series(model(X).detach().cpu().numpy(), df.index)
+
+    return model, elohat
         
 def plot_flops_frontier(ags):
     df = (ags.query('test_nodes == 64')
@@ -126,10 +144,11 @@ def plot_flops_frontier(ags):
             .apply(interp_frontier, 'train_flops')
             .reset_index()) 
     
-    df['elohat'] = fit_changepoint(df)
+    model, df['elohat'] = fit_model(df)
 
     return (pn.ggplot(df, pn.aes(x='train_flops', color='factor(boardsize)', group='boardsize'))
-                + pn.geom_line(pn.aes(y='400/np.log(10)*elo'), size=2)
+                + pn.geom_line(pn.aes(y='elo'), size=2)
+                + pn.geom_line(pn.aes(y='elohat'), size=1, linetype='dashed')
                 + pn.labs(
                     x='training flops', 
                     y='elo v. perfect play',
