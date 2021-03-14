@@ -114,12 +114,14 @@ class Sigmoid(nn.Module):
         center = X[:, 1:] @ self.center
         return vscale*(torch.sigmoid((X[:, 0] - center)/hscale) - 1)
 
-def fit_model(df):
-    X = torch.stack([
-        torch.as_tensor(df.train_flops).log10().float(),
-        torch.as_tensor(df.boardsize).float(),], -1)
+def model_inputs(df):
+    return torch.stack([
+        torch.as_tensor(df.train_flops.values).log10().float(),
+        torch.as_tensor(df.boardsize.values).float(),], -1)
 
-    y = torch.as_tensor(df.elo)
+def fit_model(df):
+    X = model_inputs(df)
+    y = torch.as_tensor(df.elo.values)
 
     model = Sigmoid()
     optim = torch.optim.LBFGS(model.parameters(), line_search_fn='strong_wolfe', max_iter=100)
@@ -129,32 +131,59 @@ def fit_model(df):
         loss = (y - yhat).pow(2).mean()
         optim.zero_grad()
         loss.backward()
-        print(loss)
         return loss
         
     optim.step(closure)
 
-    elohat = pd.Series(model(X).detach().cpu().numpy(), df.index)
+    return model
 
-    return model, elohat
+def apply_model(model, df):
+    X = model_inputs(df)
+    return pd.Series(model(X).detach().cpu().numpy(), df.index)
         
-def plot_flops_frontier(ags):
+def plot_flops_frontier(ags, b=np.inf):
     df = (ags.query('test_nodes == 64')
             .groupby('boardsize')
             .apply(interp_frontier, 'train_flops')
             .reset_index()) 
     
-    model, df['elohat'] = fit_model(df)
+    model = fit_model(df[df.boardsize <= b])
+    df['elohat'] = apply_model(model, df)
 
     return (pn.ggplot(df, pn.aes(x='train_flops', color='factor(boardsize)', group='boardsize'))
-                + pn.geom_line(pn.aes(y='elo'), size=2)
-                + pn.geom_line(pn.aes(y='elohat'), size=1, linetype='dashed')
+                + pn.geom_line(pn.aes(y='400/np.log(10)*elo'), size=2)
+                + pn.geom_line(pn.aes(y='400/np.log(10)*elohat'), size=1, linetype='dashed')
                 + pn.labs(
-                    x='training flops', 
-                    y='elo v. perfect play',
-                    title='performance frontier in terms of compute')
+                    x='Training FLOPS', 
+                    y='Elo v. perfect play',
+                    title='Performance is a sigmoid of compute, linearly scaled by board size')
                 + pn.scale_x_continuous(trans='log10')
-                + pn.scale_color_discrete(name='boardsize')
+                + pn.scale_color_discrete(name='Boardsize')
                 + pn.coord_cartesian(None, (None, 0))
                 + plot.mpl_theme()
                 + plot.poster_sizes())
+
+def plot_resid_var_trends(ags):
+    df = (ags.query('test_nodes == 64')
+            .groupby('boardsize')
+            .apply(interp_frontier, 'train_flops')
+            .reset_index()) 
+
+    yhats = {}
+    for b in range(4, 10):
+        model = fit_model(df[df.boardsize <= b])
+        yhats[b] = apply_model(model, df[df.boardsize >= b])
+    yhats = pd.concat(yhats, 1)
+
+    num = yhats.sub(df.elo, 0).pow(2).groupby(df.boardsize).mean()
+    denom = df.elo.pow(2).groupby(df.boardsize).mean()
+    resid_var = (num/denom).stack().reset_index()
+    resid_var.columns = ['predicted', 'seen', 'rv']
+    resid_var['dist'] = resid_var.predicted - resid_var.seen
+
+    return (pn.ggplot(resid_var, pn.aes(x='dist', y='rv', color='factor(predicted)', group='predicted'))
+        + pn.geom_line()
+        + pn.geom_point()
+        + pn.scale_y_continuous(trans='log10')
+        + plot.mpl_theme()
+        + plot.poster_sizes())
