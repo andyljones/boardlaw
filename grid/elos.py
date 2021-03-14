@@ -12,7 +12,7 @@ def symmetrize(trials):
     ws = (df.black_wins/df.games + df.white_wins.T/df.games.T)/2*(df.games + df.games.T)/2.
     gs = (df.games + df.games.T)/2.
 
-    return ws.where(gs > 0, 0), gs
+    return ws.where(gs > 0, np.nan), gs
 
 def fast_elos(wins, games, prior=1):
     pd.testing.assert_index_equal(wins.index, games.index)
@@ -20,7 +20,7 @@ def fast_elos(wins, games, prior=1):
 
     W = torch.as_tensor(wins.fillna(0).values) + prior
     N = torch.as_tensor(games.fillna(0).values) + 2*prior
-    mask = torch.as_tensor(games.isnull().values)
+    mask = torch.as_tensor(games.gt(0).values)
 
     n = N.shape[0]
     r = torch.nn.Parameter(torch.zeros(n))
@@ -30,7 +30,7 @@ def fast_elos(wins, games, prior=1):
         s = 1/(1 + torch.exp(-d))
         
         l = W*s.log() + (N - W)*(1 - s).log()
-        return -l[~mask].mean() + .01*r.sum().pow(2)
+        return -l[mask].mean() + .01*r.sum().pow(2)
 
     optim = torch.optim.LBFGS([r], line_search_fn='strong_wolfe', max_iter=200)
 

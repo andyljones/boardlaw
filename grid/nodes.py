@@ -1,7 +1,7 @@
 import statsmodels.formula.api as smf
 import plotnine as pn
 import pandas as pd
-from . import eval, plot, asymdata, data
+from . import eval, plot, asymdata, data, elos
 import numpy as np
 import time
 
@@ -86,14 +86,13 @@ def summarize(boardsize=9):
     wins = (df.black_wins + df.white_wins.T)
     games = wins + wins.T
 
-    elos = asymdata.fast_elos(wins, games)
-    elos = pd.Series(elos, wins.index)
+    e = elos.fast_elos(wins, games)
 
     regex = r'(?P<run>[\w-]+)\.(?P<idx>\d+)(?:\.(?P<nodes>\d+))?'
-    info = elos.index.str.extract(regex)
+    info = e.index.str.extract(regex)
     info['nickname'] = info.run + '.' + info.idx
     info['nodes'] = info['nodes'].astype(float)
-    info['elo'] = elos.values
+    info['elo'] = e.values
     info = pd.merge(info[['nodes', 'nickname', 'elo']], snaps, left_on='nickname', right_on='nickname')    
 
     info['test_flops'] = info.nodes*info.flops/info.samples
