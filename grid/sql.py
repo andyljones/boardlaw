@@ -56,7 +56,7 @@ class Trial(Base):
 def run_data():
     r = runs.pandas().loc[lambda df: df._created >= FIRST_RUN]
     params = r.params.dropna().apply(pd.Series).reindex(r.index)
-    insert = pd.concat([r.index.to_series().to_frame('run'), params[['boardsize', 'width', 'depth', 'nodes']]], 1)
+    insert = pd.concat([r.index.to_series().to_frame('run'), r[['description']], params[['boardsize', 'width', 'depth', 'nodes']]], 1)
     insert['nodes'] = insert.nodes.fillna(64)
     return insert.reset_index(drop=True)
 
@@ -78,8 +78,8 @@ def trial_agent_data(s):
     trials = pd.concat([asymdata.pandas(b) for b in range(3, 10)]).reset_index()
 
     regex = r'(?P<run>[\w-]+)\.(?P<idx>\d+)(?:\.(?P<nodes>\d+))?'
-    black_agents = trials.black_name.str.extract(regex).fillna(64)
-    white_agents = trials.white_name.str.extract(regex).fillna(64)
+    black_agents = trials.black_name.str.extract(regex).fillna('64')
+    white_agents = trials.white_name.str.extract(regex).fillna('64')
 
     agents = (pd.concat([black_agents, white_agents])
                 .drop_duplicates(['run', 'idx', 'nodes'])
@@ -133,11 +133,16 @@ def create():
             create view agents_details as
             select 
                 agents.id, agents.nodes as test_nodes, 
-                snaps.samples, snaps.flops as train_flops,       
-                runs.run, snaps.idx, runs.boardsize, runs.width, runs.depth, runs.nodes as train_nodes
+                snaps.samples, snaps.flops as train_flops, snaps.idx, 
+                runs.run, runs.description, runs.boardsize, runs.width, runs.depth, runs.nodes as train_nodes
             from agents
                 inner join snaps on (agents.snap == snaps.id)
                 inner join runs on (snaps.run == runs.run)''')
+
+def run(sql):
+    with connection() as conn:
+        return conn.execute(sql)
+
 
 def query(sql, **kwargs):
     with connection() as conn:
@@ -146,7 +151,7 @@ def query(sql, **kwargs):
 def agent_query():
     return query('''select * from agents_details''', index_col='id')
 
-def trial_query(boardsize):
+def trial_query(boardsize, desc='%'):
     return query('''
         select trials.* 
         from trials 
@@ -154,4 +159,4 @@ def trial_query(boardsize):
                 on (trials.black_agent == black.id)
             inner join agents_details as white
                 on (trials.white_agent == white.id)
-        where (black.boardsize == ?) and (white.boardsize == ?)''', index_col='id', params=(boardsize, boardsize))
+        where (black.boardsize == ?) and (white.boardsize == ?) and (black.description like ?)''', index_col='id', params=(boardsize, boardsize, desc))
