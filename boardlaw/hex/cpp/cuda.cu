@@ -12,7 +12,9 @@ enum {
     TOP,
     BOT, 
     LEFT,
-    RIGHT
+    RIGHT,
+    BLACK_WIN,
+    WHITE_WIN
 };
 
 __device__ void flood(C3D::PTA board, int row, int col, uint8_t new_val) {
@@ -115,18 +117,16 @@ __global__ void step_kernel(
         if (adj[LEFT] && adj[RIGHT]) { 
             results[b][0] = -1.f;
             results[b][1] = +1.f;
-        } 
-
-        if (adj[LEFT]) { new_val = LEFT; } 
+            new_val = WHITE_WIN; } 
+        else if (adj[LEFT]) { new_val = LEFT; } 
         else if (adj[RIGHT]) { new_val = RIGHT; } 
         else { new_val = WHITE; }
     } else {
         if (adj[TOP] && adj[BOT]) {
             results[b][0] = +1.f;
             results[b][1] = -1.f;
-        } 
-
-        if (adj[TOP]) { new_val = TOP; } 
+            new_val = BLACK_WIN;
+        } else if (adj[TOP]) { new_val = TOP; } 
         else if (adj[BOT]) { new_val = BOT; } 
         else { new_val = BLACK; }
     }
@@ -166,9 +166,9 @@ __global__ void observe_kernel(C3D::PTA board, I1D::PTA seats, F4D::PTA obs) {
         for (int j=0; j<S; j++) {
             auto c = board[b][i][j];
             uint8_t color = 2;
-            if ((c == BLACK) | (c == TOP) | (c == BOT)) {
+            if ((c == BLACK) | (c == TOP) | (c == BOT) | (c == BLACK_WIN)) {
                 color = 0;
-            } else if ((c == WHITE) | (c == LEFT) | (c == RIGHT)) {
+            } else if ((c == WHITE) | (c == LEFT) | (c == RIGHT) | (c == WHITE_WIN)) {
                 color = 1;
             }
             colors[i*S+j] = color;

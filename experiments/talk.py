@@ -207,3 +207,35 @@ def plot_resid_var_trends(ags):
             title='Frontiers of small problems are good, cheap proxies for frontiers of expensive problems')
         + plot.mpl_theme()
         + plot.poster_sizes())
+
+def plot_params(ags):
+    df = ags.query('boardsize == 9 & test_nodes == 64').copy()
+    df['params'] = df.train_flops/df.samples
+    return (pn.ggplot(df, pn.aes(x='train_flops', y='400/np.log(10)*elo', color='params', group='run'))
+        + pn.geom_line()
+        + pn.geom_point()
+        + pn.scale_x_continuous(trans='log10')
+        + pn.scale_color_continuous(trans='log10', name='Params')
+        + pn.labs(
+            title='Smaller networks are more compute efficient for lower performances, but plateau earlier',
+            y='Elo v. perfect play',
+            x='Train FLOPS')
+        + plot.mpl_theme()
+        + plot.poster_sizes()
+        + plot.no_colorbar_ticks())
+
+def plot_sample_efficiency(ags):
+    df = ags.query('boardsize == 9 & test_nodes == 64').copy()
+    df['params'] = df.train_flops/df.samples
+    return (pn.ggplot(df, pn.aes(x='samples', y='400/np.log(10)*elo', color='params', group='run'))
+        + pn.geom_line()
+        + pn.geom_point()
+        + pn.scale_x_continuous(trans='log10')
+        + pn.scale_color_continuous(trans='log10', name='Params')
+        + pn.labs(
+            title='Bigger networks might not be comute efficient, but they are sample efficient',
+            y='Elo v. perfect play',
+            x='Train FLOPS')
+        + plot.mpl_theme()
+        + plot.poster_sizes()
+        + plot.no_colorbar_ticks())

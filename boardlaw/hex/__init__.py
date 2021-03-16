@@ -6,7 +6,7 @@ import torch
 from .. import heads
 from . import cuda
 
-CHARS = '.bwTBLR'
+CHARS = '.bwTBLRbw'
 ORDS = {c: i for i, c in enumerate(CHARS)}
 
 def color_board(board, colors='obs'):
@@ -208,6 +208,27 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seats'))):
         ax = self.plot_worlds(arrdict.numpyify(arrdict.arrdict(self)), e=e, **kwargs)
         plt.close(ax.figure)
         return ax
+
+class Finishable(Hex):
+
+    def _finished(self):
+        return ((self.board == ORDS['b']) | (self.board == ORDS['w'])).any(-1).any(-1)
+
+    def step(self, actions):
+        fin = self._finished()
+
+        new_worlds = type(self)(board=self.board.clone(), seats=self.seats.clone())
+
+        transition = arrdict.arrdict(
+            terminal=torch.full((self.n_envs,), True, device=self.device),
+            rewards=torch.full((self.n_envs, self.n_seats), 0., device=self.device))
+
+        new_worlds[~fin], transition[~fin] = super(type(self), self[~fin]).step(actions[~fin])
+
+        transition['terminal'] = fin
+
+        return new_worlds, transition
+
 
 class Solitaire(Hex):
     """One-player Hex"""
