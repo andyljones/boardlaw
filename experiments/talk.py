@@ -13,14 +13,27 @@ from boardlaw import analysis, arena
 from grid import sql, plot, elos
 from tqdm.auto import tqdm
 import plotnine as pn
+from rebar import arrdict
 
-def record_games():
+def record_games(n_envs=1, boardsize=9):
     rs = runs.pandas().dropna()
     run = rs[rs.params.apply(lambda r: r['boardsize'] == 9)].index[-1]
 
     world = arena.common.worlds(run, 49)
     agent = arena.common.agent(run)
-    analysis.record(world, [agent, agent], n_trajs=1).notebook()
+    trace = analysis.rollout(world, [agent, agent], n_trajs=1)
+
+    # Bit of a mess this
+    if n_envs == 1:
+        penult = trace.worlds[-2]
+        actions = trace.actions[-1]
+
+        ult, _ = penult.step(actions, reset=False)
+        augmented = arrdict.cat([trace.worlds[[-1]], trace.worlds[:-1], ult[None]], 0)
+    else:
+        augmented = trace.worlds
+
+    return analysis.record_worlds(augmented).notebook()
 
 def plot_elo_winrates():
     diffs = np.linspace(-1000, +1000)

@@ -147,7 +147,7 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seats'))):
         return self._valid
 
     @profiling.nvtx
-    def step(self, actions):
+    def step(self, actions, reset=True):
         """Args:
             actions: (n_env, 2)-int tensor between (0, 0) and (boardsize, boardsize). Cells are indexed in row-major
             order from the top-left.
@@ -168,7 +168,7 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seats'))):
 
         new_board = self.board.clone()
         rewards = cuda.step(new_board, self.seats.int(), actions.int())
-        terminal = (rewards > 0).any(-1)
+        terminal = (rewards > 0).any(-1) if reset else torch.full((self.n_envs,), False, device=self.device)
 
         new_board[terminal] = 0
 
