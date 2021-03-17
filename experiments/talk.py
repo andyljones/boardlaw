@@ -15,12 +15,15 @@ from tqdm.auto import tqdm
 import plotnine as pn
 from rebar import arrdict
 
-def record_games(n_envs=1, boardsize=9):
-    rs = runs.pandas().dropna()
-    run = rs[rs.params.apply(lambda r: r['boardsize'] == 9)].index[-1]
+RUNS = {
+    3: ('2021-02-17 21-01-19 arctic-ease', 20),
+    9: ('2021-02-20 23-35-25 simple-market', 20)}
 
-    world = arena.common.worlds(run, 49)
-    agent = arena.common.agent(run)
+def record_games(n_envs=1, boardsize=9):
+    run, idx = RUNS[boardsize]
+
+    world = arena.common.worlds(run, n_envs)
+    agent = arena.common.agent(run, idx)
     trace = analysis.rollout(world, [agent, agent], n_trajs=1)
 
     # Bit of a mess this
@@ -29,7 +32,7 @@ def record_games(n_envs=1, boardsize=9):
         actions = trace.actions[-1]
 
         ult, _ = penult.step(actions, reset=False)
-        augmented = arrdict.cat([trace.worlds[[-1]], trace.worlds[:-1], ult[None]], 0)
+        augmented = arrdict.cat([trace.worlds[[-1]], trace.worlds[:-1], ult[None], ult[None]], 0)
     else:
         augmented = trace.worlds
 
