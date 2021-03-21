@@ -9,8 +9,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import aljpy.plot
 from pavlov import runs
-from boardlaw import analysis, arena
-from grid import sql, plot, elos
+from boardlaw import analysis, arena, sql, elos
+from . import plot
 from tqdm.auto import tqdm
 import plotnine as pn
 from rebar import arrdict
