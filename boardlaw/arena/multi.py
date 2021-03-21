@@ -269,6 +269,36 @@ def evaluate(worldfunc, agentfunc, games, n_envs_per=512, chunksize=64, n_worker
             yield [], stats.copy()
             time.sleep(.1)
 
+def evaluate_save(boardsize=5, n_workers=2, **kwargs):
+    from .. import sql
+    from . import common
+
+    snaps = sql.snapshot_solns(boardsize, solve=False)
+
+    raw = sql.pandas(boardsize)
+    raw['games'] = raw.black_wins + raw.white_wins
+
+    games = raw.games.unstack().reindex(index=snaps.index, columns=snaps.index).fillna(0)
+
+    def worldfunc(n_envs):
+        return common.worlds(snaps.run.iloc[0], n_envs, device='cuda')
+
+    def agentfunc(name):
+        row = snaps.loc[name]
+        return common.agent(row.run, row.idx, device='cuda')
+
+    from IPython import display
+
+    for rs, stats in evaluate(worldfunc, agentfunc, games, chunksize=64, n_workers=n_workers):
+        sql.save(rs)
+
+        display.clear_output(wait=True)
+        print_stats(boardsize, stats)
+
+
+
+### TESTS ###
+
 class MockAgent:
 
     def __init__(self, id):
