@@ -6,7 +6,6 @@ from sqlalchemy import Column, Integer, Float, String, ForeignKey, create_engine
 from pavlov import runs, storage
 import ast
 from tqdm.auto import tqdm
-from . import asymdata
 from pathlib import Path
 from contextlib import contextmanager
 
@@ -77,6 +76,8 @@ def snapshot_data(r):
     return snapshots
 
 def trial_agent_data(s):
+    from . import asymdata
+
     trials = pd.concat([asymdata.pandas(b) for b in range(3, 10)]).reset_index()
 
     regex = r'(?P<run>[\w-]+)\.(?P<idx>\d+)(?:\.(?P<nodes>\d+))?'
