@@ -1,7 +1,6 @@
 import time
 import numpy as np
 import pandas as pd
-from IPython import display
 import matplotlib.pyplot as plt
 import pandas as pd
 from . import registry
@@ -50,6 +49,8 @@ def plot(*args, ffill=False, skip=None, head=None, **kwargs):
     return ax
 
 def periodic(*args, period=900, **kwargs):
+    from IPython import display
+
     epoch = pd.Timestamp('2020-1-1') 
     last = 0
     ax = None
