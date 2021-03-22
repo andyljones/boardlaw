@@ -9,21 +9,20 @@ def mpl_theme(width=12, height=8):
             panel_grid=pn.element_line(color='k', alpha=.1))]
 
 def poster_sizes():
-    return pn.theme(text=pn.element_text(size=18),
-                title=pn.element_text(size=18),
-                legend_title=pn.element_text(size=18))
+    return pn.theme(
+        text=pn.element_text(size=18),
+        title=pn.element_text(size=18),
+        legend_title=pn.element_text(size=18))
 
 
 def ieee():
     # https://github.com/garrettj403/SciencePlots/blob/master/styles/journals/ieee.mplstyle
     return pn.theme(
-        text=pn.element_text(family='serif')
+        text=pn.element_text(family='serif', size=6),
+        legend_title=pn.element_text(size=6),
+        figure_size=(3.3, 2.5), 
+        dpi=600,
     )
-# class IEEE(pn.theme.theme):
-
-#     def __init__(self):
-#         super().__init__()
-#         self._rcParams[]
 
 def no_colorbar_ticks():
     return pn.guides(color=pn.guide_colorbar(ticks=False))
