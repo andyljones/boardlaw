@@ -18,15 +18,18 @@ def poster_sizes():
 class IEEE(pn.theme):
 
     def __init__(self):
+        # https://matplotlib.org/stable/tutorials/introductory/customizing.html
         super().__init__(complete=True)
 
         self._rcParams.update({
-            'figure.figsize': (5, 4),
+            'figure.figsize': (3.487, 2.155),
+            'figure.dpi': 384,
             'font.family': 'serif',
-            'font.size': 8,
+            'font.size': 6,
             'axes.grid': True,
             'axes.grid.which': 'both',
-            'grid.alpha': .2})
+            'grid.alpha': .2,
+            'axes.linewidth': .5})
         
 
 def ieee():
