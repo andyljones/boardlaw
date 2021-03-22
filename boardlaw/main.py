@@ -58,30 +58,6 @@ def as_chunk(buffer, batch_size):
 
     return chunk, buffer
 
-def rel_entropy(logits):
-    valid = (logits > -np.inf)
-    zeros = torch.zeros_like(logits)
-    logits = logits.where(valid, zeros)
-    probs = logits.exp().where(valid, zeros)
-    return (-(logits*probs).sum(-1).mean(), torch.log(valid.sum(-1).float()).mean())
-
-def noise_scale(B, opt):
-    step = list(opt.state.values())[0]['step']
-    beta1, beta2 = opt.param_groups[0]['betas']
-    m_bias = 1 - beta1**step
-    v_bias = 1 - beta2**step
-
-    m = 1/m_bias*torch.cat([s['exp_avg'].flatten() for s in opt.state.values() if 'exp_avg' in s])
-    v = 1/v_bias*torch.cat([s['exp_avg_sq'].flatten() for s in opt.state.values() if 'exp_avg_sq' in s])
-
-    # Follows from chasing the var through the defn of m
-    inflator = (1 - beta1**2)/(1 - beta1)**2
-
-    S = B*(v.mean() - m.pow(2).mean())
-    G2 = inflator*m.pow(2).mean()
-
-    return S/G2
-
 def optimize(network, scaler, opt, batch):
 
     with torch.cuda.amp.autocast():
@@ -118,8 +94,8 @@ def optimize(network, scaler, opt, batch):
         stats.mean('kl-div.behaviour', (p0 - l0).mul(p0.exp()).sum(-1).mean())
         stats.mean('kl-div.prior', (p0 - l).mul(p0.exp()).sum(-1).mean())
 
-        stats.mean('rel-entropy.policy', *rel_entropy(d.logits)) 
-        stats.mean('rel-entropy.targets', *rel_entropy(d0.logits))
+        stats.mean('rel-entropy.policy', *learning.rel_entropy(d.logits)) 
+        stats.mean('rel-entropy.targets', *learning.rel_entropy(d0.logits))
 
         stats.mean('v.target.mean', target_value.mean())
         stats.mean('v.target.std', target_value.std())
@@ -151,52 +127,22 @@ def optimize(network, scaler, opt, batch):
         stats.max('grad.norm', grad.pow(2).sum().pow(.5))
         
         B = batch.transitions.terminal.nelement()
-        stats.mean('noise-scale', noise_scale(B, opt))
-
-def agent_factory(worldfunc, **kwargs):
-    worlds = worldfunc(n_envs=1)
-    network = networks.FCModel(worlds.obs_space, worlds.action_space, **kwargs).to(worlds.device)
-    return mcts.MCTSAgent(network)
-
-def warm_start(agent, opt, scaler, parent):
-    if parent:
-        parent = runs.resolve(parent)
-        sd = storage.load_latest(parent, device='cuda')
-        agent.load_state_dict(sd['agent'])
-        opt.load_state_dict(sd['opt'])
-        scaler.load_state_dict(sd['scaler'])
-    return parent
-
-def mix(worlds, T=2500):
-    for _ in range(T):
-        actions = torch.distributions.Categorical(probs=worlds.valid.float()).sample()
-        worlds, transitions = worlds.step(actions)
-    return worlds
-
-@arrdict.mapping
-def half(x):
-    if isinstance(x, torch.Tensor) and x.dtype == torch.float:
-        return x.half()
-    else:
-        return x
+        stats.mean('noise-scale', learning.noise_scale(B, opt))
 
 def run(boardsize, width, depth, nodes, desc):
     buffer_len = 64
     n_envs = 32*1024
 
-    #TODO: Restore league and sched when you go back to large boards
-    worlds = mix(hex.Hex.initial(n_envs, boardsize))
+    worlds = learning.mix(hex.Hex.initial(n_envs, boardsize))
     network = networks.FCModel(worlds.obs_space, worlds.action_space, width=width, depth=depth).to(worlds.device)
     agent = mcts.MCTSAgent(network, n_nodes=nodes)
 
     opt = torch.optim.Adam(network.parameters(), lr=1e-3)
     scaler = torch.cuda.amp.GradScaler()
 
-    parent = warm_start(agent, opt, scaler, '')
-
     run = runs.new_run(
             description=desc, 
-            params=dict(boardsize=worlds.boardsize, width=width, depth=depth, nodes=nodes, parent=parent))
+            params=dict(boardsize=worlds.boardsize, width=width, depth=depth, nodes=nodes))
 
     archive.archive(run)
 
@@ -218,7 +164,7 @@ def run(boardsize, width, depth, nodes, desc):
                 buffer.append(arrdict.arrdict(
                     worlds=worlds,
                     decisions=decisions.half(),
-                    transitions=half(transition)).detach())
+                    transitions=learning.half(transition)).detach())
 
                 worlds = new_worlds
 

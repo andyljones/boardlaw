@@ -1,39 +1,44 @@
 import torch
 import numpy as np
 from itertools import cycle
+from rebar import arrdict
 
-PRIME = 160481219
+def mix(worlds, T=2500):
+    for _ in range(T):
+        actions = torch.distributions.Categorical(probs=worlds.valid.float()).sample()
+        worlds, transitions = worlds.step(actions)
+    return worlds
 
-def batch_indices_fancy(buffer_length, buffer_inc, n_envs, batch_size, device='cuda'):
-    #TODO: This is supposed to account for the movement of the buffer so that each sample gets used exactly
-    # once. But it doesn't work. 
-    assert n_envs <= batch_size
-    assert batch_size % n_envs == 0 
-    assert (n_envs*buffer_length) % batch_size == 0
+@arrdict.mapping
+def half(x):
+    if isinstance(x, torch.Tensor) and x.dtype == torch.float:
+        return x.half()
+    else:
+        return x
 
-    batch_height = batch_size // n_envs
-    cols = torch.arange(n_envs, device=device)[None, :].repeat_interleave(batch_height, 1)
+def rel_entropy(logits):
+    valid = (logits > -np.inf)
+    zeros = torch.zeros_like(logits)
+    logits = logits.where(valid, zeros)
+    probs = logits.exp().where(valid, zeros)
+    return (-(logits*probs).sum(-1).mean(), torch.log(valid.sum(-1).float()).mean())
 
-    offsets = PRIME*torch.arange(n_envs, device=device)
+def noise_scale(B, opt):
+    step = list(opt.state.values())[0]['step']
+    beta1, beta2 = opt.param_groups[0]['betas']
+    m_bias = 1 - beta1**step
+    v_bias = 1 - beta2**step
 
-    rowperm = torch.arange(buffer_length, device=device)
-    i = 0
-    while True:
-        start = batch_height*i % buffer_length
-        end = start + batch_height
+    m = 1/m_bias*torch.cat([s['exp_avg'].flatten() for s in opt.state.values() if 'exp_avg' in s])
+    v = 1/v_bias*torch.cat([s['exp_avg_sq'].flatten() for s in opt.state.values() if 'exp_avg_sq' in s])
 
-        seeds = rowperm[start:end] - i*buffer_inc
-        rows = (seeds[:, None] + offsets[None, :]) % buffer_length
+    # Follows from chasing the var through the defn of m
+    inflator = (1 - beta1**2)/(1 - beta1)**2
 
-        yield (rows, cols)
+    S = B*(v.mean() - m.pow(2).mean())
+    G2 = inflator*m.pow(2).mean()
 
-        i += 1
-
-def batch_indices(buffer_length, n_envs, batch_size, device='cuda'):
-    while True:
-        cols = torch.arange(batch_size, device=device) % n_envs
-        rows = torch.randperm(batch_size) % buffer_length
-        yield rows, cols
+    return S/G2
 
 def gather(arr, indices):
     if isinstance(arr, dict):
@@ -70,6 +75,7 @@ def reward_to_go(reward, value, terminal, gamma=1.):
     fallback[terminal] = reward[terminal]
     return present_value(reward[:-1], fallback, terminal, gamma).detach()
 
+
 #########
 # TESTS #
 #########
@@ -86,23 +92,3 @@ def test_reward_to_go():
     terminal = torch.tensor([False, True, False])
     actual = reward_to_go(reward, value, terminal, gamma)
     torch.testing.assert_allclose(actual, torch.tensor([3., 2., 6.]))
-
-def test_batch_indices():
-    buffer_length = 16
-    buffer_inc = 4
-    n_envs = 1
-
-    batch_size = 4
-
-    n_incs = 16
-    counts = torch.zeros(buffer_length+n_incs*buffer_inc)
-    buffer = torch.arange(buffer_length)
-
-    idxs = batch_indices_fancy(buffer_length, buffer_inc, n_envs, batch_size, device='cpu')
-    for _, (rows, cols) in zip(range(n_incs), idxs):
-        counts[buffer[rows]] += 1
-
-        buffer = torch.cat([
-            buffer[buffer_inc:],
-            torch.arange(buffer.max()+1, buffer.max()+1+buffer_inc)])
-
