@@ -5,6 +5,7 @@ import pandas as pd
 import scipy as sp
 from tqdm.auto import tqdm
 from boardlaw import sql, elos
+import aljpy
 
 @aljpy.autocache()
 def _trial_elos(boardsize, counter):
