@@ -120,14 +120,14 @@ class Sigmoid(nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.vscale = nn.Parameter(torch.as_tensor([1.3, -2.]))
         self.hscale = nn.Parameter(torch.as_tensor([1/16., 0.]))
+        self.vscale = nn.Parameter(torch.as_tensor(1.3))
         self.center = nn.Parameter(torch.as_tensor([.66, 9.]))
         
     def forward(self, X):
         X = torch.cat([X, torch.ones_like(X[:, :1])], -1)
-        vscale = X[:, 1:] @ self.vscale
         hscale = X[:, 1:] @ self.hscale
+        vscale = hscale * self.vscale
         center = X[:, 1:] @ self.center
         return vscale*(torch.sigmoid((X[:, 0] - center)/hscale) - 1)
 
