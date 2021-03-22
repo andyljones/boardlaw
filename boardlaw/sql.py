@@ -60,53 +60,6 @@ def run_data():
     insert['nodes'] = insert.nodes.fillna(64)
     return insert.reset_index(drop=True)
 
-def snapshot_data(r):
-    snapshots = {}
-    for _, r in tqdm(list(r.iterrows()), desc='snapshots'):
-        for i, s in storage.snapshots(r.run).items():
-            stored = storage.load_snapshot(r.run, i)
-            if 'n_samples' in stored:
-                snapshots[r.run, i] = {
-                    'samples': stored['n_samples'], 
-                    'flops': stored['n_flops']}
-    snapshots = (pd.DataFrame.from_dict(snapshots, orient='index')
-                    .rename_axis(index=('run', 'idx'))
-                    .reset_index())
-    snapshots['id'] = snapshots.index.to_series()
-    return snapshots
-
-def trial_agent_data(s):
-    from . import asymdata
-
-    trials = pd.concat([asymdata.pandas(b) for b in range(3, 10)]).reset_index()
-
-    regex = r'(?P<run>[\w-]+)\.(?P<idx>\d+)(?:\.(?P<nodes>\d+))?'
-    black_agents = trials.black_name.str.extract(regex).fillna('64')
-    white_agents = trials.white_name.str.extract(regex).fillna('64')
-
-    agents = (pd.concat([black_agents, white_agents])
-                .drop_duplicates(['run', 'idx', 'nodes'])
-                .reset_index(drop=True)
-                .rename_axis(index='id')
-                .reset_index('id'))
-
-    short = pd.concat({
-            'run': s.run.str.extract(r'.* (?P<nickname>[\w-]+)$', expand=False), 
-            'idx': s.idx.astype(str), 
-            'id': s.index.to_series()}, 1)
-    agents = (pd.merge(agents, short, how='left', on=['run', 'idx'], suffixes=('', '_'))
-                .rename(columns={'id_': 'snap'}))
-    agents['c'] = 1/16
-
-    trials['black_agent'] = pd.merge(black_agents, agents, on=['run', 'idx', 'nodes'], how='left')['id']
-    trials['white_agent'] = pd.merge(white_agents, agents, on=['run', 'idx', 'nodes'], how='left')['id']
-    trials = (trials
-                .rename_axis(index='id')
-                .reset_index()
-                [['id', 'black_agent', 'white_agent', 'black_wins', 'white_wins', 'moves', 'times']])
-
-    return agents[['id', 'snap', 'nodes', 'c']], trials
-
 _engine = None
 @contextmanager
 def connection():
