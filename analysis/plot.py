@@ -1,3 +1,4 @@
+import matplotlib as mpl
 import plotnine as pn
 
 def mpl_theme(width=12, height=8):
@@ -28,8 +29,10 @@ class IEEE(pn.theme):
             'font.size': 6,
             'axes.grid': True,
             'axes.grid.which': 'both',
+            'grid.linewidth': .25,
             'grid.alpha': .2,
-            'axes.linewidth': .5})
+            'axes.linewidth': .5,
+            'axes.prop_cycle': mpl.rcParams['axes.prop_cycle']})
         
 
 def ieee():
