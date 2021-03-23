@@ -2,6 +2,24 @@ import numpy as np
 from . import plot, data
 import plotnine as pn
 import matplotlib.patheffects as path_effects
+from boardlaw import arena, analysis
+
+RUNS = {
+    3: ('2021-02-17 21-01-19 arctic-ease', 20),
+    9: ('2021-02-20 23-35-25 simple-market', 20)}
+
+def plot_termination(n_envs=1, boardsize=9):
+    run, idx = RUNS[boardsize]
+
+    world = arena.common.worlds(run, n_envs)
+    agent = arena.common.agent(run, idx)
+    trace = analysis.rollout(world, [agent, agent], n_trajs=1)
+
+    penult = trace.worlds[-2]
+    actions = trace.actions[-1]
+    ult, _ = penult.step(actions, reset=False)
+
+    return ult.display()
 
 def plot_frontiers(ags):
     df = data.modelled_elos(ags)
