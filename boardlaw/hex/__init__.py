@@ -27,7 +27,24 @@ def color_obs(obs):
     keyed[obs[..., 1] == 1.] = 2
     return color_board(keyed)
 
-def edge(width, k=.2):
+def _hex_centers(width):
+    # Find Hex centers
+    sin60 = np.sin(np.pi/3)
+    rows, cols = np.indices((width, width))
+    return np.stack([
+        cols + .5*np.arange(width)[:, None],
+        # Hex centers are 1 apart, so distances between rows are sin(60)
+        sin60*(width - 1 - rows)], -1).reshape(-1, 2)
+
+def _hex_size(ax):
+    # Generate hexes
+    sin60 = np.sin(np.pi/3)
+    radius = .5/sin60
+    data_to_pixels = ax.transData.get_matrix()[0, 0]
+    pixels_to_points = 1/ax.figure.get_dpi()*72.
+    return np.pi*(data_to_pixels*pixels_to_points*radius)**2
+
+def _edge(width, k=.2):
     sin30 = np.sin(np.pi/6)
     cos30 = np.cos(np.pi/6)
     sin60 = np.sin(np.pi/3)
@@ -50,7 +67,24 @@ def edge(width, k=.2):
 
     return np.concatenate([left, top, right])
 
-def plot_board(colors, ax=None, black='dimgray', white='lightgray', edges=True):
+def _edges(coords, black, white, width):
+    # Generate board edges
+    rots = [0, 120, 180, 300]
+    origins = [coords[0], coords[0], coords[-1], coords[-1]]
+    cols = [black, white, black, white]
+    patches = []
+    for rot, origin, color in zip(rots, origins, cols):
+        rot = np.pi/180*rot
+        rot = np.array([[np.cos(rot), -np.sin(rot)], [np.sin(rot), np.cos(rot)]])
+        ref = 1 if color == black else -1
+        rot[:, 1] = ref*rot[:, 1] 
+        
+        points = _edge(width)*ref @ rot + origin
+        patches.append(mpl.patches.Polygon(points, linewidth=1, edgecolor='k', facecolor=color, zorder=1))
+    return patches
+
+
+def plot_board(colors, ax=None, black='dimgray', white='lightgray', rotate=False):
     ax = plt.subplots()[1] if ax is None else ax
     ax.set_aspect(1)
 
@@ -60,37 +94,13 @@ def plot_board(colors, ax=None, black='dimgray', white='lightgray', edges=True):
     ax.set_xlim(-1.5, 1.5*width)
     ax.set_ylim(-sin60, sin60*width)
 
-    # Find Hex centers
-    size = width*width
-    rows, cols = np.indices((width, width))
-    coords = np.stack([
-        cols + .5*np.arange(width)[:, None],
-        # Hex centers are 1 apart, so distances between rows are sin(60)
-        sin60*(width - 1 - rows)], -1).reshape(-1, 2)
-
-    # Generate board edges
-    rots = [0, 120, 180, 300]
-    origins = [coords[0], coords[0], coords[-1], coords[-1]]
-    cols = [black, white, black, white]
-    for rot, origin, color in zip(rots, origins, cols):
-        rot = np.pi/180*rot
-        rot = np.array([[np.cos(rot), -np.sin(rot)], [np.sin(rot), np.cos(rot)]])
-        ref = 1 if color == black else -1
-        rot[:, 1] = ref*rot[:, 1] 
-        
-        points = edge(width)*ref @ rot + origin
-        ax.add_patch(mpl.patches.Polygon(points, linewidth=1, edgecolor='k', facecolor=color, zorder=1))
-
-    # Generate hexes
-    radius = .5/sin60
-    data_to_pixels = ax.transData.get_matrix()[0, 0]
-    pixels_to_points = 1/ax.figure.get_dpi()*72.
-    size = np.pi*(data_to_pixels*pixels_to_points*radius)**2
-    sizes = (size,)*len(coords)
+    size = _hex_size(ax)
+    coords = _hex_centers(width)
 
     hexes = mpl.collections.RegularPolyCollection(
                     numsides=6, 
-                    sizes=sizes,
+                    rotation=np.pi/180*30 if rotate else 0,
+                    sizes=(size,)*len(coords),
                     offsets=coords, 
                     facecolors=colors.reshape(-1, colors.shape[-1]), 
                     edgecolor='k', 
@@ -98,6 +108,9 @@ def plot_board(colors, ax=None, black='dimgray', white='lightgray', edges=True):
                     transOffset=ax.transData,
                     zorder=2)
     ax.add_collection(hexes)
+
+    for patch in _edges(coords, black, white, width):
+        ax.add_patch(patch)
 
     ax.set_frame_on(False)
     ax.set_xticks([])
@@ -193,14 +206,14 @@ class Hex(arrdict.namedarrtuple(fields=('board', 'seats'))):
         return super().__setitem__(x, y)
 
     @classmethod
-    def plot_worlds(cls, worlds, e=None, ax=None, colors='obs'):
+    def plot_worlds(cls, worlds, e=None, ax=None, colors='obs', **kwargs):
         e = (0,)*(worlds.board.ndim-2) if e is None else e
         board = worlds.board[e]
 
         ax = plt.subplots()[1] if ax is None else ax
 
         colors = color_board(board, colors)
-        plot_board(colors, ax)
+        plot_board(colors, ax, **kwargs)
 
         return ax.figure
 
