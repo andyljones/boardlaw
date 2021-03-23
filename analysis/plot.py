@@ -1,5 +1,9 @@
+import json
+from pathlib import Path
+import matplotlib.pyplot as plt
 import matplotlib as mpl
 import plotnine as pn
+from io import BytesIO
 
 def mpl_theme(width=12, height=8):
     return [
@@ -24,7 +28,7 @@ class IEEE(pn.theme):
 
         self._rcParams.update({
             'figure.figsize': (3.487, 2.155),
-            'figure.dpi': 384,
+            'figure.dpi': 600,
             'font.family': 'serif',
             'font.size': 6,
             'axes.grid': True,
@@ -50,3 +54,32 @@ def ieee():
 
 def no_colorbar_ticks():
     return pn.guides(color=pn.guide_colorbar(ticks=False))
+
+def _dropbox_upload(data, path):
+    # https://www.dropbox.com/developers/documentation/http/documentation#files-upload
+    import dropbox
+    token = json.loads(Path('credentials.json').read_text())['dropbox']
+    dbx = dropbox.Dropbox(token)
+
+    # Will throw an UploadError if it fails
+    dbx.files_upload(
+        f=data, 
+        path=path,
+        mode=dropbox.files.WriteMode.overwrite)
+
+def overleaf(x, name):
+    if isinstance(x, pn.ggplot):
+        fig = x.draw()
+    elif isinstance(x, plt.Axes):
+        fig = x.figure
+    elif isinstance(x, plt.Figure):
+        fig = x
+    else:
+        raise ValueError(f'Can\'t handle {type(x)}')
+    
+    bs = BytesIO()
+    format = name.split('.')[-1]
+    fig.savefig(bs, format=format, bbox_inches='tight')
+    plt.close(fig)
+
+    _dropbox_upload(bs.getvalue(), f'/Apps/Overleaf/boardlaw/images/{name}')
