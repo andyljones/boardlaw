@@ -70,17 +70,16 @@ def plot_frontiers(ags):
 
 def plot_resid_var(ags):
     resid_var = data.residual_vars(ags)
-    labels = resid_var.sort_values('seen').groupby('predicted').first().reset_index()
-    return (pn.ggplot(resid_var, pn.aes(x='ratio', y='rv', color='factor(predicted)', group='predicted'))
+    resid_var['diff'] = resid_var.predicted - resid_var.seen
+    labels = resid_var.sort_values('seen').groupby('predicted').last().reset_index()
+    return (pn.ggplot(resid_var, pn.aes(x='seen', y='rv', color='factor(predicted)', group='predicted'))
         + pn.geom_line(size=.25, show_legend=False)
-        + pn.geom_text(pn.aes(label='predicted'), labels, nudge_y=+.1, size=6, show_legend=False)
-        + pn.geom_text(pn.aes(label='seen'), nudge_y=-.1, size=4, show_legend=False)
+        + pn.geom_text(pn.aes(label='predicted'), labels, nudge_x=+.15, size=6, show_legend=False)
         + pn.geom_point(size=.25, show_legend=False)
-        + pn.scale_x_continuous(trans='log10')
         + pn.scale_y_continuous(trans='log10')
         + pn.scale_color_discrete(l=.4)
         + pn.labs(
-            x='compute ratio',
+            x='max board size observed',
             y='residual variance')
         + plot.IEEE())
 
