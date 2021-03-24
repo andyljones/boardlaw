@@ -42,48 +42,6 @@ class IEEE(pn.theme):
             'axes.linewidth': .5,
             'axes.prop_cycle': mpl.rcParams['axes.prop_cycle']})
         
-
-def ieee():
-    # https://github.com/garrettj403/SciencePlots/blob/master/styles/journals/ieee.mplstyle
-    return [
-        pn.theme_mpl(),
-        pn.theme(
-            strip_background=pn.element_rect(color='w', fill='w'),
-            panel_grid=pn.element_line(color='k', alpha=.1, size=.25),
-
-            text=pn.element_text(family='serif', size=8),
-            legend_title=pn.element_text(size=8),
-            figure_size=(3.3, 2.5), 
-            dpi=180,)]
-
 def no_colorbar_ticks():
     return pn.guides(color=pn.guide_colorbar(ticks=False))
 
-def _dropbox_upload(data, path):
-    # https://www.dropbox.com/developers/documentation/http/documentation#files-upload
-    import dropbox
-    token = json.loads(Path('credentials.json').read_text())['dropbox']
-    dbx = dropbox.Dropbox(token)
-
-    # Will throw an UploadError if it fails
-    dbx.files_upload(
-        f=data, 
-        path=path,
-        mode=dropbox.files.WriteMode.overwrite)
-
-def overleaf(x, name):
-    if isinstance(x, pn.ggplot):
-        fig = x.draw()
-    elif isinstance(x, plt.Axes):
-        fig = x.figure
-    elif isinstance(x, plt.Figure):
-        fig = x
-    else:
-        raise ValueError(f'Can\'t handle {type(x)}')
-    
-    bs = BytesIO()
-    format = name.split('.')[-1]
-    fig.savefig(bs, format=format, bbox_inches='tight', pad_inches=.005, dpi=600)
-    plt.close(fig)
-
-    _dropbox_upload(bs.getvalue(), f'/Apps/Overleaf/boardlaw/images/{name}')

@@ -1,5 +1,5 @@
 import numpy as np
-from . import plot, data
+from . import plot, data, overleaf
 import plotnine as pn
 import matplotlib.patheffects as path_effects
 from boardlaw import arena, analysis
@@ -56,11 +56,22 @@ def plot_runtimes(ags):
         .groupby('boardsize').first()
         .reset_index())
     return (pn.ggplot(best, pn.aes(x='boardsize', y='train_time'))
-        + pn.geom_point()
-        + pn.geom_line()
+        + pn.geom_point(size=.5)
+        + pn.geom_line(size=.5)
         + pn.scale_y_continuous(trans='log10')
-        + pn.labs(x='board size', y='training time (s)')
+        + pn.labs(x='Board size', y='Training time (s)')
         + plot.IEEE())
+
+def boardsize_hyperparams_table(ags):
+    return (ags
+        .groupby('boardsize')
+        [['width', 'depth', 'samples', 'train_flops']]
+        .max()
+        .assign(train_flops=lambda df: df.train_flops.apply(lambda s: f'{s:.1G}'))
+        .assign(samples=lambda df: df.samples.apply(lambda s: f'{s:.1G}'))
+        .rename(columns={'boardsize': 'board size', 'width': 'max neurons', 'depth': 'max layers', 'samples': 'max samples', 'train_flops': 'max flops'})
+        .reset_index()
+        .to_latex(index=False, label='boardsize', caption='Board size-dependent hyperparameters'))
 
 if __name__ == '__main__':
     ags = data.load()
@@ -69,3 +80,5 @@ if __name__ == '__main__':
     upload(plot_hex)
     upload(plot_frontiers, ags)
     upload(plot_runtimes, ags)
+
+    overleaf.table(boardsize_hyperparams_table(ags), 'boardsize_hyperparams')
