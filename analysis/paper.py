@@ -68,6 +68,22 @@ def plot_frontiers(ags):
                 + pn.coord_cartesian(None, (None, 0))
                 + plot.IEEE())
 
+def plot_resid_var(ags):
+    resid_var = data.residual_vars(ags)
+    labels = resid_var.sort_values('seen').groupby('predicted').first().reset_index()
+    return (pn.ggplot(resid_var, pn.aes(x='ratio', y='rv', color='factor(predicted)', group='predicted'))
+        + pn.geom_line(size=.25, show_legend=False)
+        + pn.geom_text(pn.aes(label='predicted'), labels, nudge_y=+.1, size=6, show_legend=False)
+        + pn.geom_text(pn.aes(label='seen'), nudge_y=-.1, size=4, show_legend=False)
+        + pn.geom_point(size=.25, show_legend=False)
+        + pn.scale_x_continuous(trans='log10')
+        + pn.scale_y_continuous(trans='log10')
+        + pn.scale_color_discrete(l=.4)
+        + pn.labs(
+            x='compute ratio',
+            y='residual variance')
+        + plot.IEEE())
+
 def plot_runtimes(ags):
     threshold = -50/(400/np.log(10))
     best = (ags
@@ -116,6 +132,7 @@ if __name__ == '__main__':
     upload(plot_flops_curves, ags)
     upload(plot_frontiers, ags)
     upload(plot_runtimes, ags)
+    upload(plot_resid_var, ags)
 
     overleaf.table(boardsize_hyperparams_table(ags), 'boardsize_hyperparams')
     overleaf.table(parameters_table(ags), 'parameters')

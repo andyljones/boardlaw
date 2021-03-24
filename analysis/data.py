@@ -91,7 +91,7 @@ def fit_model(df):
     X = model_inputs(df)
     y = torch.as_tensor(df.elo.values)
 
-    model = Sigmoid()
+    model = Changepoint()
     optim = torch.optim.LBFGS(model.parameters(), line_search_fn='strong_wolfe', max_iter=100)
 
     def closure():
@@ -109,7 +109,7 @@ def apply_model(model, df):
     X = model_inputs(df)
     return pd.Series(model(X).detach().cpu().numpy(), df.index)
     
-def perfect_play(model, target=-100):
+def perfect_play(model, target=-50):
     perfect = {}
     for b in range(3, 10):
         f = lambda x: 400/np.log(10)*model(torch.as_tensor([[x, b]])).detach().numpy().squeeze() - target
