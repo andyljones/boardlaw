@@ -3,12 +3,22 @@ from . import plot, data
 import plotnine as pn
 import matplotlib.patheffects as path_effects
 from boardlaw import arena, analysis
+from functools import wraps
+import torch
 
 RUNS = {
     3: ('2021-02-17 21-01-19 arctic-ease', 20),
     9: ('2021-02-20 23-35-25 simple-market', 20)}
 
-def plot_termination(n_envs=1, boardsize=9):
+def upload(f, *args, **kwargs):
+    [_, name] = f.__name__.split('plot_')
+
+    y = f(*args, **kwargs)
+    plot.overleaf(y, name + '.png')
+
+def plot_hex(n_envs=1, boardsize=9, seed=8):
+    torch.manual_seed(seed)
+
     run, idx = RUNS[boardsize]
 
     world = arena.common.worlds(run, n_envs)
@@ -30,11 +40,32 @@ def plot_frontiers(ags):
                 + pn.geom_line(pn.aes(y='400/np.log(10)*elohat'), size=.25, linetype='dashed', show_legend=False)
                 + pn.geom_text(pn.aes(y='400/np.log(10)*elohat', label='boardsize'), data=labels, show_legend=False, size=6, nudge_x=-.25, nudge_y=-15)
                 + pn.labs(
-                    x='TFLOPS', 
+                    x='FLOPS', 
                     y='Elo v. perfect play')
                 + pn.scale_color_discrete(l=.4)
                 + pn.scale_x_continuous(trans='log10')
                 + pn.coord_cartesian(None, (None, 0))
                 + plot.IEEE())
 
+def plot_runtimes(ags):
+    threshold = -50/(400/np.log(10))
+    best = (ags
+        .query('test_nodes == 64')
+        .loc[lambda df: df.elo > threshold]
+        .sort_values('train_time')
+        .groupby('boardsize').first()
+        .reset_index())
+    return (pn.ggplot(best, pn.aes(x='boardsize', y='train_time'))
+        + pn.geom_point()
+        + pn.geom_line()
+        + pn.scale_y_continuous(trans='log10')
+        + pn.labs(x='board size', y='training time (s)')
+        + plot.IEEE())
 
+if __name__ == '__main__':
+    ags = data.load()
+    #TODO: Push this back into the database
+    ags = data.with_times(ags)
+    upload(plot_hex)
+    upload(plot_frontiers, ags)
+    upload(plot_runtimes, ags)

@@ -89,7 +89,11 @@ class LogarithmicStorer:
     def step(self, agent, n_samples):
         self._n_samples += n_samples
         self._n_flops += self._flops_per*n_samples
-        sd = {'agent': agent.state_dict(), 'n_flops': self._n_flops, 'n_samples': self._n_samples}
+        sd = {
+            'agent': agent.state_dict(), 
+            'n_flops': self._n_flops, 
+            'n_samples': self._n_samples, 
+            'runtime': time.time() - self._start}
         if self._n_flops >= self._savepoints[self._next]:
             log.info(f'Taking a snapshot at {self._n_flops:.1G} FLOPS')
             storage.save_snapshot(self._run, sd)

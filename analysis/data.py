@@ -6,6 +6,9 @@ import scipy as sp
 from tqdm.auto import tqdm
 from boardlaw import sql, elos
 import aljpy
+from pavlov import stats, runs
+import pandas as pd
+
 
 @aljpy.autocache()
 def _trial_elos(boardsize, counter):
@@ -26,6 +29,18 @@ def load():
     es = pd.concat(es)
 
     return ags.join(es, how='inner')
+
+def with_times(ags):
+    rates = {}
+    for r in ags.run.unique():
+        arr = stats.array(r, 'count.samples')
+        s, t = arr['total'], arr['_time']
+        rates[r] = 1e6*(s.sum() - s[0])/(t[-1] - t[0]).astype(float)
+    rates = pd.Series(rates, name='sample_rate')
+
+    aug = pd.merge(ags, rates, left_on='run', right_index=True)
+    aug['train_time'] = aug.samples/aug.sample_rate
+    return aug
 
 def interp_frontier(g, x='train_flops', y='elo', group='run'):
     xl, xr = g[x].pipe(np.log10).min(), g[x].pipe(np.log10).max()

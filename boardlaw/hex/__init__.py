@@ -83,7 +83,6 @@ def _edges(coords, black, white, width):
         patches.append(mpl.patches.Polygon(points, linewidth=1, edgecolor='k', facecolor=color, zorder=1))
     return patches
 
-
 def plot_board(colors, ax=None, black='dimgray', white='lightgray', rotate=False):
     ax = plt.subplots()[1] if ax is None else ax
     ax.set_aspect(1)

@@ -24,11 +24,15 @@ class IEEE(pn.theme):
 
     def __init__(self):
         # https://matplotlib.org/stable/tutorials/introductory/customizing.html
-        super().__init__(complete=True)
+        margin = {'t': 1, 'b': 1, 'l': 1, 'r': 1, 'units': 'pt'}
+        super().__init__(
+            axis_title_x=pn.element_text(margin=margin), 
+            axis_title_y=pn.element_text(margin=margin), 
+            complete=True)
 
         self._rcParams.update({
             'figure.figsize': (3.487, 2.155),
-            'figure.dpi': 600,
+            'figure.dpi': 300,
             'font.family': 'serif',
             'font.size': 6,
             'axes.grid': True,
@@ -79,7 +83,7 @@ def overleaf(x, name):
     
     bs = BytesIO()
     format = name.split('.')[-1]
-    fig.savefig(bs, format=format, bbox_inches='tight')
+    fig.savefig(bs, format=format, bbox_inches='tight', pad_inches=.005, dpi=600)
     plt.close(fig)
 
     _dropbox_upload(bs.getvalue(), f'/Apps/Overleaf/boardlaw/images/{name}')
