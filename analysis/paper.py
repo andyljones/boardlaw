@@ -14,7 +14,7 @@ def upload(f, *args, **kwargs):
     [_, name] = f.__name__.split('plot_')
 
     y = f(*args, **kwargs)
-    plot.overleaf(y, name + '.png')
+    overleaf.plot(y, name + '.png')
 
 def plot_hex(n_envs=1, boardsize=9, seed=8):
     torch.manual_seed(seed)
@@ -30,6 +30,23 @@ def plot_hex(n_envs=1, boardsize=9, seed=8):
     ult, _ = penult.step(actions, reset=False)
 
     return ult.display()
+
+def plot_flops_curves(ags):
+    df = ags.query('test_nodes == 64').copy()
+    df['g'] = ags.run
+    labels = df.sort_values('train_flops').groupby('boardsize').first().reset_index()
+
+    return (pn.ggplot(df, pn.aes(x='train_flops', color='factor(boardsize)', group='g'))
+        + pn.geom_line(pn.aes(y='400/np.log(10)*elo'), size=.25, show_legend=False)
+        + pn.geom_point(pn.aes(y='400/np.log(10)*elo'), size=1/16, show_legend=False, shape='.')
+        + pn.geom_text(pn.aes(y='400/np.log(10)*elo', label='boardsize'), data=labels, show_legend=False, size=6, nudge_x=-.25, nudge_y=-15)
+        + pn.labs(
+            x='FLOPS', 
+            y='Elo v. perfect play')
+        + pn.scale_color_discrete(l=.4)
+        + pn.scale_x_continuous(trans='log10')
+        + pn.coord_cartesian(None, (None, 0))
+        + plot.IEEE())
 
 def plot_frontiers(ags):
     df = data.modelled_elos(ags)
@@ -78,6 +95,7 @@ if __name__ == '__main__':
     #TODO: Push this back into the database
     ags = data.with_times(ags)
     upload(plot_hex)
+    upload(plot_flops_curves, ags)
     upload(plot_frontiers, ags)
     upload(plot_runtimes, ags)
 
