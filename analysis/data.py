@@ -58,14 +58,16 @@ class Changepoint(nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.lower = nn.Parameter(torch.as_tensor([-1.5, 3.]))
-        self.linear = nn.Parameter(torch.as_tensor([2., -2, -16]))
+        # Boardsize, offset
+        self.plateau = nn.Parameter(torch.as_tensor([-1.5, 3.]))
+        # Flops, boardsize, offset
+        self.incline = nn.Parameter(torch.as_tensor([2., -2, -16]))
         
     def forward(self, X):
         X = torch.cat([X, torch.ones_like(X[:, :1])], -1)
-        lower = X[:, 1:] @ self.lower
-        linear = X @ self.linear
-        return torch.maximum(linear, lower).clamp(None, 0)
+        plateau = X[:, 1:] @ self.plateau
+        incline = X @ self.incline
+        return torch.maximum(incline, plateau).clamp(None, 0)
 
 class Sigmoid(nn.Module):
 

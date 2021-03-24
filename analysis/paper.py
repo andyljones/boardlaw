@@ -108,21 +108,24 @@ def boardsize_hyperparams_table(ags):
         .assign(samples=lambda df: df.samples.apply(lambda s: f'{s:.1G}'))
         .rename(columns={'boardsize': 'board size', 'width': 'max neurons', 'depth': 'max layers', 'samples': 'max samples', 'train_flops': 'max flops'})
         .reset_index()
-        .to_latex(index=False, label='boardsize', caption='Board size-dependent hyperparameters'))
+        .to_latex(index=True, label='boardsize', caption='Board size-dependent hyperparameters'))
 
 def parameters_table(ags):
     df, model = data.modelled_elos(ags)
     params = {k: v.detach().cpu().numpy() for k, v in model.named_parameters()}
-    raw = pd.Series({
-            '$m_\text{scale}$': params['scale'][0],
-            '$c_\text{scale}$': params['scale'][1],
-            '$m_\text{center}$': params['center'][0],
-            '$c_\text{center}$': params['center'][1],
-            '$\text{height}$': ELO*params['height'].item()})
+    raw = ELO*pd.Series({
+            ('$m_\text{boardsize}$', 'plateau'): params['plateau'][0],
+            ('$c$', 'plateau'): params['plateau'][1],
+            ('$m_\text{flops}$', 'incline'): params['incline'][0],
+            ('$m_\text{boardsize}$', 'incline'): params['incline'][1],
+            ('$c$', 'incline'): params['incline'][2]})
+
     return (raw
-            .apply(plot.sig_figs, n=3)
-            .to_frame().T
-            .to_latex(index=False, label='parameters', caption='Fitted frontier parameters', escape=False))
+            .apply(plot.sig_figs, n=2)
+            .unstack(0)
+            .fillna('')
+            .iloc[::-1, ::-1]
+            .to_latex(index=True, label='parameters', caption='Fitted frontier parameters', escape=False))
 
 if __name__ == '__main__':
     ags = data.load()
@@ -131,8 +134,8 @@ if __name__ == '__main__':
     upload(plot_hex)
     upload(plot_flops_curves, ags)
     upload(plot_frontiers, ags)
-    upload(plot_runtimes, ags)
     upload(plot_resid_var, ags)
+    upload(plot_runtimes, ags)
 
     overleaf.table(boardsize_hyperparams_table(ags), 'boardsize_hyperparams')
     overleaf.table(parameters_table(ags), 'parameters')
