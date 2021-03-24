@@ -45,3 +45,5 @@ class IEEE(pn.theme):
 def no_colorbar_ticks():
     return pn.guides(color=pn.guide_colorbar(ticks=False))
 
+def sig_figs(x, n=1):
+    return '{:g}'.format(float('{:.{p}g}'.format(x, p=n)))

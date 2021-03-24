@@ -71,14 +71,14 @@ class Sigmoid(nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.hscale = nn.Parameter(torch.as_tensor([1/16., 0.]))
-        self.vscale = nn.Parameter(torch.as_tensor(1.3))
+        self.scale = nn.Parameter(torch.as_tensor([1/16., 0.]))
+        self.height = nn.Parameter(torch.as_tensor(1.3))
         self.center = nn.Parameter(torch.as_tensor([.66, 9.]))
         
     def forward(self, X):
         X = torch.cat([X, torch.ones_like(X[:, :1])], -1)
-        hscale = X[:, 1:] @ self.hscale
-        vscale = hscale * self.vscale
+        hscale = X[:, 1:] @ self.scale
+        vscale = hscale * self.height
         center = X[:, 1:] @ self.center
         return vscale*(torch.sigmoid((X[:, 0] - center)/hscale) - 1)
 
@@ -124,7 +124,7 @@ def modelled_elos(ags):
     
     model = fit_model(df)
     df['elohat'] = apply_model(model, df)
-    return df
+    return df, model
 
 def residual_vars(ags):
     df = (ags.query('test_nodes == 64')

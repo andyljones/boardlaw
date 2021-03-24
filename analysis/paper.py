@@ -1,3 +1,4 @@
+import pandas as pd
 import numpy as np
 from . import plot, data, overleaf
 import plotnine as pn
@@ -9,6 +10,9 @@ import torch
 RUNS = {
     3: ('2021-02-17 21-01-19 arctic-ease', 20),
     9: ('2021-02-20 23-35-25 simple-market', 20)}
+
+# All Elos internally go as e^d; Elos in public are in base 10^(d/400)
+ELO = 400/np.log(10)
 
 def upload(f, *args, **kwargs):
     [_, name] = f.__name__.split('plot_')
@@ -37,9 +41,9 @@ def plot_flops_curves(ags):
     labels = df.sort_values('train_flops').groupby('boardsize').first().reset_index()
 
     return (pn.ggplot(df, pn.aes(x='train_flops', color='factor(boardsize)', group='g'))
-        + pn.geom_line(pn.aes(y='400/np.log(10)*elo'), size=.25, show_legend=False)
-        + pn.geom_point(pn.aes(y='400/np.log(10)*elo'), size=1/16, show_legend=False, shape='.')
-        + pn.geom_text(pn.aes(y='400/np.log(10)*elo', label='boardsize'), data=labels, show_legend=False, size=6, nudge_x=-.25, nudge_y=-15)
+        + pn.geom_line(pn.aes(y='ELO*elo'), size=.25, show_legend=False)
+        + pn.geom_point(pn.aes(y='ELO*elo'), size=1/16, show_legend=False, shape='.')
+        + pn.geom_text(pn.aes(y='ELO*elo', label='boardsize'), data=labels, show_legend=False, size=6, nudge_x=-.25, nudge_y=-15)
         + pn.labs(
             x='FLOPS', 
             y='Elo v. perfect play')
@@ -49,13 +53,13 @@ def plot_flops_curves(ags):
         + plot.IEEE())
 
 def plot_frontiers(ags):
-    df = data.modelled_elos(ags)
+    df, model = data.modelled_elos(ags)
     labels = df.sort_values('train_flops').groupby('boardsize').first().reset_index()
 
     return (pn.ggplot(df, pn.aes(x='train_flops', color='factor(boardsize)', group='boardsize'))
-                + pn.geom_line(pn.aes(y='400/np.log(10)*elo'), size=.5, show_legend=False)
-                + pn.geom_line(pn.aes(y='400/np.log(10)*elohat'), size=.25, linetype='dashed', show_legend=False)
-                + pn.geom_text(pn.aes(y='400/np.log(10)*elohat', label='boardsize'), data=labels, show_legend=False, size=6, nudge_x=-.25, nudge_y=-15)
+                + pn.geom_line(pn.aes(y='ELO*elo'), size=.5, show_legend=False)
+                + pn.geom_line(pn.aes(y='ELO*elohat'), size=.25, linetype='dashed', show_legend=False)
+                + pn.geom_text(pn.aes(y='ELO*elohat', label='boardsize'), data=labels, show_legend=False, size=6, nudge_x=-.25, nudge_y=-15)
                 + pn.labs(
                     x='FLOPS', 
                     y='Elo v. perfect play')
@@ -90,6 +94,20 @@ def boardsize_hyperparams_table(ags):
         .reset_index()
         .to_latex(index=False, label='boardsize', caption='Board size-dependent hyperparameters'))
 
+def parameters_table(ags):
+    df, model = data.modelled_elos(ags)
+    params = {k: v.detach().cpu().numpy() for k, v in model.named_parameters()}
+    raw = pd.Series({
+            '$m_\text{scale}$': params['scale'][0],
+            '$c_\text{scale}$': params['scale'][1],
+            '$m_\text{center}$': params['center'][0],
+            '$c_\text{center}$': params['center'][1],
+            '$\text{height}$': ELO*params['height'].item()})
+    return (raw
+            .apply(plot.sig_figs, n=3)
+            .to_frame().T
+            .to_latex(index=False, label='parameters', caption='Fitted frontier parameters', escape=False))
+
 if __name__ == '__main__':
     ags = data.load()
     #TODO: Push this back into the database
@@ -100,3 +118,4 @@ if __name__ == '__main__':
     upload(plot_runtimes, ags)
 
     overleaf.table(boardsize_hyperparams_table(ags), 'boardsize_hyperparams')
+    overleaf.table(parameters_table(ags), 'parameters')
