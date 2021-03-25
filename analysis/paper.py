@@ -75,7 +75,7 @@ def plot_resid_var(ags):
         + pn.geom_text(pn.aes(label='predicted'), labels, nudge_x=+.15, size=6, show_legend=False)
         + pn.geom_point(size=.5, show_legend=False)
         + pn.scale_y_continuous(trans='log10')
-        + pn.scale_color_discrete(l=.4)
+        + pn.scale_color_discrete(l=.4, limits=list(range(3, 10)))
         + pn.labs(
             x='max board size observed',
             y='residual variance')
@@ -89,11 +89,35 @@ def plot_runtimes(ags):
         .sort_values('train_time')
         .groupby('boardsize').first()
         .reset_index())
-    return (pn.ggplot(best, pn.aes(x='boardsize', y='train_time'))
-        + pn.geom_point(size=.5)
-        + pn.geom_line(size=.5)
+    return (pn.ggplot(best, pn.aes(x='boardsize', y='train_time', color='factor(boardsize)'))
+        + pn.geom_point(size=2, show_legend=False)
+        # + pn.geom_line(size=.5, show_legend=False)
         + pn.scale_y_continuous(trans='log10')
+        + pn.scale_color_discrete(l=.4)
         + pn.labs(x='Board size', y='Training time (s)')
+        + plot.IEEE())
+
+def plot_test(ags):
+    df = ags.query('boardsize == 9').groupby('run').apply(lambda df: df[df.idx == df.idx.max()]).copy()
+
+    subset = df.query('test_nodes == 64').sort_values('test_flops')
+    selection = [subset.loc[ELO*subset.elo > e].iloc[0].run for e in np.linspace(-2000, -250, 8)]
+
+    df = df[df.run.isin(selection)]
+
+    df['params'] = df.width**2 * df.depth
+    df['arch'] = df.apply(lambda r: '{depth}×{width}'.format(**r), axis=1)
+    labels = df.sort_values('test_flops').reset_index(drop=True).groupby('run').first().reset_index()
+    return (pn.ggplot(df, pn.aes(x='test_flops', y='ELO*elo', color='params', group='run'))
+        + pn.geom_point(size=.125, show_legend=False)
+        + pn.geom_line(size=.25, show_legend=False)
+        + pn.geom_text(pn.aes(label='arch'), data=labels, show_legend=False, size=6, nudge_x=-.1, ha='right')
+        + pn.scale_x_continuous(trans='log10')
+        + pn.scale_color_continuous(trans='log10')
+        + pn.coord_cartesian((3.5, None))
+        + pn.labs(
+            x='Test-time FLOPS',
+            y='Elo v. perfect play')
         + plot.IEEE())
 
 def plot_train_test(ags):
@@ -103,7 +127,7 @@ def plot_train_test(ags):
     return (pn.ggplot(frontiers, pn.aes(x='train_flops', y='test_flops', color='elo', group='elo'))
         + pn.geom_line(size=.5, show_legend=False)
         + pn.geom_line(pn.aes(y='test_flops_hat'), size=.25, show_legend=False, linetype='dashed')
-        + pn.geom_point(data=frontiers, size=.5, show_legend=False)
+        + pn.geom_point(size=.5, show_legend=False)
         + pn.geom_text(pn.aes(label='elo.astype(int)'), labs, show_legend=False, size=6, nudge_y=+.2)
         + pn.scale_x_continuous(trans='log10')
         + pn.scale_y_continuous(trans='log10')
@@ -121,7 +145,7 @@ def hyperparams_table():
         'MCTS node count': 64,
         r'MCTS $c_\text{puct}$': r'$\sfrac{1}{16}$',
         'MCTS noise $\epsilon$': r'$\sfrac{1}{4}$'})
-    return s.to_latex(index=True, label='hyperparams', caption='Hyperparameters')
+    return s.to_latex(index=True, label='hyperparams', caption='Hyperparameters', escape=False)
 
 def boardsize_hyperparams_table(ags):
     return (ags
@@ -161,6 +185,7 @@ if __name__ == '__main__':
     upload(plot_resid_var, ags)
     upload(plot_runtimes, ags)
     upload(plot_train_test, ags)
+    upload(plot_test, ags)
 
     overleaf.table(boardsize_hyperparams_table(ags), 'boardsize_hyperparams')
     overleaf.table(parameters_table(ags), 'parameters')
