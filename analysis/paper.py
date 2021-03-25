@@ -98,6 +98,34 @@ def plot_runtimes(ags):
         + pn.labs(x='Board size', y='Training time (s)')
         + plot.IEEE())
 
+def plot_train_test(ags):
+    df = ags.query('boardsize == 9').copy()
+    df['test_flops'] = df.test_nodes*(df.train_flops/df.samples)
+    df['train_flops_group'] = df.train_flops.pipe(np.log10).round(1).pipe(lambda s: 10**s)
+
+    frontiers = {}
+    for e in np.linspace(-1500, 0, 7):
+        frontiers[e] = df[ELO*df.elo > e].groupby('train_flops_group').test_flops.min().expanding().min()
+    frontiers = pd.concat(frontiers).unstack().T
+
+    distinct = frontiers.pipe(np.log10).round(1).pipe(lambda df: 10**df)
+    distinct = distinct.where(distinct.iloc[-1].eq(distinct).cumsum().le(1))
+    distinct = distinct.stack().reset_index().sort_values('train_flops_group')
+    distinct.columns = ['train_flops', 'elo', 'test_flops']
+
+    labs = distinct.sort_values('train_flops').groupby('elo').first().reset_index()
+    return (pn.ggplot(distinct, pn.aes(x='train_flops', y='test_flops', color='elo', group='elo'))
+        + pn.geom_line(size=.5, show_legend=False)
+        + pn.geom_point(data=distinct, size=.5, show_legend=False)
+        + pn.geom_text(pn.aes(label='elo.astype(int)'), labs, show_legend=False, size=6, nudge_y=+.2)
+        + pn.scale_x_continuous(trans='log10')
+        + pn.scale_y_continuous(trans='log10')
+        + pn.labs(
+            x='train-time FLOPS',
+            y='test-time FLOPS')
+        + plot.IEEE())
+
+
 def boardsize_hyperparams_table(ags):
     return (ags
         .groupby('boardsize')
@@ -135,6 +163,7 @@ if __name__ == '__main__':
     upload(plot_frontiers, ags)
     upload(plot_resid_var, ags)
     upload(plot_runtimes, ags)
+    upload(plot_train_test, ags)
 
     overleaf.table(boardsize_hyperparams_table(ags), 'boardsize_hyperparams')
     overleaf.table(parameters_table(ags), 'parameters')
