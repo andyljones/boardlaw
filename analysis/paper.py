@@ -101,19 +101,20 @@ def plot_test(ags):
     df = ags.query('boardsize == 9').groupby('run').apply(lambda df: df[df.idx == df.idx.max()]).copy()
 
     subset = df.query('test_nodes == 64').sort_values('test_flops')
-    selection = [subset.loc[ELO*subset.elo > e].iloc[0].run for e in np.linspace(-2000, -250, 8)]
+    selection = [subset.loc[ELO*subset.elo > e].iloc[0].run for e in np.linspace(-2000, -500, 4)]
 
-    df = df[df.run.isin(selection)]
+    df = df[df.run.isin(selection)].copy()
 
     df['params'] = df.width**2 * df.depth
     df['arch'] = df.apply(lambda r: '{depth}×{width}'.format(**r), axis=1)
     labels = df.sort_values('test_flops').reset_index(drop=True).groupby('run').first().reset_index()
     return (pn.ggplot(df, pn.aes(x='test_flops', y='ELO*elo', color='params', group='run'))
-        + pn.geom_point(size=.125, show_legend=False)
-        + pn.geom_line(size=.25, show_legend=False)
+        + pn.geom_point(size=.25, show_legend=False)
+        + pn.geom_line(size=.5, show_legend=False)
+        + pn.geom_text(pn.aes(label='test_nodes'), nudge_y=-50, show_legend=False, size=4, va='top')    + pn.geom_text(pn.aes(label='test_nodes'), nudge_y=-50, show_legend=False, size=4, va='top')
         + pn.geom_text(pn.aes(label='arch'), data=labels, show_legend=False, size=6, nudge_x=-.1, ha='right')
         + pn.scale_x_continuous(trans='log10')
-        + pn.scale_color_continuous(trans='log10')
+        + pn.scale_color_cmap('plasma', trans='log10', limits=(df.params.min(), 10*df.params.max()))
         + pn.coord_cartesian((3.5, None))
         + pn.labs(
             x='Test-time FLOPS',
@@ -145,7 +146,7 @@ def hyperparams_table():
         'MCTS node count': 64,
         r'MCTS $c_\text{puct}$': r'$\sfrac{1}{16}$',
         'MCTS noise $\epsilon$': r'$\sfrac{1}{4}$'})
-    return s.to_latex(index=True, label='hyperparams', caption='Hyperparameters', escape=False)
+    return s.to_latex(index=True, label='hyperparams', caption='Hyperparameters', escape=False, header=False)
 
 def boardsize_hyperparams_table(ags):
     return (ags
@@ -154,7 +155,7 @@ def boardsize_hyperparams_table(ags):
         .max()
         .assign(train_flops=lambda df: df.train_flops.apply(lambda s: f'{s:.1G}'))
         .assign(samples=lambda df: df.samples.apply(lambda s: f'{s:.1G}'))
-        .rename(columns={'boardsize': 'board size', 'width': 'max neurons', 'depth': 'max layers', 'samples': 'max samples', 'train_flops': 'max flops'})
+        .rename(columns={'boardsize': 'Board size', 'width': 'Max neurons', 'depth': 'Max layers', 'samples': 'Max samples', 'train_flops': 'Max FLOPS'})
         .reset_index()
         .to_latex(index=True, label='boardsize', caption='Board size-dependent hyperparameters'))
 
