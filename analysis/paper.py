@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from . import plot, data, overleaf
+from .data import ELO
 import plotnine as pn
 import matplotlib.patheffects as path_effects
 from boardlaw import arena, analysis
@@ -10,9 +11,6 @@ import torch
 RUNS = {
     3: ('2021-02-17 21-01-19 arctic-ease', 20),
     9: ('2021-02-20 23-35-25 simple-market', 20)}
-
-# All Elos internally go as e^d; Elos in public are in base 10^(d/400)
-ELO = 400/np.log(10)
 
 def upload(f, *args, **kwargs):
     [_, name] = f.__name__.split('plot_')
@@ -73,9 +71,9 @@ def plot_resid_var(ags):
     resid_var['diff'] = resid_var.predicted - resid_var.seen
     labels = resid_var.sort_values('seen').groupby('predicted').last().reset_index()
     return (pn.ggplot(resid_var, pn.aes(x='seen', y='rv', color='factor(predicted)', group='predicted'))
-        + pn.geom_line(size=.25, show_legend=False)
+        + pn.geom_line(size=.5, show_legend=False)
         + pn.geom_text(pn.aes(label='predicted'), labels, nudge_x=+.15, size=6, show_legend=False)
-        + pn.geom_point(size=.25, show_legend=False)
+        + pn.geom_point(size=.5, show_legend=False)
         + pn.scale_y_continuous(trans='log10')
         + pn.scale_color_discrete(l=.4)
         + pn.labs(
@@ -99,32 +97,31 @@ def plot_runtimes(ags):
         + plot.IEEE())
 
 def plot_train_test(ags):
-    df = ags.query('boardsize == 9').copy()
-    df['test_flops'] = df.test_nodes*(df.train_flops/df.samples)
-    df['train_flops_group'] = df.train_flops.pipe(np.log10).round(1).pipe(lambda s: 10**s)
-
-    frontiers = {}
-    for e in np.linspace(-1500, 0, 7):
-        frontiers[e] = df[ELO*df.elo > e].groupby('train_flops_group').test_flops.min().expanding().min()
-    frontiers = pd.concat(frontiers).unstack().T
-
-    distinct = frontiers.pipe(np.log10).round(1).pipe(lambda df: 10**df)
-    distinct = distinct.where(distinct.iloc[-1].eq(distinct).cumsum().le(1))
-    distinct = distinct.stack().reset_index().sort_values('train_flops_group')
-    distinct.columns = ['train_flops', 'elo', 'test_flops']
-
-    labs = distinct.sort_values('train_flops').groupby('elo').first().reset_index()
-    return (pn.ggplot(distinct, pn.aes(x='train_flops', y='test_flops', color='elo', group='elo'))
+    frontiers = data.train_test(ags)
+    frontiers, model = data.train_test_model(frontiers)
+    labs = frontiers.sort_values('train_flops').groupby('elo').first().reset_index()
+    return (pn.ggplot(frontiers, pn.aes(x='train_flops', y='test_flops', color='elo', group='elo'))
         + pn.geom_line(size=.5, show_legend=False)
-        + pn.geom_point(data=distinct, size=.5, show_legend=False)
+        + pn.geom_line(pn.aes(y='test_flops_hat'), size=.25, show_legend=False, linetype='dashed')
+        + pn.geom_point(data=frontiers, size=.5, show_legend=False)
         + pn.geom_text(pn.aes(label='elo.astype(int)'), labs, show_legend=False, size=6, nudge_y=+.2)
         + pn.scale_x_continuous(trans='log10')
         + pn.scale_y_continuous(trans='log10')
         + pn.labs(
-            x='train-time FLOPS',
-            y='test-time FLOPS')
+            x='Train-time FLOPS',
+            y='Test-time FLOPS')
         + plot.IEEE())
 
+def hyperparams_table():
+    s = pd.Series({
+        'Number of envs': '32k',
+        'Batch size': '32k',
+        'Buffer size': '2m samples',
+        'Learning rate': '1e-3',
+        'MCTS node count': 64,
+        r'MCTS $c_\text{puct}$': r'$\sfrac{1}{16}$',
+        'MCTS noise $\epsilon$': r'$\sfrac{1}{4}$'})
+    return s.to_latex(index=True, label='hyperparams', caption='Hyperparameters')
 
 def boardsize_hyperparams_table(ags):
     return (ags
@@ -167,3 +164,4 @@ if __name__ == '__main__':
 
     overleaf.table(boardsize_hyperparams_table(ags), 'boardsize_hyperparams')
     overleaf.table(parameters_table(ags), 'parameters')
+    overleaf.table(hyperparams_table(), 'hyperparams')

@@ -1,3 +1,4 @@
+import statsmodels.formula.api as smf
 import numpy as np
 import torch
 from torch import nn
@@ -9,6 +10,8 @@ import aljpy
 from pavlov import stats, runs
 import pandas as pd
 
+# All Elos internally go as e^d; Elos in public are in base 10^(d/400)
+ELO = 400/np.log(10)
 
 @aljpy.autocache()
 def _trial_elos(boardsize, counter):
@@ -153,3 +156,25 @@ def residual_vars(ags):
 
     return resid_var
  
+def train_test(ags):
+    df = ags.query('boardsize == 9').copy()
+    df['test_flops'] = df.test_nodes*(df.train_flops/df.samples)
+    df['train_flops_group'] = df.train_flops.pipe(np.log10).round(1).pipe(lambda s: 10**s)
+
+    frontiers = {}
+    for e in np.linspace(-1500, 0, 7):
+        frontiers[e] = df[ELO*df.elo > e].groupby('train_flops_group').test_flops.min().expanding().min()
+    frontiers = pd.concat(frontiers).unstack().T
+
+    frontiers = frontiers.pipe(np.log10).round(1).pipe(lambda df: 10**df)
+    frontiers = frontiers.where(frontiers.iloc[-1].eq(frontiers).cumsum().le(1))
+    frontiers = frontiers.stack().reset_index().sort_values('train_flops_group')
+    frontiers.columns = ['train_flops', 'elo', 'test_flops']
+
+    return frontiers
+
+def train_test_model(frontiers):
+    frontiers = frontiers.copy()
+    model = smf.ols('np.log10(test_flops) ~ np.log10(train_flops) + elo + 1', frontiers).fit()
+    frontiers['test_flops_hat'] = 10**model.predict(frontiers)
+    return frontiers, model
