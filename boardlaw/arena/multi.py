@@ -224,7 +224,7 @@ def print_stats(boardsize, stats):
         f'  {format_seconds(duration)} so far. {format_seconds(remaining)} remaining, end {end:%a %d %b %H:%M}.\n'
         f'  {stats.moves/duration:.0f} moves/sec, {60*stats.matchups/duration:.0f} matchups/min.')
 
-def evaluate(worldfunc, agentfunc, games, n_envs_per=512, chunksize=64, n_workers=4):
+def evaluate_gen(worldfunc, agentfunc, games, n_envs_per=512, chunksize=32, n_workers=2):
     assert list(games.index) == list(games.columns)
 
     names = list(games.index)
@@ -270,11 +270,14 @@ def evaluate(worldfunc, agentfunc, games, n_envs_per=512, chunksize=64, n_worker
             yield [], stats.copy()
             time.sleep(.1)
 
-def evaluate_save(boardsize=5, n_workers=2, **kwargs):
-    trials = sql.trial_query(9, 'bee/%')
-    agents = sql.agent_query()
+def evaluate(boardsize=9, **kwargs):
+    agents = sql.agent_query().query(f'description == "bee/{boardsize}" & test_nodes == 64')
+    trials = (sql.trial_query(9, 'bee/%')
+                .loc[lambda df: df.black_agent.isin(agents.index)]
+                .loc[lambda df: df.white_agent.isin(agents.index)])
 
-    wins, games = elos.symmetrize(trials)
+    _, games = elos.symmetrize(trials)
+    games = games.reindex(index=agents.index, columns=agents.index).fillna(0)
 
     def worldfunc(n_envs):
         return common.worlds(agents.run.iloc[0], n_envs, device='cuda')
@@ -285,8 +288,8 @@ def evaluate_save(boardsize=5, n_workers=2, **kwargs):
 
     from IPython import display
 
-    for rs, stats in evaluate(worldfunc, agentfunc, games, chunksize=64, n_workers=n_workers):
-        sql.save(rs)
+    for rs, stats in evaluate_gen(worldfunc, agentfunc, games, **kwargs):
+        sql.save_trials(rs)
 
         display.clear_output(wait=True)
         print_stats(boardsize, stats)

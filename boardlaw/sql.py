@@ -64,6 +64,20 @@ def connection():
     with _engine.connect() as conn:
         yield conn
 
+def create():
+    with connection() as conn:
+        Base.metadata.create_all(conn.engine)
+
+        conn.execute('''
+            create view agents_details as
+            select 
+                agents.id, agents.nodes as test_nodes, 
+                snaps.samples, snaps.flops as train_flops, snaps.idx, 
+                runs.run, runs.description, runs.boardsize, runs.width, runs.depth, runs.nodes as train_nodes
+            from agents
+                inner join snaps on (agents.snap == snaps.id)
+                inner join runs on (snaps.run == runs.run)''')
+
 def run_data():
     r = runs.pandas().loc[lambda df: df._created >= FIRST_RUN]
     params = r.params.dropna().apply(pd.Series).reindex(r.index)
@@ -111,24 +125,9 @@ def create_agents(new_runs, test_nodes=64, c=1/16):
 
         new_agents.to_sql('agents', conn, index=False, if_exists='append')
 
-def create():
-    with connection() as conn:
-        Base.metadata.create_all(conn.engine)
-
-        conn.execute('''
-            create view agents_details as
-            select 
-                agents.id, agents.nodes as test_nodes, 
-                snaps.samples, snaps.flops as train_flops, snaps.idx, 
-                runs.run, runs.description, runs.boardsize, runs.width, runs.depth, runs.nodes as train_nodes
-            from agents
-                inner join snaps on (agents.snap == snaps.id)
-                inner join runs on (snaps.run == runs.run)''')
-
-def run(sql):
+def execute(sql):
     with connection() as conn:
         return conn.execute(sql)
-
 
 def query(sql, **kwargs):
     with connection() as conn:
@@ -148,6 +147,21 @@ def trial_query(boardsize, desc='%'):
         where 
             (black.boardsize == ?) and (white.boardsize == ?) and 
             (black.description like ?) and (white.description like ?)''', index_col='id', params=(int(boardsize), int(boardsize), desc, desc))
+
+def save_trials(results):
+    rows = []
+    for r in results:
+        rows.append({
+            'black_agent': r.names[0],
+            'white_agent': r.names[1],
+            'black_wins': r.wins[0],
+            'white_wins': r.wins[1],
+            'moves': r.moves,
+            'times': r.times})
+    rows = pd.DataFrame(rows)
+    with connection() as conn:
+        rows.to_sql('trials', conn, index=False, if_exists='append')
+
 
 def file_change_counter():
     # https://www.sqlite.org/fileformat.html
