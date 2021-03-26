@@ -93,7 +93,7 @@ class Machine(machines.Machine):
         ssh = f"ssh -o StrictHostKeyChecking=no -i '{keyfile}' -p {conn.port}"
 
         # https://unix.stackexchange.com/questions/104618/how-to-rsync-over-ssh-when-directory-names-have-spaces
-        command = f"""rsync -r -e "{ssh}" {conn.user}@{conn.host}:"'{source}/'" "{target}" """
+        command = f"""rsync -rzu -e "{ssh}" {conn.user}@{conn.host}:"'{source}/'" "{target}" """
         return invoke.context.Context().run(command, asynchronous=True)
 
 def add(name, **kwargs):
