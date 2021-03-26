@@ -4,7 +4,7 @@ from .vast_api import launch, status, offers, wait, destroy
 log = getLogger(__name__)
 
 def jittenate(local=False, ssh_accept=True, forbidden=[]):
-    import jittens
+    from . import jittens
     jittens.machines.clear()
     if local:
         jittens.local.add(root='.jittens/local', resources={'gpu': 2})
@@ -32,7 +32,7 @@ def ssh_command(label=-1):
     print(f'SSH_AUTH_SOCK="" ssh root@{s.ssh_host} -p {s.ssh_port} -o StrictHostKeyChecking=no -i /root/.ssh/vast_rsa')
 
 def push_command(label, source, target):
-    from jittens.machines import machines
+    from .jittens.machines import machines
     machine = machines()[label]
 
     conn = machine.connection

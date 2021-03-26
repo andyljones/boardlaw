@@ -100,8 +100,8 @@ def cleanup(names=None):
                 del js[job.name]
 
 def fetch(source, target):
-    from jittens.machines import machines
-    from jittens.jobs import jobs
+    from .machines import machines
+    from .jobs import jobs
 
     machines = machines()
     ps = {}
