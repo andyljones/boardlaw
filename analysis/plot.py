@@ -28,6 +28,8 @@ class IEEE(pn.theme):
         super().__init__(
             axis_title_x=pn.element_text(margin=margin), 
             axis_title_y=pn.element_text(margin=margin), 
+            legend_key_width=10,
+            legend_key_height=10.,
             complete=True)
 
         self._rcParams.update({
