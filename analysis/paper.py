@@ -128,8 +128,9 @@ def plot_train_test(ags):
     return (pn.ggplot(frontiers, pn.aes(x='train_flops', y='test_flops', color='elo', group='elo'))
         + pn.geom_line(size=.5, show_legend=False)
         + pn.geom_line(pn.aes(y='test_flops_hat'), size=.25, show_legend=False, linetype='dashed')
-        + pn.geom_point(size=.5, show_legend=False)
+        # + pn.geom_point(size=.5, show_legend=False)
         + pn.geom_text(pn.aes(label='elo.astype(int)'), labs, show_legend=False, size=6, nudge_y=+.2)
+        + pn.scale_color_cmap(limits=(-1500, 0))
         + pn.scale_x_continuous(trans='log10')
         + pn.scale_y_continuous(trans='log10')
         + pn.labs(
