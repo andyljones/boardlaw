@@ -2,7 +2,7 @@ import activelo
 import numpy as np
 from rebar import dotdict
 import pandas as pd
-from . import database, analysis
+from . import json, analysis
 import matplotlib.pyplot as plt
 from pavlov import runs, stats
 import copy
@@ -29,7 +29,7 @@ def snapshots(run=-1, target=None, filter=''):
 def heatmap(run=-1, drop=[]):
     import seaborn as sns
 
-    rates = database.symmetric_wins(run)/database.symmetric_games(run)
+    rates = json.symmetric_wins(run)/json.symmetric_games(run)
     rates = (rates
         .drop(drop,  axis=0)
         .drop(drop, axis=1)
@@ -44,8 +44,8 @@ def heatmap(run=-1, drop=[]):
 
 def nontransitivities(run_name=-1):
     import seaborn as sns
-    from boardlaw.arena import database
-    w, n = database.symmetric_wins(run_name), database.symmetric_games(run_name)
+    from boardlaw.arena import json
+    w, n = json.symmetric_wins(run_name), json.symmetric_games(run_name)
     r = w/n
     e = (r*(1-r)/n)**.5
 
@@ -73,7 +73,7 @@ def nontransitivities(run_name=-1):
 
 def errors(run=-1, filter='.*'):
     run = runs.resolve(run)
-    games, wins = database.symmetric(run)
+    games, wins = json.symmetric(run)
     games, wins = analysis.mask(games, wins, filter)
     soln = activelo.solve(games.values, wins.values)
 
@@ -145,7 +145,7 @@ def plot_mohex(run):
     import matplotlib.pyplot as plt
     import copy
 
-    games, wins = database.symmetric(run)
+    games, wins = json.symmetric(run)
     games, wins = analysis.mask(games, wins, '.*')
     soln = activelo.solve(games.values, wins.values)
 

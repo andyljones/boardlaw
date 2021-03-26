@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from pavlov import runs, stats
 from rebar import dotdict
-from . import database
+from . import json
 import activelo
 
 def pandas(soln, names):
@@ -27,7 +27,7 @@ def mask(games, wins, filter):
 
 def elos(run, target=None, filter='.*'):
     run = runs.resolve(run)
-    games, wins = database.symmetric(run)
+    games, wins = json.symmetric(run)
     games, wins = mask(games, wins, filter)
 
     soln = activelo.solve(games.values, wins.values)

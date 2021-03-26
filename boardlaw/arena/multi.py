@@ -5,9 +5,10 @@ import torch
 from rebar import arrdict, dotdict, parallel
 from logging import getLogger
 from itertools import combinations
-import rebar
 from random import shuffle
 from multiprocessing import set_start_method
+from . import common
+from .. import sql, elos
 
 log = getLogger(__name__)
 
@@ -270,21 +271,16 @@ def evaluate(worldfunc, agentfunc, games, n_envs_per=512, chunksize=64, n_worker
             time.sleep(.1)
 
 def evaluate_save(boardsize=5, n_workers=2, **kwargs):
-    from .. import sql
-    from . import common
+    trials = sql.trial_query(9, 'bee/%')
+    agents = sql.agent_query()
 
-    snaps = sql.snapshot_solns(boardsize, solve=False)
-
-    raw = sql.pandas(boardsize)
-    raw['games'] = raw.black_wins + raw.white_wins
-
-    games = raw.games.unstack().reindex(index=snaps.index, columns=snaps.index).fillna(0)
+    wins, games = elos.symmetrize(trials)
 
     def worldfunc(n_envs):
-        return common.worlds(snaps.run.iloc[0], n_envs, device='cuda')
+        return common.worlds(agents.run.iloc[0], n_envs, device='cuda')
 
     def agentfunc(name):
-        row = snaps.loc[name]
+        row = agents.loc[name]
         return common.agent(row.run, row.idx, device='cuda')
 
     from IPython import display

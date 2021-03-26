@@ -3,7 +3,7 @@ from collections import deque
 import torch
 import numpy as np
 from .. import mohex, hex
-from . import database, analysis, common
+from . import json, analysis, common
 from rebar import arrdict
 from pavlov import stats, runs, logs, storage
 from logging import getLogger
@@ -19,10 +19,10 @@ BOARDSIZES = [3, 5, 7, 9, 11, 13]
 RUN_NAMES = [f'mohex-{s}' for s in BOARDSIZES]
 
 def elos(run_name, names=None, queue=[]):
-    n = (database.symmetric_games(run_name)
+    n = (json.symmetric_games(run_name)
             .reindex(index=names, columns=names)
             .fillna(0))
-    w = (database.symmetric_wins(run_name)
+    w = (json.symmetric_wins(run_name)
             .reindex(index=names, columns=names)
             .fillna(0))
     
@@ -49,7 +49,7 @@ def activelo_refill(run_name, names, queue, count=1):
         queue.append(pair[::-1])
 
 def offdiag_refill(run, names, queue, count=1):
-    n = (database.symmetric_games(run)
+    n = (json.symmetric_games(run)
             .reindex(index=names, columns=names)
             .fillna(0))
 
