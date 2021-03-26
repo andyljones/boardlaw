@@ -53,13 +53,6 @@ class Trial(Base):
     moves = Column(Integer)
     times = Column(Integer)
 
-def run_data():
-    r = runs.pandas().loc[lambda df: df._created >= FIRST_RUN]
-    params = r.params.dropna().apply(pd.Series).reindex(r.index)
-    insert = pd.concat([r.index.to_series().to_frame('run'), r[['description']], params[['boardsize', 'width', 'depth', 'nodes']]], 1)
-    insert['nodes'] = insert.nodes.fillna(64)
-    return insert.reset_index(drop=True)
-
 _engine = None
 @contextmanager
 def connection():
@@ -71,19 +64,56 @@ def connection():
     with _engine.connect() as conn:
         yield conn
 
+def run_data():
+    r = runs.pandas().loc[lambda df: df._created >= FIRST_RUN]
+    params = r.params.dropna().apply(pd.Series).reindex(r.index)
+    insert = pd.concat([r.index.to_series().to_frame('run'), r[['description']], params[['boardsize', 'width', 'depth', 'nodes']]], 1)
+    insert['nodes'] = insert.nodes.fillna(64)
+    return insert.reset_index(drop=True)
+
+def snapshot_data(new_runs):
+    snapshots = {}
+    for _, r in tqdm(list(new_runs.iterrows()), desc='snapshots'):
+        for i, s in storage.snapshots(r.run).items():
+            stored = storage.load_snapshot(r.run, i)
+            if 'n_samples' in stored:
+                snapshots[r.run, i] = {
+                    'samples': stored['n_samples'], 
+                    'flops': stored['n_flops']}
+    snapshots = (pd.DataFrame.from_dict(snapshots, orient='index')
+                    .rename_axis(index=('run', 'idx'))
+                    .reset_index())
+    # snapshots['id'] = snapshots.index.to_series()
+    return snapshots
+
+def refresh_runs():
+    current = run_data()
+    with connection() as conn:
+        old = pd.read_sql_query('select * from runs', conn)
+        new = current[~current.run.isin(old.run)]
+        new.to_sql('runs', conn, index=False, if_exists='append')
+
+        snaps = snapshot_data(new)
+        snaps.to_sql('snaps', conn, index=False, if_exists='append')
+
+    return new
+
+def create_agents(new_runs, test_nodes=64, c=1/16):
+    with connection() as conn:
+        snaps = pd.read_sql_query('select * from snaps', conn, index_col='id')
+
+        new_agents = (snaps.index
+            [snaps.run.isin(new_runs.run)]
+            .to_frame(name='snap')
+            .reset_index(drop=True))
+        new_agents['nodes'] = test_nodes
+        new_agents['c'] = 1/16
+
+        new_agents.to_sql('agents', conn, index=False, if_exists='append')
+
 def create():
     with connection() as conn:
         Base.metadata.create_all(conn.engine)
-
-        r = run_data()
-        r.to_sql('runs', conn, index=False, if_exists='append')
-
-        s = snapshot_data(r)
-        s.to_sql('snaps', conn, index=False, if_exists='append')
-
-        a, t = trial_agent_data(s)
-        a.to_sql('agents', conn, index=False, if_exists='append')
-        t.to_sql('trials', conn, index=False, if_exists='append')
 
         conn.execute('''
             create view agents_details as
