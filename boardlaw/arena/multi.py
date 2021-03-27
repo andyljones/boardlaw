@@ -215,16 +215,16 @@ def format_seconds(s):
     h = td.components.days*24 + td.components.hours
     return f'{h}h{td.components.minutes:02d}m{td.components.seconds:02d}s'
     
-def print_stats(boardsize, stats):
+def print_stats(stats):
     duration = stats.end - stats.start
     remaining = (stats.total - stats.finished)/(stats.finished + 1)*(stats.end - stats.start)
     end = pd.to_datetime(stats.end + remaining, unit='s')
     print(
-        f'{boardsize}x{boardsize}, {stats.finished}/{stats.total}:\n'
+        f'{stats.finished}/{stats.total}:\n'
         f'  {format_seconds(duration)} so far. {format_seconds(remaining)} remaining, end {end:%a %d %b %H:%M}.\n'
         f'  {stats.moves/duration:.0f} moves/sec, {60*stats.matchups/duration:.0f} matchups/min.')
 
-def evaluate_gen(worldfunc, agentfunc, games, n_envs_per=512, chunksize=32, n_workers=2):
+def evaluate_gen(worldfunc, agentfunc, games, n_envs_per=512, chunksize=16, n_workers=2):
     assert list(games.index) == list(games.columns)
 
     names = list(games.index)
@@ -270,12 +270,7 @@ def evaluate_gen(worldfunc, agentfunc, games, n_envs_per=512, chunksize=32, n_wo
             yield [], stats.copy()
             time.sleep(.1)
 
-def evaluate(boardsize=9, **kwargs):
-    agents = sql.agent_query().query(f'description == "bee/{boardsize}" & test_nodes == 64')
-    trials = (sql.trial_query(9, 'bee/%')
-                .loc[lambda df: df.black_agent.isin(agents.index)]
-                .loc[lambda df: df.white_agent.isin(agents.index)])
-
+def evaluate(agents, trials, **kwargs):
     _, games = elos.symmetrize(trials)
     games = games.reindex(index=agents.index, columns=agents.index).fillna(0)
 
@@ -292,7 +287,14 @@ def evaluate(boardsize=9, **kwargs):
         sql.save_trials(rs)
 
         display.clear_output(wait=True)
-        print_stats(boardsize, stats)
+        print_stats(stats)
+
+def evaluate_trunk(boardsize):
+    agents = sql.agent_query().query(f'description == "bee/{boardsize}" & test_nodes == 64 & width >= 128')
+    trials = (sql.trial_query(boardsize, 'bee/%')
+                .loc[lambda df: df.black_agent.isin(agents.index)]
+                .loc[lambda df: df.white_agent.isin(agents.index)])
+    evaluate(agents, trials)
 
 
 

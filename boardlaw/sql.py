@@ -112,18 +112,28 @@ def refresh_runs():
 
     return new
 
-def create_agents(new_runs, test_nodes=64, c=1/16):
+def create_agents(rs, test_nodes=64, c=1/16, dry_run=False):
     with connection() as conn:
         snaps = pd.read_sql_query('select * from snaps', conn, index_col='id')
 
-        new_agents = (snaps.index
-            [snaps.run.isin(new_runs.run)]
+        agents = (snaps.index
+            [snaps.run.isin(rs.run)]
             .to_frame(name='snap')
             .reset_index(drop=True))
-        new_agents['nodes'] = test_nodes
-        new_agents['c'] = 1/16
+        agents['nodes'] = test_nodes
+        agents['c'] = c
 
-        new_agents.to_sql('agents', conn, index=False, if_exists='append')
+        old_agents = pd.read_sql_query('select * from agents', conn)
+        old_agents = pd.merge(
+            agents.rename_axis(index='idx').reset_index(), 
+            old_agents, 
+            on=['snap', 'nodes', 'c'], how='inner')
+        new_agents = agents[~agents.index.isin(old_agents.idx)]
+
+        if dry_run:
+            print(new_agents)
+        else:
+            new_agents.to_sql('agents', conn, index=False, if_exists='append')
 
 def execute(sql):
     with connection() as conn:
