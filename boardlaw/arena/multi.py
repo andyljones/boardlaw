@@ -270,9 +270,7 @@ def evaluate_gen(worldfunc, agentfunc, games, n_envs_per=512, chunksize=16, n_wo
             yield [], stats.copy()
             time.sleep(.1)
 
-def evaluate(agents, trials, **kwargs):
-    _, games = elos.symmetrize(trials)
-    games = games.reindex(index=agents.index, columns=agents.index).fillna(0)
+def evaluate(agents, games, **kwargs):
 
     def worldfunc(n_envs):
         return common.worlds(agents.run.iloc[0], n_envs, device='cuda')
@@ -289,14 +287,26 @@ def evaluate(agents, trials, **kwargs):
         display.clear_output(wait=True)
         print_stats(stats)
 
-def evaluate_trunk(boardsize):
-    agents = sql.agent_query().query(f'description == "bee/{boardsize}" & test_nodes == 64 & width >= 128')
+def evaluate_trunk(boardsize, min_width):
+    agents = sql.agent_query().query(f'description == "bee/{boardsize}" & test_nodes == 64 & width >= {min_width}')
     trials = (sql.trial_query(boardsize, 'bee/%')
                 .loc[lambda df: df.black_agent.isin(agents.index)]
                 .loc[lambda df: df.white_agent.isin(agents.index)])
-    evaluate(agents, trials)
+    _, games = elos.symmetrize(trials)
+    games = games.reindex(index=agents.index, columns=agents.index).fillna(0)
+    evaluate(agents, games)
 
+def evaluate_nodes(boardsize, n_envs_per=512):
+    agents = sql.agent_query().query(f'description == "bee/{boardsize}"')
+    trials = (sql.trial_query(boardsize, 'bee/%')
+                .loc[lambda df: df.black_agent.isin(agents.index)]
+                .loc[lambda df: df.white_agent.isin(agents.index)])
 
+    _, games = elos.symmetrize(trials)
+    games = games.reindex(index=agents.index, columns=agents.index).fillna(0)
+    games[agents.snap_id.values[:, None] != agents.snap_id.values[None, :]] = n_envs_per
+
+    evaluate(agents, games, n_envs_per=n_envs_per)
 
 ### TESTS ###
 

@@ -72,7 +72,7 @@ def create():
             create view agents_details as
             select 
                 agents.id, agents.nodes as test_nodes, 
-                snaps.samples, snaps.flops as train_flops, snaps.idx, 
+                snaps.id as snap_id, snaps.samples, snaps.flops as train_flops, snaps.idx, 
                 runs.run, runs.description, runs.boardsize, runs.width, runs.depth, runs.nodes as train_nodes
             from agents
                 inner join snaps on (agents.snap == snaps.id)
