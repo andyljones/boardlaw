@@ -224,11 +224,12 @@ def print_stats(stats):
         f'  {format_seconds(duration)} so far. {format_seconds(remaining)} remaining, end {end:%a %d %b %H:%M}.\n'
         f'  {stats.moves/duration:.0f} moves/sec, {60*stats.matchups/duration:.0f} matchups/min.')
 
-def evaluate_gen(worldfunc, agentfunc, games, n_envs_per=512, chunksize=64, n_workers=2):
+def evaluate_gen(worldfunc, agentfunc, games, n_envs_per=512, chunks=64, n_workers=2):
     assert list(games.index) == list(games.columns)
 
-    names = list(games.index)
-    chunks = [names[i:i+chunksize] for i in range(0, len(names), chunksize)]
+    if isinstance(chunks, int):
+        names = list(games.index)
+        chunks = [names[i:i+chunks] for i in range(0, len(names), chunks)]
 
     jobs = {}
     # Diagonal pieces
@@ -287,6 +288,21 @@ def evaluate(agents, games, **kwargs):
         display.clear_output(wait=True)
         print_stats(stats)
 
+def memory_safe_chunks(agents, max_memory=2048, max_size=256):
+    memusage = agents.width.clip(agents.boardsize**2, None)
+
+    chunks = []
+    chunk, mem = [], 0
+    for i, m in memusage.iteritems():
+        chunk.append(i)
+        mem += memusage[i]
+        if mem >= max_memory or len(chunk) >= max_size:
+            chunks.append(chunk)
+            chunk = []
+            mem = 0
+    
+    return chunks
+
 def evaluate_trunk(boardsize, min_width):
     agents = sql.agent_query().query(f'description == "bee/{boardsize}" & test_nodes == 64 & width >= {min_width}')
     trials = (sql.trial_query(boardsize, 'bee/%')
@@ -308,7 +324,8 @@ def evaluate_nodes(boardsize, n_envs_per=512):
     games = games.reindex(index=agents.index, columns=agents.index).fillna(0)
     games[agents.snap_id.values[:, None] != agents.snap_id.values[None, :]] = n_envs_per
 
-    evaluate(agents, games, n_envs_per=n_envs_per)
+    chunks = memory_safe_chunks(agents)
+    evaluate(agents, games, n_envs_per=n_envs_per, chunks=chunks)
 
 ### TESTS ###
 
