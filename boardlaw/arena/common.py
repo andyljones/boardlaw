@@ -10,14 +10,14 @@ from ..hex import Hex
 
 log = getLogger(__name__)
 
-def agent(run, idx=None, device='cpu', **kwargs):
+def agent(run, idx=None, device='cpu'):
     try:
         network = storage.load_raw(run, 'model', device)
     except IOError:
         log.warn(f'No model file for "{run}"')
         return None
 
-    agent = MCTSAgent(network, **kwargs)
+    agent = MCTSAgent(network)
 
     try:
         if idx is None:

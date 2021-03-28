@@ -278,7 +278,10 @@ def evaluate(agents, games, **kwargs):
 
     def agentfunc(name):
         row = agents.loc[name]
-        return common.agent(row.run, row.idx, device='cuda', n_nodes=row.test_nodes)
+        ag = common.agent(row.run, row.idx, device='cuda')
+        ag.kwargs['n_nodes'] = row.test_nodes
+        # ag.kwargs['c_puct'] = row.c
+        return ag
 
     from IPython import display
 
@@ -288,8 +291,9 @@ def evaluate(agents, games, **kwargs):
         display.clear_output(wait=True)
         print_stats(stats)
 
-def memory_safe_chunks(agents, max_memory=2048, max_size=256):
-    memusage = agents.width.clip(agents.boardsize**2, None)
+def memory_safe_chunks(agents, n_envs_per, max_memory=4*1024*1024, max_size=256):
+    #TODO: Are the activations of a single layer really the expensive part here?
+    memusage = n_envs_per*agents.width.clip(agents.boardsize**2, None)
 
     chunks = []
     chunk, mem = [], 0
@@ -301,6 +305,7 @@ def memory_safe_chunks(agents, max_memory=2048, max_size=256):
             chunk = []
             mem = 0
     
+    shuffle(chunks)
     return chunks
 
 def evaluate_trunk(boardsize, min_width):
@@ -324,7 +329,7 @@ def evaluate_nodes(boardsize, n_envs_per=512):
     games = games.reindex(index=agents.index, columns=agents.index).fillna(0)
     games[agents.snap_id.values[:, None] != agents.snap_id.values[None, :]] = n_envs_per
 
-    chunks = memory_safe_chunks(agents)
+    chunks = memory_safe_chunks(agents, n_envs_per)
     evaluate(agents, games, n_envs_per=n_envs_per, chunks=chunks)
 
 ### TESTS ###
