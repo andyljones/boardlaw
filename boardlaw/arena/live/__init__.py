@@ -2,10 +2,11 @@ import time
 from collections import deque
 import torch
 import numpy as np
-from .. import mohex, hex
-from . import json, analysis, common
+from ... import mohex, hex
+from . import json, analysis
+from .. import common
 from rebar import arrdict
-from pavlov import stats, runs, logs, storage
+from pavlov import stats, runs, logs
 from logging import getLogger
 import activelo
 import pandas as pd
@@ -15,7 +16,7 @@ from multiprocessing import set_start_method, Process
 
 log = getLogger(__name__)
 
-BOARDSIZES = [3, 5, 7, 9, 11, 13]
+BOARDSIZES = [3, 5, 7, 9]
 RUN_NAMES = [f'mohex-{s}' for s in BOARDSIZES]
 
 def elos(run_name, names=None, queue=[]):
@@ -32,21 +33,6 @@ def elos(run_name, names=None, queue=[]):
         n.loc[ni, nj] += 1
 
     return activelo.solve(n.values, w.values)
-
-def activelo_refill(run_name, names, queue, count=1):
-    if len(queue) >= count:
-        return 
-
-    soln = elos(run_name, names, queue)
-    imp = activelo.improvement(soln)
-    while len(queue) < count:
-        probs = imp.flatten()/imp.sum()
-        idx = np.random.choice(np.arange(n.size), p=probs)
-        pair = (idx // n.shape[0], idx % n.shape[0])
-
-        log.info(f'Adding {pair} to the list')
-        queue.append(pair)
-        queue.append(pair[::-1])
 
 def offdiag_refill(run, names, queue, count=1):
     n = (json.symmetric_games(run)
@@ -107,7 +93,7 @@ def reference_ladder(boardsize):
                 boardsize=worlds.boardsize)
 
             log.info(f'Storing {result.names[0]} v {result.names[1]}, {result.wins[0]}-{result.wins[1]} in {result.moves} moves')
-            database.save(run_name, result)
+            json.save(run_name, result)
 
             moves[idx] = 0
 
@@ -131,8 +117,8 @@ class RollingArena:
 
     def play(self, agent):
         size = self.worlds.boardsize
-        games = database.symmetric_games(f'mohex-{size}').pipe(append, 'agent')
-        wins = database.symmetric_wins(f'mohex-{size}').pipe(append, 'agent')
+        games = json.symmetric_games(f'mohex-{size}').pipe(append, 'agent')
+        wins = json.symmetric_wins(f'mohex-{size}').pipe(append, 'agent')
         for result in self.history:
             games.loc[result.names[0], result.names[1]] += result.games
             games.loc[result.names[1], result.names[0]] += result.games
@@ -155,40 +141,6 @@ class RollingArena:
         self.history.extend(results)
 
         return arrdict.arrdict(games=games.loc['agent'].sum(), mean=μ, std=σ)
-
-class CumulativeArena:
-
-    def __init__(self, worlds):
-        # Deferred import so the module can be imported from boardlaw
-        self.worlds = worlds
-        self.mohex = mohex.MoHexAgent()
-        self.soln = None
-
-        size = worlds.boardsize
-        self.games = database.symmetric_games(f'mohex-{size}').pipe(append, 'agent')
-        self.wins = database.symmetric_wins(f'mohex-{size}').pipe(append, 'agent')
-
-    def play(self, agent):
-        self.soln = activelo.solve(self.games, self.wins, soln=self.soln)
-        μ, σ = analysis.difference(self.soln, 'mohex-0.00', 'agent')
-        log.info(f'Agent elo is {μ:.2f}±{σ:.2f} based on {int(self.games.loc["agent"].sum())} games')
-
-        imp = activelo.improvement(self.soln)
-        imp = pd.DataFrame(imp, self.games.index, self.games.index)
-
-        challenger = imp['agent'].idxmax()
-        randomness = float(challenger.split('-')[1])
-        self.mohex.random = randomness
-        results = common.evaluate(self.worlds, {'agent': agent, challenger: self.mohex})
-        log.info(f'Agent played {challenger}, {int(results[0].wins[0] + results[1].wins[1])}-{int(results[0].wins[1] + results[1].wins[0])}')
-
-        for result in results:
-            self.games.loc[result.names[0], result.names[1]] += result.games
-            self.games.loc[result.names[1], result.names[0]] += result.games
-            self.wins.loc[result.names[0], result.names[1]] += result.wins[0]
-            self.wins.loc[result.names[1], result.names[0]] += result.wins[1]
-
-        return arrdict.arrdict(games=self.games.loc['agent'].sum(), mean=μ, std=σ), results
 
 def run_sync(run):
     log.info('Arena launched')

@@ -3,6 +3,11 @@ import numpy as np
 import pandas as pd
 
 def symmetrize(trials):
+    if len(trials) == 0:
+        ws = pd.DataFrame(0., index=trials.index, columns=trials.index)
+        gs = pd.DataFrame(0., index=trials.index, columns=trials.index)
+        return ws, gs
+
     df = (trials
             .assign(games=lambda df: df.black_wins + df.white_wins)
             .pivot('black_agent', 'white_agent', ['games', 'white_wins', 'black_wins']))

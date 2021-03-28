@@ -308,8 +308,8 @@ def memory_safe_chunks(agents, n_envs_per, max_memory=4*1024*1024, max_size=256)
     shuffle(chunks)
     return chunks
 
-def evaluate_trunk(boardsize, min_width):
-    agents = sql.agent_query().query(f'description == "bee/{boardsize}" & test_nodes == 64 & width >= {min_width}')
+def evaluate_trunk(boardsize):
+    agents = sql.agent_query().query(f'description == "bee/{boardsize}" & test_nodes == 64')
     trials = (sql.trial_query(boardsize, 'bee/%')
                 .loc[lambda df: df.black_agent.isin(agents.index)]
                 .loc[lambda df: df.white_agent.isin(agents.index)])

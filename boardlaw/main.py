@@ -150,7 +150,7 @@ def run(boardsize, width, depth, nodes, desc):
 
     buffer = []
     with logs.to_run(run), stats.to_run(run), \
-            arena.mohex.run(run):
+            arena.live.run(run):
         #TODO: Upgrade this to handle batches that are some multiple of the env count
         idxs = (torch.randint(buffer_len, (n_envs,), device='cuda'), torch.arange(n_envs, device='cuda'))
         while True:
