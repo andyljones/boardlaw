@@ -13,7 +13,7 @@ log = getLogger(__name__)
 
 
 def configfile(max_games=None, max_memory=None, presearch=None, 
-        max_time=None, max_nodes=None, solver=False, extras=[]):
+        max_time=None, max_nodes=None, solver=True, extras=[]):
     contents = []
     if max_games is not None:
         contents.append(f'param_mohex max_games {max_games}')
