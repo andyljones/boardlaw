@@ -224,7 +224,7 @@ def print_stats(stats):
         f'  {format_seconds(duration)} so far. {format_seconds(remaining)} remaining, end {end:%a %d %b %H:%M}.\n'
         f'  {stats.moves/duration:.0f} moves/sec, {60*stats.matchups/duration:.0f} matchups/min.')
 
-def evaluate_gen(worldfunc, agentfunc, games, n_envs_per=512, chunksize=16, n_workers=2):
+def evaluate_gen(worldfunc, agentfunc, games, n_envs_per=512, chunksize=64, n_workers=2):
     assert list(games.index) == list(games.columns)
 
     names = list(games.index)
@@ -277,7 +277,7 @@ def evaluate(agents, games, **kwargs):
 
     def agentfunc(name):
         row = agents.loc[name]
-        return common.agent(row.run, row.idx, device='cuda')
+        return common.agent(row.run, row.idx, device='cuda', n_nodes=row.test_nodes)
 
     from IPython import display
 
@@ -297,7 +297,9 @@ def evaluate_trunk(boardsize, min_width):
     evaluate(agents, games)
 
 def evaluate_nodes(boardsize, n_envs_per=512):
-    agents = sql.agent_query().query(f'description == "bee/{boardsize}"')
+    agents = (sql.agent_query()
+                .query(f'description == "bee/{boardsize}"')
+                .sort_values(['snap_id', 'test_nodes']))
     trials = (sql.trial_query(boardsize, 'bee/%')
                 .loc[lambda df: df.black_agent.isin(agents.index)]
                 .loc[lambda df: df.white_agent.isin(agents.index)])
