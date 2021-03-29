@@ -1,7 +1,7 @@
 import json
 import torch
 import pandas as pd
-from .. import sql, mohex, analysis, hex
+from .. import sql, elos, mohex, analysis, hex
 from . import common
 from rebar import arrdict
 from random import shuffle
@@ -83,5 +83,21 @@ def calibrate(agent_id, mhx=None, n_envs=128):
     results = common.evaluate(worlds, agents)
     sql.save_mohex_trials(results)
 
-def run():
-    pass
+def run(boardsize):
+    ags = sql.agent_query().query('test_nodes == 64 & boardsize == 7')
+
+    trials = sql.trial_query(boardsize, 'bee/%')
+    trials = trials[trials.black_agent.isin(ags.index) & trials.white_agent.isin(ags.index)]
+    ws, gs = elos.symmetrize(trials)
+    ags['elo'] = elos.solve(ws, gs)
+    targets = ags.query('elo > -1').index
+
+    extant = sql.mohex_trial_query(boardsize)
+    extant = (set(extant.white_agent.dropna().astype(int).values) | 
+              set(extant.black_agent.dropna().astype(int).values))
+
+    choices = set(targets) - extant
+
+    mhx = mohex.MoHexAgent()
+    for c in tqdm(choices):
+        calibrate(c, mhx=mhx)
