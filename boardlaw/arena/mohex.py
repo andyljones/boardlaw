@@ -67,3 +67,21 @@ def snapshot_wins(snap_id):
         mohex.MoHexAgent()]
 
     snap_wins = evaluate(worlds, agents)
+
+def calibrate(agent_id, mhx=None, n_envs=128):
+    row = sql.query('select * from agents_details where id == ?', params=(agent_id,)).iloc[0]
+
+    worlds = hex.Hex.initial(n_envs, row.boardsize)
+
+    ag = common.agent(row.run, row.idx, device=worlds.device)
+    ag.kwargs['n_nodes'] = row.test_nodes
+
+    mhx = mohex.MoHexAgent() if mhx is None else mhx
+    agents = {
+        agent_id: ag,
+        None: mhx}
+    results = common.evaluate(worlds, agents)
+    sql.save_mohex_trials(results)
+
+def run():
+    pass

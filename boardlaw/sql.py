@@ -53,6 +53,17 @@ class Trial(Base):
     moves = Column(Integer)
     times = Column(Integer)
 
+class MohexTrial(Base):
+    __tablename__ = 'mohex_trials'
+
+    id = Column(Integer, primary_key=True)
+    black_agent = Column(Integer, ForeignKey('agents.id'), nullable=True)
+    white_agent = Column(Integer, ForeignKey('agents.id'), nullable=True)
+    black_wins = Column(Integer)
+    white_wins = Column(Integer)
+    moves = Column(Integer)
+    times = Column(Integer)
+
 _engine = None
 @contextmanager
 def connection():
@@ -172,6 +183,32 @@ def save_trials(results):
     with connection() as conn:
         rows.to_sql('trials', conn, index=False, if_exists='append')
 
+def save_mohex_trials(results):
+    rows = []
+    for r in results:
+        assert sum(n is None for n in r.names) == 1, 'One agent should be MoHex'
+        rows.append({
+            'black_agent': r.names[0],
+            'white_agent': r.names[1],
+            'black_wins': r.wins[0],
+            'white_wins': r.wins[1],
+            'moves': r.moves,
+            'times': r.times})
+    rows = pd.DataFrame(rows)
+    with connection() as conn:
+        rows.to_sql('mohex_trials', conn, index=False, if_exists='append')
+
+def mohex_trial_query(boardsize, desc='%'):
+    return query('''
+        select mohex_trials.* 
+        from mohex_trials 
+            left join agents_details as black
+                on (mohex_trials.black_agent == black.id)
+            left join agents_details as white
+                on (mohex_trials.white_agent == white.id)
+        where 
+            ((black.boardsize == ?) or (white.boardsize == ?)) and 
+            ((black.description like ?) or (white.description like ?))''', index_col='id', params=(int(boardsize), int(boardsize), desc, desc))
 
 def file_change_counter():
     # https://www.sqlite.org/fileformat.html
