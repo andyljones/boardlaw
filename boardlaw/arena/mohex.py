@@ -83,14 +83,17 @@ def calibrate(agent_id, mhx=None, n_envs=128):
     results = common.evaluate(worlds, agents)
     sql.save_mohex_trials(results)
 
-def run(boardsize):
-    ags = sql.agent_query().query('test_nodes == 64 & boardsize == 7')
+def calibrate_all(boardsize=None, threshold=-1):
+    if boardsize is None:
+        for b in range(3, 10):
+            calibrate_all(b)
+    ags = sql.agent_query().loc[lambda df: df.boardsize == boardsize].query('test_nodes == 64')
 
     trials = sql.trial_query(boardsize, 'bee/%')
     trials = trials[trials.black_agent.isin(ags.index) & trials.white_agent.isin(ags.index)]
     ws, gs = elos.symmetrize(trials)
     ags['elo'] = elos.solve(ws, gs)
-    targets = ags.query('elo > -1').index
+    targets = ags.loc[ags.elo > threshold].index
 
     extant = sql.mohex_trial_query(boardsize)
     extant = (set(extant.white_agent.dropna().astype(int).values) | 
@@ -99,7 +102,7 @@ def run(boardsize):
     choices = set(targets) - extant
 
     mhx = mohex.MoHexAgent()
-    for c in tqdm(choices):
+    for c in tqdm(choices, desc=str(boardsize)):
         calibrate(c, mhx=mhx)
 
 def analyze(boardsize):
