@@ -26,7 +26,7 @@ def initial_states(boardsize=7):
     return worlds
 
 def evaluate(worlds, agents):
-    worlds = worlds.copy()
+    worlds = worlds.clone()
     terminal = torch.full((worlds.n_envs,), False, device=worlds.device)
     rewards = torch.full((worlds.n_envs, worlds.n_seats), 0., device=worlds.device)
     while not terminal.all():
