@@ -56,3 +56,14 @@ def reference_wins(n_agents=8):
         path.write_text(json.dumps([int(w) for w in wins.cpu().int().numpy()]))
     
     return np.asarray(json.loads(path.read_text()), dtype=int)
+
+def snapshot_wins(snap_id):
+    row = sql.query('select * from snaps where id == ?', params=(snap_id,)).iloc[0]
+    boardsize = sql.query('select boardsize from runs where run == ?', params=(row.run,)).iloc[0].boardsize
+    worlds = initial_states(boardsize)
+
+    agents = [
+        common.agent(row.run, row.idx, device=worlds.device),
+        mohex.MoHexAgent()]
+
+    snap_wins = evaluate(worlds, agents)
