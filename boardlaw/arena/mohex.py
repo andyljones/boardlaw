@@ -1,3 +1,4 @@
+import json
 import torch
 import pandas as pd
 from .. import sql, mohex, analysis, hex
@@ -6,40 +7,9 @@ from rebar import arrdict
 from random import shuffle
 from tqdm.auto import tqdm
 import numpy as np
+from pathlib import Path
+from pkg_resources import resource_filename
 
-def evaluate(snap_id, n_envs=2):
-    row = sql.query('select * from snaps where id == ?', params=(snap_id,)).iloc[0]
-    worlds = common.worlds(row.run, n_envs=n_envs)
-    ags = {
-        snap_id: common.agent(row.run, row.idx, device='cpu'),
-        'mhx': mohex.MoHexAgent()}
-    return common.evaluate(worlds, ags) 
-
-def tree_sample(boardsize=7, size=1024, seed=1):
-    state = torch.get_rng_state()
-    torch.manual_seed(seed)
-
-    worlds = hex.Hex.initial(size, boardsize, device='cuda')
-    terminal = [torch.zeros(size, device=worlds.device, dtype=torch.bool)]
-    trace  = [worlds]
-    while not terminal[-1].all():
-        actions = torch.distributions.Categorical(worlds.valid.float()).sample()
-        worlds, transitions = worlds.step(actions)
-        trace.append(worlds)
-        terminal.append(terminal[-1] | transitions.terminal)
-    trace = arrdict.stack(trace)
-    terminal = arrdict.stack(terminal)
-
-    max_rows = (~terminal).cumsum(0).max(0).values
-    rows = torch.rand(size, device=worlds.device).mul(max_rows).int()
-    rows = torch.minimum(rows, max_rows)
-
-    cols = torch.arange(size, device=worlds.device)
-    sample = trace[rows, cols]
-
-    torch.set_rng_state(state)
-    return sample
-    
 def initial_states(boardsize=7):
     count = boardsize**4
     first = torch.arange(count, device='cuda') // boardsize**2
@@ -69,15 +39,20 @@ def evaluate(worlds, agents):
     return (rewards == 1).float().argmax(-1).float()
 
 def reference_wins(n_agents=8):
-    worlds = initial_states()
-    mhx = mohex.MoHexAgent()
-    agents = [mhx, mhx]
+    path = Path(resource_filename(__package__, 'data/mohex.json'))
+    path.parent.mkdir(exist_ok=True, parents=True)
+    if not path.exists():
+        worlds = initial_states()
+        mhx = mohex.MoHexAgent()
+        agents = [mhx, mhx]
 
-    chunks = [list(range(i, i+n_agents)) for i in range(0, worlds.n_envs, n_agents)]
-    shuffle(chunks)
+        chunks = [list(range(i, i+n_agents)) for i in range(0, worlds.n_envs, n_agents)]
+        shuffle(chunks)
 
-    wins = torch.full((worlds.n_envs,), np.nan, device=worlds.device)
-    for chunk in tqdm(chunks):
-        wins[chunk] = evaluate(worlds[chunk], agents)
+        wins = torch.full((worlds.n_envs,), np.nan, device=worlds.device)
+        for chunk in tqdm(chunks):
+            wins[chunk] = evaluate(worlds[chunk], agents)
+
+        path.write_text(json.dumps([int(w) for w in wins.cpu().int().numpy()]))
     
-    return wins
+    return np.asarray(json.loads(path.read_text()), dtype=int)
