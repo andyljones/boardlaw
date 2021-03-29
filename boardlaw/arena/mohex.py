@@ -101,3 +101,23 @@ def run(boardsize):
     mhx = mohex.MoHexAgent()
     for c in tqdm(choices):
         calibrate(c, mhx=mhx)
+
+def analyze(boardsize):
+    ags = sql.agent_query().loc[lambda df: df.boardsize == boardsize].query('test_nodes == 64 & boardsize == 7')
+    trials = sql.trial_query(boardsize, 'bee/%')
+    trials = trials[trials.black_agent.isin(ags.index) & trials.white_agent.isin(ags.index)]
+    ws, gs = elos.symmetrize(trials)
+    ags['elo'] = elos.solve(ws, gs)
+
+    mhx = sql.mohex_trial_query(boardsize)
+    black_wins = mhx[['black_agent', 'black_wins', 'white_wins']].dropna().set_index('black_agent')[['black_wins', 'white_wins']]
+    white_wins = mhx[['white_agent', 'black_wins', 'white_wins']].dropna().set_index('white_agent')[['black_wins', 'white_wins']]
+    black_wins = black_wins.groupby(black_wins.index).sum()
+    white_wins = white_wins.groupby(white_wins.index).sum()
+
+    rate = (black_wins.black_wins + white_wins.white_wins)/(black_wins.sum(1) + white_wins.sum(1))
+    rate.index = rate.index.astype(int)
+
+    mhx_elo = np.log(rate) - np.log(1 - rate)
+
+    pd.concat({'old': ags.elo, 'new': mhx_elo}, 1).dropna().corr()
