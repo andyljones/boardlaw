@@ -304,6 +304,8 @@ def memory_safe_chunks(agents, n_envs_per, max_memory=4*1024*1024, max_size=256)
             chunks.append(chunk)
             chunk = []
             mem = 0
+    if chunk:
+        chunks.append(chunk)
     
     shuffle(chunks)
     return chunks
