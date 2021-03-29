@@ -106,12 +106,12 @@ RUN pip install --no-cache-dir jupyter_contrib_nbextensions && \
 
 # Set up MoHex
 RUN DEBIAN_FRONTEND=noninteractive TZ=Europe/London \
-    apt-get install libdb-dev libboost-all-dev -y --no-install-recommends && \
+    apt-get install gcc-7 g++-7 libdb-dev libboost-all-dev -y --no-install-recommends && \
     cd / && \
     git clone https://github.com/cgao3/benzene-vanilla-cmake.git mohex && \
     mkdir mohex/build && \
     cd mohex/build && \
-    cmake ../ && \
+    cmake ../ -DCMAKE_C_COMPILER=gcc-7 -DCMAKE_CXX_COMPILER=g++-7 && \
     make -j4 && \
     ln -s /mohex/build/src/mohex/mohex /bin/mohex
 
