@@ -181,22 +181,24 @@ def param_list():
 
 class MoHexAgent:
 
-    def __init__(self, random=0., **kwargs):
+    def __init__(self, random=0., max_proxies=8, **kwargs):
         self._proxies = []
         self._kwargs = kwargs
         self.random = random
+        self.max_proxies = max_proxies
 
     def _load(self, worlds):
-        if len(self._proxies) < worlds.n_envs:
+        if len(self._proxies) < min(worlds.n_envs, self.max_proxies):
             self._proxies = self._proxies + [MoHex(**self._kwargs) for _ in range(worlds.n_envs - len(self._proxies))]
 
         obs, seats  = worlds.obs, worlds.seats
         for e in range(len(seats)):
             self._proxies[e].load(obs[e], seats[e])
-
-    def __call__(self, worlds, eval=False):
+    
+    def _chunk(self, worlds):
         self._load(worlds)
 
+        assert worlds.n_envs <= self.max_proxies
         actions = torch.distributions.Categorical(probs=worlds.valid.float()).sample()
         use_mohex = torch.rand(worlds.n_envs) >= self.random
 
@@ -213,9 +215,15 @@ class MoHexAgent:
             else:
                 col, row = future()
             actions[i] = worlds.boardsize*row + col
-        
-        return arrdict.arrdict(
-            actions=actions)
+
+        return actions
+
+    def __call__(self, worlds, eval=False):
+        actions = torch.zeros((worlds.n_envs,), dtype=torch.long, device=worlds.device)
+        for i in range(0, worlds.n_envs, self.max_proxies):
+            s = slice(i, i+self.max_proxies)
+            actions[s] = self._chunk(worlds[s])
+        return arrdict.arrdict(actions=actions)
 
     def display(self, e=0):
         return self._proxies[e].display()
