@@ -1,10 +1,11 @@
+import scipy as sp
 import pandas as pd
 import numpy as np
 from . import plot, data, overleaf
 from .data import ELO
 import plotnine as pn
 import matplotlib.patheffects as path_effects
-from boardlaw import arena, analysis
+from boardlaw import analysis
 from functools import wraps
 import torch
 from mizani.formatters import percent_format
@@ -140,11 +141,17 @@ def plot_train_test(ags):
         + plot.IEEE())
 
 def plot_calibrations():
-    df = arena.mohex.calibrations().reset_index()
-    return (pn.ggplot(df)
-        + pn.geom_jitter(pn.aes(x='boardsize', y='winrate', color='factor(boardsize)'), shape='.', show_legend=False, width=.1, height=.0025)
-        + pn.coord_cartesian(ylim=(.4, .5))
+    params = data.sample_calibrations()
+    return (pn.ggplot(params, pn.aes(xmin='boardsize-.25', xmax='boardsize+.25', group='boardsize', fill='factor(boardsize)'))
+        + pn.geom_hline(yintercept=.5, alpha=.2)
+        + pn.geom_rect(pn.aes(ymin='lower', ymax='upper'), show_legend=False, color='k')
+        + pn.geom_rect(pn.aes(ymin='mid', ymax='mid'), show_legend=False, color='k', size=2)
         + pn.scale_y_continuous(labels=percent_format())
+        + pn.scale_fill_hue(l=.5)
+        + pn.coord_cartesian(ylim=(.4, .6))
+        + pn.labs(
+            y='Win rate v. perfect play',
+            x='Board size')
         + plot.IEEE())
 
 def hyperparams_table():
@@ -197,6 +204,7 @@ if __name__ == '__main__':
     upload(plot_runtimes, ags)
     upload(plot_train_test, ags)
     upload(plot_test, ags)
+    upload(plot_calibrations)
 
     overleaf.table(boardsize_hyperparams_table(ags), 'boardsize_hyperparams')
     overleaf.table(parameters_table(ags), 'parameters')

@@ -107,7 +107,7 @@ def calibrate_all(boardsize=None, threshold=-1):
 
 def calibrations(boardsize=None):
     if boardsize is None:
-        return pd.concat({b: calibrations(b) for b in range(3, 10)}, names=('boardsize',))
+        return pd.concat({b: calibrations(b) for b in range(3, 10)}, names=('boardsize',)).reset_index(level=0).reset_index(drop=True)
 
     mhx = sql.mohex_trial_query(boardsize)
     black_wins = mhx[['black_agent', 'black_wins', 'white_wins']].dropna().set_index('black_agent')[['black_wins', 'white_wins']]
@@ -115,9 +115,10 @@ def calibrations(boardsize=None):
     black_wins = black_wins.groupby(black_wins.index).sum()
     white_wins = white_wins.groupby(white_wins.index).sum()
 
-    rate = (black_wins.black_wins + white_wins.white_wins)/(black_wins.sum(1) + white_wins.sum(1))
-    rate.index = rate.index.astype(int)
-    rate.index.name = 'agent_id'
-    rate.name = 'winrate'
+    results = pd.concat({
+        'wins': (black_wins.black_wins + white_wins.white_wins),
+        'games': (black_wins.sum(1) + white_wins.sum(1))}, 1)
+    results.index = results.index.astype(int)
+    results.index.name = 'agent_id'
 
-    return rate
+    return results.reset_index()

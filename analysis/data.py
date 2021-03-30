@@ -9,6 +9,7 @@ from boardlaw import sql, elos
 import aljpy
 from pavlov import stats, runs
 import pandas as pd
+from boardlaw import arena
 
 # All Elos internally go as e^d; Elos in public are in base 10^(d/400)
 ELO = 400/np.log(10)
@@ -178,3 +179,18 @@ def train_test_model(frontiers):
     model = smf.ols('np.log10(test_flops) ~ np.log10(train_flops) + elo + 1', frontiers).fit()
     frontiers['test_flops_hat'] = 10**model.predict(frontiers)
     return frontiers, model
+
+def sample_calibrations(pseudocount=1):
+    best = (arena.mohex.calibrations()
+                .assign(winrate=lambda df: df.wins/df.games)
+                .sort_values('winrate')
+                .groupby('boardsize').last()
+                .reset_index())
+
+    dist = sp.stats.beta(best.wins + pseudocount, best.games - best.wins + pseudocount)
+    best['lower'] = dist.ppf(.1)
+    best['mid'] = dist.ppf(.5)
+    best['upper'] = dist.ppf(.9)
+
+    return best
+
