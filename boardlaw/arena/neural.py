@@ -376,6 +376,27 @@ def evaluate_best(boardsize, n_envs=64*1024):
             target = total - len(av)
             pbar.update(target - pbar.n)
 
+def best_rates(boardsize):
+    from . import mohex
+
+    best_id = int(mohex.calibrations(boardsize).sort_values('winrate').agent_id.iloc[-1])
+
+    black = sql.query('select * from trials where black_agent == ?', params=(best_id,))
+    white = sql.query('select * from trials where white_agent == ?', params=(best_id,))
+
+    black = black.set_index('white_agent').assign(games=lambda df: df.black_wins + df.white_wins).rename(columns={'white_wins': 'wins'})[['wins', 'games']]
+    white = white.set_index('black_agent').assign(games=lambda df: df.black_wins + df.white_wins).rename(columns={'black_wins': 'wins'})[['wins', 'games']]
+
+    trials = (black + white)
+    trials = trials.groupby(trials.index).sum()
+
+    ags = sql.agent_query().reindex(trials.index)
+    ags['games'] = trials.games
+    ags['logwins'] = np.log10(trials.wins) - np.log10(trials.games)
+
+    return ags
+
+
 ### TESTS ###
 
 class MockAgent:
