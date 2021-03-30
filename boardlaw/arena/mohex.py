@@ -105,12 +105,9 @@ def calibrate_all(boardsize=None, threshold=-1):
     for c in tqdm(choices, desc=str(boardsize)):
         calibrate(c, mhx=mhx)
 
-def analyze(boardsize):
-    ags = sql.agent_query().loc[lambda df: df.boardsize == boardsize].query('test_nodes == 64 & boardsize == 7')
-    trials = sql.trial_query(boardsize, 'bee/%')
-    trials = trials[trials.black_agent.isin(ags.index) & trials.white_agent.isin(ags.index)]
-    ws, gs = elos.symmetrize(trials)
-    ags['elo'] = elos.solve(ws, gs)
+def calibrations(boardsize=None):
+    if boardsize is None:
+        return pd.concat({b: calibrations(b) for b in range(3, 10)}, names=('boardsize',))
 
     mhx = sql.mohex_trial_query(boardsize)
     black_wins = mhx[['black_agent', 'black_wins', 'white_wins']].dropna().set_index('black_agent')[['black_wins', 'white_wins']]
@@ -120,7 +117,7 @@ def analyze(boardsize):
 
     rate = (black_wins.black_wins + white_wins.white_wins)/(black_wins.sum(1) + white_wins.sum(1))
     rate.index = rate.index.astype(int)
+    rate.index.name = 'agent_id'
+    rate.name = 'elo'
 
-    mhx_elo = np.log(rate) - np.log(1 - rate)
-
-    pd.concat({'old': ags.elo, 'new': mhx_elo}, 1).dropna().corr()
+    return np.log(rate) - np.log(1 - rate)
