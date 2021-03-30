@@ -121,4 +121,6 @@ def calibrations(boardsize=None):
     results.index = results.index.astype(int)
     results.index.name = 'agent_id'
 
+    results['winrate'] = results.wins/results.games
+
     return results.reset_index()

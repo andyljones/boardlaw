@@ -334,6 +334,29 @@ def evaluate_nodes(boardsize, n_envs_per=512):
     chunks = memory_safe_chunks(agents, n_envs_per)
     evaluate(agents, games, n_envs_per=n_envs_per, chunks=chunks)
 
+def evaluate_best(boardsize, n_envs=64*1024):
+    from . import mohex
+
+    best_id = mohex.calibrations(boardsize).sort_values('winrate').agent_id.iloc[-1]
+    seen = sql.query('''
+        select black_agent, white_agent from trials 
+        where 
+            (black_agent == ? or white_agent == ?) and 
+            (black_wins + white_wins >= ?)''', params=(int(best_id), int(best_id), n_envs//2))
+    seen = set(seen.black_agent) | set(seen.white_agent)
+
+    ags = sql.agent_query().loc[lambda df: df.boardsize == boardsize].drop(seen, 0)
+    agent_id = ags.sample(1).index[0]
+
+    agents = {
+        agent_id: common.sql_agent(agent_id, device='cuda'),
+        best_id: common.sql_agent(best_id, device='cuda')}
+
+    worlds = common.sql_world(ags.index[0], n_envs, device='cuda')
+    results = common.evaluate(worlds, agents)
+
+    sql.save_trials(results)
+
 ### TESTS ###
 
 class MockAgent:

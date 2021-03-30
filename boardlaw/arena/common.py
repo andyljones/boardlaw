@@ -7,6 +7,7 @@ from itertools import permutations
 from pavlov import storage, runs
 from ..mcts import MCTSAgent
 from ..hex import Hex
+from .. import sql
 
 log = getLogger(__name__)
 
@@ -32,9 +33,20 @@ def agent(run, idx=None, device='cpu'):
 
     return agent
 
+def sql_agent(agent_id, device='cpu'):
+    row = sql.agent_query().loc[agent_id]
+    ag = agent(row.run, row.idx, device=device)
+    ag.kwargs['n_nodes'] = row.test_nodes
+    # ag.kwargs['c_puct'] = row.c
+    return ag 
+
 def worlds(run, n_envs, device='cpu'):
     boardsize = runs.info(run)['params']['boardsize']
     return Hex.initial(n_envs, boardsize, device)
+
+def sql_world(agent_id, n_envs, device='cpu'):
+    row = sql.agent_query().loc[agent_id]
+    return Hex.initial(n_envs, row.boardsize, device)
 
 def matchup_patterns(n_seats):
     return torch.as_tensor(list(permutations(range(n_seats))))
