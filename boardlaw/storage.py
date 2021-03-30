@@ -44,17 +44,20 @@ def flops_per_sample(agent):
 
     return n_nodes*count
 
+def savepoints(boardsize, n_snapshots=21):
+    lower, upper = BOUNDS[boardsize]
+    return 10**np.linspace(np.log10(lower), np.log10(upper), n_snapshots) 
+
 class LogarithmicStorer:
 
-    def __init__(self, run, agent, n_snapshots=21):
+    def __init__(self, run, agent):
         self._run = run
 
         self._flops_per = flops_per_sample(agent)
 
         boardsize = agent.network.obs_space.dim[0]
-        lower, upper = BOUNDS[boardsize]
 
-        self._savepoints = 10**np.linspace(np.log10(lower), np.log10(upper), n_snapshots) 
+        self._savepoints = savepoints(boardsize)
         self._next = 0
         self._n_samples = 0
         self._n_flops = 0

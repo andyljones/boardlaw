@@ -5,7 +5,7 @@ from . import plot, data, overleaf
 from .data import ELO
 import plotnine as pn
 import matplotlib.patheffects as path_effects
-from boardlaw import analysis
+from boardlaw import analysis, nash
 from functools import wraps
 import torch
 from mizani.formatters import percent_format
@@ -152,6 +152,16 @@ def plot_calibrations():
         + pn.labs(
             y='Win rate v. perfect play',
             x='Board size')
+        + plot.IEEE())
+
+def plot_nash_grads():
+    payoffs = nash.nash_payoffs()
+    grads = nash.nash_grads(payoffs)
+    return (pn.ggplot(grads)
+        + pn.geom_line(pn.aes(x='flops', y='grad', group='boardsize', color='factor(boardsize)'), show_legend=False)
+        + pn.scale_color_hue(l=.4)
+        + pn.scale_x_continuous(trans='log10')
+        + pn.coord_cartesian(ylim=(0, None))
         + plot.IEEE())
 
 def hyperparams_table():

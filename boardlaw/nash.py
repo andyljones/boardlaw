@@ -1,7 +1,8 @@
 import cvxpy as cp
 import pandas as pd
 import numpy as np
-from . import elos, sql
+from . import elos, sql, storage
+from tqdm.auto import tqdm
 
 def equilibrium(A):
     # https://www.cs.cmu.edu/~ggordon/780-spring09/slides/Game%20theory%20lecture2-algs%20for%20normal%20form.pdf
@@ -19,18 +20,23 @@ def equilibrium(A):
     y = pd.Series(bounds[0].dual_value, A.columns)
     return x, y
 
-def nash_solns(snaps, ws, gs):
+def nash_solns(ags, ws, gs):
+    [boardsize] = ags.boardsize.unique()
+    schedule = storage.savepoints(boardsize)
+    assignment = abs(np.log10(ags.train_flops.reindex(ws.index).values)[:, None] - np.log10(schedule)[None, :]).argmin(1)
+
     rate = (ws/gs).fillna(.5)
 
     strats = {}
     payoffs = {}
-    for i, i_group in snaps.reindex(rate.index).groupby('idx'):
-        for j, j_group in snaps.reindex(rate.index).groupby('idx'):
-            if i != j:
-                A = rate.reindex(index=i_group.index, columns=j_group.index)
+    for i in range(len(schedule)):
+        for j in range(len(schedule)):
+            iflops, jflops = schedule[i], schedule[j]
+            A = rate.loc[assignment == i].loc[:, assignment == j]
+            if (i != j) and (A.size > 0):
                 x, y = equilibrium(A)
-                strats[i, j] = x, y 
-                payoffs[i, j] = x @ A @ y
+                strats[iflops, jflops] = x, y 
+                payoffs[iflops, jflops] = x @ A @ y
     payoffs = pd.Series(payoffs).unstack()
     return strats, payoffs
 
@@ -78,7 +84,9 @@ def plot_nash_elos(joint):
         + plot.poster_sizes())
 
 
-def run_nash_elos(boardsize):
+def nash_payoffs(boardsize=None):
+    if boardsize is None:
+        return pd.concat({b: nash_payoffs(b) for b in tqdm(range(3, 10))}, names=('boardsize',)).reset_index(level=0).reset_index(drop=True)
     ags = (sql.agent_query()
             .query('test_nodes == 64')
             .loc[lambda df: df.description == f'bee/{boardsize}'])
@@ -88,6 +96,20 @@ def run_nash_elos(boardsize):
 
     ws, gs = elos.symmetrize(trials)
     strats, payoffs = nash_solns(ags, ws, gs)
-    elos = nash_elos(payoffs)
 
-    return elos
+    payoffs = payoffs.stack().reset_index()
+    payoffs.columns = ['strategy', 'challenger', 'winrate']
+
+    return payoffs
+
+def nash_grads(payoffs):
+    grads = {}
+    for boardsize, g in payoffs.groupby('boardsize'):
+        df = g.pivot('strategy', 'challenger', 'winrate')
+        mid_up = np.log10(df.index)[1:]
+        mid_down = np.log10(df.index)[:-1]
+        dy = np.diag(df, -1) - np.diag(df, +1)
+        dx = mid_up - mid_down
+        grads[boardsize] = pd.Series(dy/dx, 10**((mid_up + mid_down)/2))
+    grads = pd.concat(grads, names=('boardsize',)).rename('grad').reset_index()
+    return grads
