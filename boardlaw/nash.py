@@ -1,6 +1,7 @@
 import cvxpy as cp
 import pandas as pd
 import numpy as np
+from . import elos, sql
 
 def equilibrium(A):
     # https://www.cs.cmu.edu/~ggordon/780-spring09/slides/Game%20theory%20lecture2-algs%20for%20normal%20form.pdf
@@ -37,7 +38,7 @@ def nash_elos(payoffs):
     ws = 1000*payoffs.fillna(.5)
     gs = 0*ws + 1000
 
-    return pd.Series(fast_elos(ws, gs), payoffs.index)
+    return pd.Series(elos.solve(ws, gs), payoffs.index)
 
 def plot_nash_elos(joint):
     import plotnine as pn
@@ -77,20 +78,16 @@ def plot_nash_elos(joint):
         + plot.poster_sizes())
 
 
-def run_nash_elos():
-    snaps = pd.concat([pandas_elos(b) for b in range(3, 10)])
-    snaps = snaps[snaps.nodes.isnull()]
+def run_nash_elos(boardsize):
+    ags = (sql.agent_query()
+            .query('test_nodes == 64')
+            .loc[lambda df: df.description == f'bee/{boardsize}'])
+    trials = (sql
+                .trial_query(boardsize)
+                .loc[lambda df: df.black_agent.isin(ags.index) & df.white_agent.isin(ags.index)])
 
-    elos = {}
-    for b in snaps.boardsize.unique():
-        print(b)
-        raw = pandas(b)
-        ws, gs = symmetrize(raw)
-        strats, payoffs = nash_solns(snaps, ws, gs)
-        elos[b] = nash_elos(payoffs)
-    elos = pd.concat(elos).rename('elo').reset_index().rename(columns={'level_0': 'boardsize', 'level_1': 'idx'})
-    flops = snaps.groupby(['boardsize', 'idx']).flops.mean().reset_index()
-    joint = pd.merge(elos, flops)
+    ws, gs = elos.symmetrize(trials)
+    strats, payoffs = nash_solns(ags, ws, gs)
+    elos = nash_elos(payoffs)
 
-    return plot_nash_elos(joint)
-
+    return elos
