@@ -118,6 +118,6 @@ def calibrations(boardsize=None):
     rate = (black_wins.black_wins + white_wins.white_wins)/(black_wins.sum(1) + white_wins.sum(1))
     rate.index = rate.index.astype(int)
     rate.index.name = 'agent_id'
-    rate.name = 'elo'
+    rate.name = 'winrate'
 
-    return np.log(rate) - np.log(1 - rate)
+    return rate

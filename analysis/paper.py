@@ -7,6 +7,7 @@ import matplotlib.patheffects as path_effects
 from boardlaw import arena, analysis
 from functools import wraps
 import torch
+from mizani.formatters import percent_format
 
 RUNS = {
     3: ('2021-02-17 21-01-19 arctic-ease', 20),
@@ -136,6 +137,14 @@ def plot_train_test(ags):
         + pn.labs(
             x='Train-time FLOPS',
             y='Test-time FLOPS')
+        + plot.IEEE())
+
+def plot_calibrations():
+    df = arena.mohex.calibrations().reset_index()
+    return (pn.ggplot(df)
+        + pn.geom_jitter(pn.aes(x='boardsize', y='winrate', color='factor(boardsize)'), shape='.', show_legend=False, width=.1, height=.0025)
+        + pn.coord_cartesian(ylim=(.4, .5))
+        + pn.scale_y_continuous(labels=percent_format())
         + plot.IEEE())
 
 def hyperparams_table():
