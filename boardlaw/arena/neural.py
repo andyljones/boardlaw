@@ -1,3 +1,5 @@
+from torch.functional import broadcast_tensors
+from tqdm.auto import tqdm
 import time
 import pandas as pd
 import numpy as np
@@ -334,10 +336,7 @@ def evaluate_nodes(boardsize, n_envs_per=512):
     chunks = memory_safe_chunks(agents, n_envs_per)
     evaluate(agents, games, n_envs_per=n_envs_per, chunks=chunks)
 
-def evaluate_best(boardsize, n_envs=64*1024):
-    from . import mohex
-
-    best_id = mohex.calibrations(boardsize).sort_values('winrate').agent_id.iloc[-1]
+def _available(boardsize, best_id, n_envs):
     seen = sql.query('''
         select black_agent, white_agent from trials 
         where 
@@ -345,17 +344,37 @@ def evaluate_best(boardsize, n_envs=64*1024):
             (black_wins + white_wins >= ?)''', params=(int(best_id), int(best_id), n_envs//2))
     seen = set(seen.black_agent) | set(seen.white_agent)
 
-    ags = sql.agent_query().loc[lambda df: df.boardsize == boardsize].drop(seen, 0)
-    agent_id = ags.sample(1).index[0]
+    return (sql.agent_query()
+                .query('test_nodes == 64')
+                .loc[lambda df: df.boardsize == boardsize]
+                .drop(seen, 0, errors='ignore')
+                .index)
 
-    agents = {
-        agent_id: common.sql_agent(agent_id, device='cuda'),
-        best_id: common.sql_agent(best_id, device='cuda')}
+def evaluate_best(boardsize, n_envs=64*1024):
+    if boardsize is None:
+        for b in range(3, 10):
+            evaluate_best(b)
+    from . import mohex
 
-    worlds = common.sql_world(ags.index[0], n_envs, device='cuda')
-    results = common.evaluate(worlds, agents)
+    best_id = mohex.calibrations(boardsize).sort_values('winrate').agent_id.iloc[-1]
+    total = len(_available(boardsize, best_id, n_envs))
 
-    sql.save_trials(results)
+    with tqdm(desc=f'{boardsize}', total=total) as pbar:
+        while True:
+            av = _available(boardsize, best_id, n_envs)
+            agent_id = np.random.choice(av)
+
+            agents = {
+                agent_id: common.sql_agent(agent_id, device='cuda'),
+                best_id: common.sql_agent(best_id, device='cuda')}
+
+            worlds = common.sql_world(agent_id, n_envs, device='cuda')
+            results = common.evaluate(worlds, agents)
+
+            sql.save_trials(results)
+
+            target = total - len(av)
+            pbar.update(target - pbar.n)
 
 ### TESTS ###
 
