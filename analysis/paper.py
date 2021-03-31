@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import scipy as sp
 import pandas as pd
 import numpy as np
@@ -181,6 +182,35 @@ def plot_nash_frontier():
         + plot.IEEE()
         + pn.theme(
             figure_size=(3.487, 3*2.155)))
+
+def plot_nash_surface(payoffs, boardsize=None, ax=None):
+    if boardsize is None:
+        fig, axes = plt.subplots(4, 2, sharex=True, sharey=True)
+        for b, ax in zip(range(3, 10), axes.flatten()):
+            plot_nash_surface(payoffs, b, ax)
+            ax.set_xlim(np.log10(payoffs.strategy.min()), np.log10(payoffs.strategy.max()))
+            ax.set_ylim(np.log10(payoffs.challenger.min()), np.log10(payoffs.challenger.max()))
+        fig.set_size_inches(3.487, 3*2.155)
+        fig.set_dpi(300)
+        return fig
+    
+    Z = payoffs.loc[payoffs.boardsize == boardsize].pivot('strategy', 'challenger', 'winrate').fillna(.5)
+    X, Y = np.log10(Z.index), np.log10(Z.columns)
+
+    with plt.style.context(plot.IEEE()._rcParams):
+        _, ax = plt.subplots() if ax is None else (None, ax)
+
+        extent = (X[0], X[-1], Y[-1], Y[0])
+        ax.imshow(Z, cmap='RdYlGn', vmin=0, vmax=1, extent=extent)
+
+        formatter = lambda x, p: f'1e{int(x)}'
+        ax.xaxis.set_major_formatter(formatter)
+        ax.yaxis.set_major_formatter(formatter)
+        ax.set_title(boardsize)
+    
+    return ax
+
+
 
 def hyperparams_table():
     s = pd.Series({
