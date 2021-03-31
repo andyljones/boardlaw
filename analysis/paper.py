@@ -146,7 +146,7 @@ def plot_calibrations():
         + pn.geom_rect(pn.aes(ymin='lower', ymax='upper'), show_legend=False, color='k')
         + pn.geom_rect(pn.aes(ymin='mid', ymax='mid'), show_legend=False, color='k', size=2)
         + pn.scale_y_continuous(labels=percent_format())
-        + pn.scale_fill_hue(l=.5)
+        + pn.scale_fill_hue(l=.4)
         + pn.coord_cartesian(ylim=(.4, .6))
         + pn.labs(
             y='Win rate v. perfect play',
@@ -162,6 +162,25 @@ def plot_nash_grads():
         + pn.scale_x_continuous(trans='log10')
         + pn.coord_cartesian(ylim=(0, None))
         + plot.IEEE())
+
+def plot_nash_frontier():
+    payoffs = nash.nash_payoffs()
+    payoffs['rel'] = payoffs.challenger/payoffs.strategy
+    payoffs['elo'] = np.log(payoffs.winrate) - np.log(1 - payoffs.winrate)
+
+    return (pn.ggplot(payoffs.query('-10 < elo < +10'))
+        + pn.geom_vline(xintercept=1, alpha=.5, size=.125)
+        + pn.geom_hline(yintercept=0, alpha=.5, size=.125)
+        + pn.geom_line(pn.aes(x='rel', y='elo', group='strategy', color='challenger'), size=.25, show_legend=False)
+        + pn.scale_x_continuous(trans='log10')
+        + pn.scale_color_continuous(trans='log10')
+        + pn.facet_wrap('boardsize', ncol=2)
+        + pn.labs(
+            x='Relative compute of challenger',
+            y='Logit winrate v. challenger')
+        + plot.IEEE()
+        + pn.theme(
+            figure_size=(3.487, 3*2.155)))
 
 def hyperparams_table():
     s = pd.Series({
@@ -200,7 +219,7 @@ def parameters_table(ags):
             .unstack(0)
             .fillna('')
             .iloc[::-1, ::-1]
-            .to_latex(index=True, label='parameters', caption='Fitted frontier parameters', escape=False, header=False))
+            .to_latex(index=True, label='parameters', caption='Fitted frontier parameters', escape=False))
 
 if __name__ == '__main__':
     ags = data.load()
@@ -214,6 +233,7 @@ if __name__ == '__main__':
     upload(plot_train_test, ags)
     upload(plot_test, ags)
     upload(plot_calibrations)
+    upload(plot_nash_frontier)
 
     overleaf.table(boardsize_hyperparams_table(ags), 'boardsize_hyperparams')
     overleaf.table(parameters_table(ags), 'parameters')

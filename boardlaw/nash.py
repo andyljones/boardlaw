@@ -46,7 +46,6 @@ def nash_elos(payoffs):
 
     return pd.Series(elos.solve(ws, gs), payoffs.index)
 
-
 def incremental_solns(ags, ws, gs):
     [boardsize] = ags.boardsize.unique()
     schedule = np.log10(storage.savepoints(boardsize))

@@ -28,6 +28,8 @@ class IEEE(pn.theme):
         super().__init__(
             axis_title_x=pn.element_text(margin=margin), 
             axis_title_y=pn.element_text(margin=margin), 
+            strip_background_x=pn.element_text(color='w', height=.1),
+            strip_background_y=pn.element_text(color='w', width=.1),
             legend_key_width=10,
             legend_key_height=10.,
             complete=True)
