@@ -10,7 +10,8 @@ def symmetrize(trials):
 
     df = (trials
             .assign(games=lambda df: df.black_wins + df.white_wins)
-            .pivot('black_agent', 'white_agent', ['games', 'white_wins', 'black_wins']))
+            .groupby(['black_agent', 'white_agent'])[['games', 'white_wins', 'black_wins']].sum()
+            .unstack())
     ids = list(set(df.columns.get_level_values(1)))
     df = df.reindex(index=ids).reindex(columns=ids, level=1).fillna(0)
 

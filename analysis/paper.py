@@ -37,10 +37,9 @@ def plot_hex(n_envs=1, boardsize=9, seed=8):
 
 def plot_flops_curves(ags):
     df = ags.query('test_nodes == 64').copy()
-    df['g'] = ags.run
     labels = df.sort_values('train_flops').groupby('boardsize').first().reset_index()
 
-    return (pn.ggplot(df, pn.aes(x='train_flops', color='factor(boardsize)', group='g'))
+    return (pn.ggplot(df, pn.aes(x='train_flops', color='factor(boardsize)', group='run'))
         + pn.geom_line(pn.aes(y='ELO*elo'), size=.25, show_legend=False)
         + pn.geom_point(pn.aes(y='ELO*elo'), size=1/16, show_legend=False, shape='.')
         + pn.geom_text(pn.aes(y='ELO*elo', label='boardsize'), data=labels, show_legend=False, size=6, nudge_x=-.25, nudge_y=-15)
@@ -201,7 +200,7 @@ def parameters_table(ags):
             .unstack(0)
             .fillna('')
             .iloc[::-1, ::-1]
-            .to_latex(index=True, label='parameters', caption='Fitted frontier parameters', escape=False))
+            .to_latex(index=True, label='parameters', caption='Fitted frontier parameters', escape=False, header=False))
 
 if __name__ == '__main__':
     ags = data.load()

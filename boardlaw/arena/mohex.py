@@ -124,3 +124,8 @@ def calibrations(boardsize=None):
     results['winrate'] = results.wins/results.games
 
     return results.reset_index()
+
+def best_agent(boardsize=None):
+    if boardsize is None:
+        return pd.Series({b: best_agent(b) for b in range(3, 10)})
+    return int(calibrations(boardsize).sort_values('winrate').agent_id.iloc[-1])

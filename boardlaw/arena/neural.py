@@ -362,6 +362,8 @@ def evaluate_best(boardsize, n_envs=64*1024):
     with tqdm(desc=f'{boardsize}', total=total) as pbar:
         while True:
             av = _available(boardsize, best_id, n_envs)
+            if len(av) == 0:
+                break
             agent_id = np.random.choice(av)
 
             agents = {
@@ -379,7 +381,7 @@ def evaluate_best(boardsize, n_envs=64*1024):
 def best_rates(boardsize):
     from . import mohex
 
-    best_id = int(mohex.calibrations(boardsize).sort_values('winrate').agent_id.iloc[-1])
+    best_id = mohex.best_agent(boardsize)
 
     black = sql.query('select * from trials where black_agent == ?', params=(best_id,))
     white = sql.query('select * from trials where white_agent == ?', params=(best_id,))
@@ -390,11 +392,9 @@ def best_rates(boardsize):
     trials = (black + white)
     trials = trials.groupby(trials.index).sum()
 
-    ags = sql.agent_query().reindex(trials.index)
-    ags['games'] = trials.games
-    ags['logwins'] = np.log10(trials.wins) - np.log10(trials.games)
-
-    return ags
+    return pd.concat({
+        'best_games': trials.games,
+        'best_elo': np.log(trials.wins) - np.log(trials.games - trials.wins)}, 1)
 
 
 ### TESTS ###
