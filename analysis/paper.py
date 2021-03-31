@@ -164,67 +164,6 @@ def plot_nash_grads():
         + pn.coord_cartesian(ylim=(0, None))
         + plot.IEEE())
 
-def plot_nash_grad_frontier():
-    payoffs = nash.nash_payoffs()
-    payoffs['rel'] = payoffs.challenger/payoffs.strategy
-    payoffs['elo'] = np.log(payoffs.winrate) - np.log(1 - payoffs.winrate)
-
-    return (pn.ggplot(payoffs.query('-10 < elo < +10'))
-        + pn.geom_vline(xintercept=1, alpha=.5, size=.125)
-        + pn.geom_hline(yintercept=0, alpha=.5, size=.125)
-        + pn.geom_line(pn.aes(x='rel', y='elo', group='strategy', color='challenger'), size=.25, show_legend=False)
-        + pn.scale_x_continuous(trans='log10')
-        + pn.scale_color_continuous(trans='log10')
-        + pn.facet_wrap('boardsize', ncol=2)
-        + pn.labs(
-            x='Relative compute of challenger',
-            y='Logit winrate v. challenger')
-        + plot.IEEE()
-        + pn.theme(
-            figure_size=(3.487, 3*2.155)))
-
-def plot_nash_surface(payoffs, boardsize=None, ax=None):
-    if boardsize is None:
-        fig, axes = plt.subplots(4, 2, sharex=True, sharey=True)
-        for b, ax in zip(range(3, 10), axes.flatten()):
-            plot_nash_surface(payoffs, b, ax)
-            ax.set_xlim(np.log10(payoffs.strategy.min()), np.log10(payoffs.strategy.max()))
-            ax.set_ylim(np.log10(payoffs.challenger.min()), np.log10(payoffs.challenger.max()))
-        fig.set_size_inches(3.487, 3*2.155)
-        fig.set_dpi(300)
-        return fig
-    
-    Z = payoffs.loc[payoffs.boardsize == boardsize].pivot('strategy', 'challenger', 'winrate').fillna(.5)
-    X, Y = np.log10(Z.index), np.log10(Z.columns)
-
-    with plt.style.context(plot.IEEE()._rcParams):
-        _, ax = plt.subplots() if ax is None else (None, ax)
-
-        extent = (X[0], X[-1], Y[-1], Y[0])
-        ax.imshow(Z, cmap='RdYlGn', vmin=0, vmax=1, extent=extent)
-
-        formatter = lambda x, p: f'1e{int(x)}'
-        ax.xaxis.set_major_formatter(formatter)
-        ax.yaxis.set_major_formatter(formatter)
-        ax.set_title(boardsize)
-    
-    return ax
-
-def plot_nash_frontier(payoffs, N=1000):
-    es = {}
-    for b in range(3, 10):
-        rates = payoffs.loc[lambda df: df.boardsize == b].pivot('strategy', 'challenger', 'winrate')
-        ws = N*rates
-        gs = pd.DataFrame(N, ws.index, ws.columns)
-        es[b] = elos.solve(ws, gs)
-        
-    df = pd.concat(es, names=('boardsize',)).reset_index()
-    return (pn.ggplot(df)
-        + pn.geom_line(pn.aes(x='strategy', y='elo', color='boardsize', group='boardsize'), show_legend=False)
-        + pn.scale_x_continuous(trans='log10')
-        + plot.IEEE())
-
-
 def hyperparams_table():
     s = pd.Series({
         'Number of envs': '32k',
