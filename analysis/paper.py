@@ -6,7 +6,7 @@ from . import plot, data, overleaf
 from .data import ELO
 import plotnine as pn
 import matplotlib.patheffects as path_effects
-from boardlaw import analysis, nash
+from boardlaw import analysis, nash, elos
 from functools import wraps
 import torch
 from mizani.formatters import percent_format
@@ -164,7 +164,7 @@ def plot_nash_grads():
         + pn.coord_cartesian(ylim=(0, None))
         + plot.IEEE())
 
-def plot_nash_frontier():
+def plot_nash_grad_frontier():
     payoffs = nash.nash_payoffs()
     payoffs['rel'] = payoffs.challenger/payoffs.strategy
     payoffs['elo'] = np.log(payoffs.winrate) - np.log(1 - payoffs.winrate)
@@ -210,6 +210,19 @@ def plot_nash_surface(payoffs, boardsize=None, ax=None):
     
     return ax
 
+def plot_nash_frontier(payoffs, N=1000):
+    es = {}
+    for b in range(3, 10):
+        rates = payoffs.loc[lambda df: df.boardsize == b].pivot('strategy', 'challenger', 'winrate')
+        ws = N*rates
+        gs = pd.DataFrame(N, ws.index, ws.columns)
+        es[b] = elos.solve(ws, gs)
+        
+    df = pd.concat(es, names=('boardsize',)).reset_index()
+    return (pn.ggplot(df)
+        + pn.geom_line(pn.aes(x='strategy', y='elo', color='boardsize', group='boardsize'), show_legend=False)
+        + pn.scale_x_continuous(trans='log10')
+        + plot.IEEE())
 
 
 def hyperparams_table():
