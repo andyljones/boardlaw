@@ -154,16 +154,6 @@ def plot_calibrations():
             x='Board size')
         + plot.IEEE())
 
-def plot_nash_grads():
-    payoffs = nash.nash_payoffs()
-    grads = nash.nash_grads(payoffs)
-    return (pn.ggplot(grads)
-        + pn.geom_line(pn.aes(x='flops', y='grad', group='boardsize', color='factor(boardsize)'), show_legend=False)
-        + pn.scale_color_hue(l=.4)
-        + pn.scale_x_continuous(trans='log10')
-        + pn.coord_cartesian(ylim=(0, None))
-        + plot.IEEE())
-
 def hyperparams_table():
     s = pd.Series({
         'Number of envs': '32k',
