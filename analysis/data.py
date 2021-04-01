@@ -46,7 +46,7 @@ def with_times(ags):
     aug['train_time'] = aug.samples/aug.sample_rate
     return aug
 
-def interp_frontier(g, x='train_flops', y='elo', group='run'):
+def interp_curves(g, x='train_flops', y='elo', group='run'):
     xl, xr = g[x].pipe(np.log10).min(), g[x].pipe(np.log10).max()
     xs = np.linspace(xl, xr, 101)
     ys = {}
@@ -54,8 +54,10 @@ def interp_frontier(g, x='train_flops', y='elo', group='run'):
         xp = gg[x].pipe(np.log10).values
         yp = gg[y].values
         ys[run] = np.interp(xs, xp, yp, np.nan, np.nan)
-    ys = pd.DataFrame(ys, index=10**xs)
+    return pd.DataFrame(ys, index=10**xs)
 
+def interp_frontier(g, x='train_flops', y='elo', **kwargs):
+    ys = interp_curves(g, x=x, y=y, **kwargs)
     return ys.max(1).rename_axis(index=x).rename(y)
 
 class Changepoint(nn.Module):

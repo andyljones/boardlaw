@@ -4,11 +4,33 @@ from . import mohex, common
 import numpy as np
 from tqdm.auto import tqdm
 
+MIDS = {9: 14652}
+
+def frontier_participants(boardsize):
+    from analysis import data
+    ags = data.load().loc[lambda df: df.boardsize == boardsize]
+    ys = data.interp_curves(ags)
+
+    selection = []
+    for flops, r in ys.iterrows():
+        run = r.idxmax()
+        snaps = ags.loc[ags.run == run].sort_values('train_flops')
+        dists = snaps.train_flops.pipe(np.log10) - np.log10(flops)
+        if (dists == 0).any():
+            selection.append((dists == 0).idxmax())
+        else:
+            if (dists < 0).any():
+                selection.append(dists[dists < 0].index[-1])
+            if (dists > 0).any():
+                selection.append(dists[dists > 0].index[0])
+    return list(set(selection))
+
 def _available(boardsize, best_id, n_envs):
     seen = sql.query('''
         select black_agent, white_agent from trials 
         where 
-            (black_agent == ? or white_agent == ?)''', params=(int(best_id), int(best_id)))
+            (black_agent == ? or white_agent == ?) and
+            (black_wins + white_wins) >= n_envs''', params=(int(best_id), int(best_id), n_envs))
     seen = set(seen.black_agent) | set(seen.white_agent)
 
     return (sql.agent_query()
