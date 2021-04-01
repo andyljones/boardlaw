@@ -25,41 +25,39 @@ def frontier_participants(boardsize):
                 selection.append(dists[dists > 0].index[0])
     return list(set(selection))
 
-def _available(boardsize, best_id, n_envs):
+def best_v_mohex(boardsize):
+    return mohex.calibrations(boardsize).sort_values('winrate').agent_id.iloc[-1]
+
+def available(ref_id, n_envs):
     seen = sql.query('''
         select black_agent, white_agent from trials 
         where 
             (black_agent == ? or white_agent == ?) and
-            (black_wins + white_wins) >= n_envs''', params=(int(best_id), int(best_id), n_envs))
+            (black_wins + white_wins) >= ?''', params=(int(ref_id), int(ref_id), n_envs))
     seen = set(seen.black_agent) | set(seen.white_agent)
 
+    boardsize = sql.query('select boardsize from agents_details where id == ?', params=(ref_id,)).iloc[0].boardsize
     return (sql.agent_query()
                 .query('test_nodes == 64')
                 .loc[lambda df: df.boardsize == boardsize]
                 .drop(seen, 0, errors='ignore')
                 .index)
 
-def evaluate_best(boardsize, n_envs=64*1024):
-    if boardsize is None:
-        for b in range(3, 10):
-            evaluate_best(b)
-    from . import mohex
+def evaluate(ref_id, n_envs=64*1024):
+    total = len(available(ref_id, n_envs))
 
-    best_id = mohex.calibrations(boardsize).sort_values('winrate').agent_id.iloc[-1]
-    total = len(_available(boardsize, best_id, n_envs))
-
-    with tqdm(desc=f'{boardsize}', total=total) as pbar:
+    with tqdm(total=total) as pbar:
         while True:
-            av = _available(boardsize, best_id, n_envs)
+            av = available(ref_id, n_envs)
             if len(av) == 0:
                 break
             agent_id = np.random.choice(av)
 
             agents = {
                 agent_id: common.sql_agent(agent_id, device='cuda'),
-                best_id: common.sql_agent(best_id, device='cuda')}
+                ref_id: common.sql_agent(ref_id, device='cuda')}
 
-            worlds = common.sql_world(agent_id, n_envs, device='cuda')
+            worlds = common.sql_world(ref_id, n_envs, device='cuda')
             results = common.evaluate(worlds, agents)
 
             sql.save_trials(results)
@@ -67,13 +65,11 @@ def evaluate_best(boardsize, n_envs=64*1024):
             target = total - len(av)
             pbar.update(target - pbar.n)
 
-def best_rates(boardsize):
+def best_rates(ref_id):
     from . import mohex
 
-    best_id = mohex.best_agent(boardsize)
-
-    black = sql.query('select * from trials where black_agent == ?', params=(best_id,))
-    white = sql.query('select * from trials where white_agent == ?', params=(best_id,))
+    black = sql.query('select * from trials where black_agent == ?', params=(ref_id,))
+    white = sql.query('select * from trials where white_agent == ?', params=(ref_id,))
 
     black = black.set_index('white_agent').assign(games=lambda df: df.black_wins + df.white_wins).rename(columns={'white_wins': 'wins'})[['wins', 'games']]
     white = white.set_index('black_agent').assign(games=lambda df: df.black_wins + df.white_wins).rename(columns={'black_wins': 'wins'})[['wins', 'games']]
