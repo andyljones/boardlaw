@@ -25,19 +25,22 @@ def solve(wins, games, prior=1):
     pd.testing.assert_index_equal(wins.columns, games.columns)
     pd.testing.assert_index_equal(wins.index, wins.columns, check_names=False)
 
-    W = torch.as_tensor(wins.fillna(0).values) + prior
-    N = torch.as_tensor(games.fillna(0).values) + 2*prior
+    W = torch.as_tensor(wins.fillna(0).values).double() + prior
+    N = torch.as_tensor(games.fillna(0).values).double() + 2*prior
     mask = torch.as_tensor(games.gt(0).values)
 
     n = N.shape[0]
-    r = torch.nn.Parameter(torch.zeros(n))
+    r = torch.nn.Parameter(torch.zeros(n).double())
 
     def loss():
         d = r[:, None] - r[None, :]
         s = 1/(1 + torch.exp(-d))
         
         l = W*s.log() + (N - W)*(1 - s).log()
-        return -l[mask].mean() + .01*r.sum().pow(2)
+        loss = -l[mask].mean() + .01*r.mean().pow(2)
+        if torch.isinf(loss):
+            breakpoint()
+        return loss
 
     optim = torch.optim.LBFGS([r], line_search_fn='strong_wolfe', max_iter=200)
 
@@ -47,6 +50,7 @@ def solve(wins, games, prior=1):
         l.backward()
         return l
         
+    optim.step(closure)
     optim.step(closure)
     closure()
 

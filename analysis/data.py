@@ -15,21 +15,25 @@ from boardlaw import arena
 ELO = 400/np.log(10)
 
 @aljpy.autocache()
-def _trial_elos(boardsize, counter):
+def _trial_elos(boardsize, counter, main_only):
     trials = sql.trial_query(boardsize, 'bee/%')
     ws, gs = elos.symmetrize(trials)
+    if main_only:
+        ags = sql.agent_query().query('test_nodes == 64')
+        mask = ws.index.isin(ags.index)
+        ws, gs = ws.loc[mask, mask], gs.loc[mask, mask]
     return elos.solve(ws, gs)
 
-def trial_elos(boardsize):
+def trial_elos(boardsize, main_only=False):
     counter = sql.file_change_counter()
-    return _trial_elos(boardsize, counter)
+    return _trial_elos(boardsize, counter, main_only)
 
-def load():
+def load(main_only=False):
     ags = sql.agent_query()
 
     es = []
     for b in tqdm(ags.boardsize.unique()):
-        es.append(trial_elos(b))
+        es.append(trial_elos(b, main_only))
     es = pd.concat(es)
 
     return ags.join(es, how='inner')
