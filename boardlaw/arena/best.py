@@ -4,11 +4,27 @@ from . import mohex, common
 import numpy as np
 from tqdm.auto import tqdm
 
-MIDS = {9: 14652}
+MIDS = {
+    3: 112,
+    4: 1127,
+    5: 3109,
+    6: 4332,
+    7: 7497,
+    8: 10775,
+    9: 14652}
 
-def frontier_participants(boardsize):
+TOPS = {
+    3: 121, 
+    4: 922, 
+    5: 2994, 
+    6: 4024, 
+    7: 23047, 
+    8: 10605, 
+    9: 14576}
+
+def frontier_participants(ags, boardsize):
     from analysis import data
-    ags = data.load().loc[lambda df: df.boardsize == boardsize]
+    ags = ags.query('test_nodes == 64').loc[lambda df: df.boardsize == boardsize]
     ys = data.interp_curves(ags)
 
     selection = []
@@ -33,7 +49,7 @@ def available(ref_id, n_envs):
         select black_agent, white_agent from trials 
         where 
             (black_agent == ? or white_agent == ?) and
-            (black_wins + white_wins) >= ?''', params=(int(ref_id), int(ref_id), n_envs))
+            (black_wins + white_wins) >= ?''', params=(int(ref_id), int(ref_id), n_envs//2))
     seen = set(seen.black_agent) | set(seen.white_agent)
 
     boardsize = sql.query('select boardsize from agents_details where id == ?', params=(ref_id,)).iloc[0].boardsize
@@ -46,7 +62,7 @@ def available(ref_id, n_envs):
 def evaluate(ref_id, n_envs=64*1024):
     total = len(available(ref_id, n_envs))
 
-    with tqdm(total=total) as pbar:
+    with tqdm(total=total, desc=str(ref_id)) as pbar:
         while True:
             av = available(ref_id, n_envs)
             if len(av) == 0:
