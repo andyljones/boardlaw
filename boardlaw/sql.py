@@ -157,8 +157,8 @@ def query(sql, **kwargs):
 def agent_query():
     return query('''select * from agents_details''', index_col='id')
 
-def trial_query(boardsize, desc='%'):
-    return query('''
+def trial_query(boardsize=None, desc='%', test_nodes=None):
+    q = '''
         select trials.* 
         from trials 
             inner join agents_details as black
@@ -166,8 +166,18 @@ def trial_query(boardsize, desc='%'):
             inner join agents_details as white
                 on (trials.white_agent == white.id)
         where 
-            (black.boardsize == ?) and (white.boardsize == ?) and 
-            (black.description like ?) and (white.description like ?)''', index_col='id', params=(int(boardsize), int(boardsize), desc, desc))
+            (black.description like ?) and (white.description like ?)
+            '''
+    params = (desc, desc)
+    
+    if test_nodes is not None:
+        q += '\nand (black.test_nodes == ?) and (white.test_nodes == ?)'
+        params += (test_nodes, test_nodes)
+    if boardsize is not None:
+        q += '\nand (black.boardsize == ?) and (white.boardsize == ?)'
+        params += (int(boardsize), int(boardsize)) 
+    
+    return query(q, index_col='id', params=params)
 
 def save_trials(results):
     rows = []

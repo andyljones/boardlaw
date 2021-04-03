@@ -39,7 +39,7 @@ def solve(wins, games, prior=1):
         l = W*s.log() + (N - W)*(1 - s).log()
         loss = -l[mask].mean() + .01*r.mean().pow(2)
         if torch.isinf(loss):
-            breakpoint()
+            print('Infinite loss!')
         return loss
 
     optim = torch.optim.LBFGS([r], line_search_fn='strong_wolfe', max_iter=200)

@@ -1,3 +1,4 @@
+import scipy as sp
 import pandas as pd
 from .. import sql, elos
 from . import mohex, common
@@ -44,7 +45,7 @@ def frontier_participants(ags, boardsize):
 def best_v_mohex(boardsize):
     return mohex.calibrations(boardsize).sort_values('winrate').agent_id.iloc[-1]
 
-def available(ref_id, n_envs):
+def uniform_available(ref_id, n_envs):
     seen = sql.query('''
         select black_agent, white_agent from trials 
         where 
@@ -59,15 +60,37 @@ def available(ref_id, n_envs):
                 .drop(seen, 0, errors='ignore')
                 .index)
 
-def evaluate(ref_id, n_envs=64*1024):
-    total = len(available(ref_id, n_envs))
+def std_available(max_games=256*1024):
+    ws, gs = [], []
+    agents = sql.agent_query().query('test_nodes == 64')
+    trials = sql.trial_query(None, 'bee/%', 64)
+    for b in range(3, 10):
+        board_agents = agents.loc[lambda df: df.boardsize == b]
+        board_trials = trials[trials.black_agent.isin(board_agents.index) & trials.white_agent.isin(board_agents.index)]
+        wb, gb = elos.symmetrize(board_trials)
 
-    with tqdm(total=total, desc=str(ref_id)) as pbar:
+        idxs = dict(index=[TOPS[b]], columns=board_agents.index)
+        wb, gb = wb.reindex(**idxs).fillna(0).stack(), gb.reindex(**idxs).fillna(0).stack()
+        
+        ws.append(wb), gs.append(gb)
+    ws, gs = pd.concat(ws), pd.concat(gs)    
+    
+    m, n = ws, gs - ws
+    std = (sp.special.polygamma(1, n+1) + sp.special.polygamma(1, m+n+2))**.5
+    std = pd.Series(std, ws.index)
+
+    return std[(std > .5) & (gs < max_games)].sort_values()
+
+
+def evaluate(n_envs=64*1024):
+    total = len(std_available())
+
+    with tqdm(total=total) as pbar:
         while True:
-            av = available(ref_id, n_envs)
+            av = std_available()
             if len(av) == 0:
                 break
-            agent_id = np.random.choice(av)
+            ref_id, agent_id = np.random.choice(av)
 
             agents = {
                 agent_id: common.sql_agent(agent_id, device='cuda'),
