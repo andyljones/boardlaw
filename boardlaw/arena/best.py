@@ -60,7 +60,7 @@ def uniform_available(ref_id, n_envs):
                 .drop(seen, 0, errors='ignore')
                 .index)
 
-def std_available(max_games=256*1024):
+def std_available(max_std=.5, max_games=256*1024):
     ws, gs = [], []
     agents = sql.agent_query().query('test_nodes == 64')
     trials = sql.trial_query(None, 'bee/%', 64)
@@ -69,7 +69,8 @@ def std_available(max_games=256*1024):
         board_trials = trials[trials.black_agent.isin(board_agents.index) & trials.white_agent.isin(board_agents.index)]
         wb, gb = elos.symmetrize(board_trials)
 
-        idxs = dict(index=[TOPS[b]], columns=board_agents.index)
+        others = board_agents.drop([TOPS[b]], errors='ignore').index
+        idxs = dict(index=[TOPS[b]], columns=others)
         wb, gb = wb.reindex(**idxs).fillna(0).stack(), gb.reindex(**idxs).fillna(0).stack()
         
         ws.append(wb), gs.append(gb)
@@ -77,20 +78,20 @@ def std_available(max_games=256*1024):
     
     m, n = ws, gs - ws
     std = (sp.special.polygamma(1, n+1) + sp.special.polygamma(1, m+n+2))**.5
-    std = pd.Series(std, ws.index)
+    joint = pd.concat({'std': pd.Series(std, ws.index), 'gs': gs}, 1)
 
-    return std[(std > .5) & (gs < max_games)].sort_values()
-
+    mask = (std > max_std) & (gs < max_games)
+    return joint[mask].sort_values('std')
 
 def evaluate(n_envs=64*1024):
     total = len(std_available())
 
-    with tqdm(total=total) as pbar:
+    with tqdm(total=total, desc='resid') as resid, tqdm(desc='count') as count:
         while True:
             av = std_available()
             if len(av) == 0:
                 break
-            ref_id, agent_id = np.random.choice(av)
+            ref_id, agent_id = av.sample(1).index[0]
 
             agents = {
                 agent_id: common.sql_agent(agent_id, device='cuda'),
@@ -102,7 +103,8 @@ def evaluate(n_envs=64*1024):
             sql.save_trials(results)
 
             target = total - len(av)
-            pbar.update(target - pbar.n)
+            resid.update(target - resid.n)
+            count.update(1)
 
 def best_rates(ref_id):
     from . import mohex
