@@ -74,7 +74,8 @@ def std_available(max_std=.5, max_games=256*1024):
         wb, gb = wb.reindex(**idxs).fillna(0).stack(), gb.reindex(**idxs).fillna(0).stack()
         
         ws.append(wb), gs.append(gb)
-    ws, gs = pd.concat(ws), pd.concat(gs)    
+    # Double the number of games because half the mass is on the symmetric play
+    ws, gs = pd.concat(ws), 2*pd.concat(gs)    
     
     m, n = ws, gs - ws
     std = (sp.special.polygamma(1, n+1) + sp.special.polygamma(1, m+n+2))**.5
@@ -115,11 +116,14 @@ def best_rates(ref_id):
     black = black.set_index('white_agent').assign(games=lambda df: df.black_wins + df.white_wins).rename(columns={'white_wins': 'wins'})[['wins', 'games']]
     white = white.set_index('black_agent').assign(games=lambda df: df.black_wins + df.white_wins).rename(columns={'black_wins': 'wins'})[['wins', 'games']]
 
-    trials = (black + white)
-    trials = trials.groupby(trials.index).sum()
+    trials = pd.concat([black, white]).groupby(level=0).sum()
+
+    m, n = trials.wins, trials.games - trials.wins
+    std = (sp.special.polygamma(1, n+1) + sp.special.polygamma(1, m+n+2))**.5
 
     return pd.concat({
-        'best_games': trials.games,
+        'n_games': trials.games,
+        'best_std': pd.Series(std, trials.index),
         'best_elo': np.log(trials.wins + 1) - np.log(trials.games - trials.wins + 1)}, 1)
 
 
