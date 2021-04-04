@@ -74,11 +74,10 @@ def std_available(max_std=.5, max_games=256*1024):
         wb, gb = wb.reindex(**idxs).fillna(0).stack(), gb.reindex(**idxs).fillna(0).stack()
         
         ws.append(wb), gs.append(gb)
-    # Double the number of games because half the mass is on the symmetric play
     ws, gs = pd.concat(ws), pd.concat(gs)    
     
     m, n = ws, gs - ws
-    std = (sp.special.polygamma(1, n+1) + sp.special.polygamma(1, m+n+2))**.5
+    std = (sp.special.polygamma(1, m+1) + sp.special.polygamma(1, n+1))**.5
     joint = pd.concat({'std': pd.Series(std, ws.index), 'gs': gs}, 1)
 
     mask = (std > max_std) & (gs < max_games)
@@ -108,8 +107,6 @@ def evaluate(n_envs=64*1024):
             count.update(1)
 
 def best_rates(ref_id):
-    from . import mohex
-
     black = sql.query('select * from trials where black_agent == ?', params=(ref_id,))
     white = sql.query('select * from trials where white_agent == ?', params=(ref_id,))
 
@@ -119,7 +116,7 @@ def best_rates(ref_id):
     trials = pd.concat([black, white]).groupby(level=0).sum()
 
     m, n = trials.wins, trials.games - trials.wins
-    std = (sp.special.polygamma(1, n+1) + sp.special.polygamma(1, m+n+2))**.5
+    std = (sp.special.polygamma(1, m+1) + sp.special.polygamma(1, n+1))**.5
 
     return pd.concat({
         'n_games': trials.games,
