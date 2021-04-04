@@ -75,7 +75,7 @@ def std_available(max_std=.5, max_games=256*1024):
         
         ws.append(wb), gs.append(gb)
     # Double the number of games because half the mass is on the symmetric play
-    ws, gs = pd.concat(ws), 2*pd.concat(gs)    
+    ws, gs = pd.concat(ws), pd.concat(gs)    
     
     m, n = ws, gs - ws
     std = (sp.special.polygamma(1, n+1) + sp.special.polygamma(1, m+n+2))**.5

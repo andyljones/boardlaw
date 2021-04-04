@@ -15,8 +15,8 @@ def symmetrize(trials):
     ids = list(set(df.columns.get_level_values(1)))
     df = df.reindex(index=ids).reindex(columns=ids, level=1).fillna(0)
 
-    ws = (df.black_wins/df.games + df.white_wins.T/df.games.T)/2*(df.games + df.games.T)/2.
-    gs = (df.games + df.games.T)/2.
+    ws = (df.black_wins/df.games + df.white_wins.T/df.games.T)/2*(df.games + df.games.T)
+    gs = (df.games + df.games.T)
 
     return ws.where(gs > 0, np.nan), gs
 
