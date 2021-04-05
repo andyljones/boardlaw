@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import aljpy.download
 import sqlalchemy
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, Float, String, ForeignKey, create_engine
@@ -8,11 +9,16 @@ import ast
 from tqdm.auto import tqdm
 from pathlib import Path
 from contextlib import contextmanager
+from logging import getLogger
+
+log = getLogger(__name__)
 
 # First modern run
 FIRST_RUN = pd.Timestamp('2021-02-03 12:47:26.557749+00:00')
 
 DATABASE = Path('output/experiments/eval/database.sql')
+
+URL = 'https://f002.backblazeb2.com/file/boardlaw/output/experiments/eval/database.sql'
 
 Base = declarative_base()
 class Run(Base):
@@ -69,6 +75,9 @@ _engine = None
 def connection():
     if not DATABASE.parent.exists():
         DATABASE.parent.mkdir(exist_ok=True, parents=True)
+    if not DATABASE.exists():
+        log.info('Downloading the SQL database')
+        DATABASE.write_bytes(aljpy.download.download(URL))
 
     global _engine
     _engine = create_engine('sqlite:///' + str(DATABASE)) if _engine is None else _engine
