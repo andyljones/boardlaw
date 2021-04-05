@@ -6,7 +6,7 @@ from . import plot, data, overleaf
 from .data import ELO
 import plotnine as pn
 import matplotlib.patheffects as path_effects
-from boardlaw import analysis, nash, elos
+from boardlaw import analysis, elos
 from functools import wraps
 import torch
 from mizani.formatters import percent_format
