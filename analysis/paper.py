@@ -85,6 +85,11 @@ def plot_frontiers(ags):
                 + pn.coord_cartesian(None, (None, 0))
                 + plot.IEEE())
 
+def plot_direct_frontiers(ags):
+    ags = ags.copy()
+    ags['elo'] = pd.concat([best.best_rates(best.TOPS[b]) for b in best.TOPS]).best_elo
+    return plot_frontiers(ags)
+
 def plot_resid_var(ags):
     resid_var = data.residual_vars(ags)
     resid_var['diff'] = resid_var.predicted - resid_var.seen
@@ -193,7 +198,7 @@ def boardsize_hyperparams_table(ags):
         .reset_index()
         .to_latex(index=True, label='boardsize', caption='Board size-dependent hyperparameters'))
 
-def parameters_table(ags, caption='Fitted frontier parameters'):
+def parameters_table(ags, caption='Fitted frontier parameters', label='parameters'):
     df, model = data.modelled_elos(ags)
     params = {k: v.detach().cpu().numpy() for k, v in model.named_parameters()}
     raw = ELO*pd.Series({
@@ -208,12 +213,12 @@ def parameters_table(ags, caption='Fitted frontier parameters'):
             .unstack(0)
             .fillna('')
             .iloc[::-1, ::-1]
-            .to_latex(index=True, label='parameters', caption=caption, escape=False))
+            .to_latex(index=True, label=label, caption=caption, escape=False, position='t'))
 
 def direct_params_table(ags):
     ags = ags.copy()
-    ags['elo'] = pd.concat([best.best_rates(best.TOPS[b]) for b in best.TOPS])
-    return parameters_table(ags, 'Fitted frontier parameters, using direct evaluation')
+    ags['elo'] = pd.concat([best.best_rates(best.TOPS[b]) for b in best.TOPS]).best_elo
+    return parameters_table(ags, 'Fitted frontier parameters, using direct evaluation', 'direct-parameters')
 
 if __name__ == '__main__':
     ags = data.load()
@@ -222,6 +227,7 @@ if __name__ == '__main__':
     upload(plot_hex)
     upload(plot_flops_curves, ags)
     upload(plot_frontiers, ags)
+    upload(plot_direct_frontiers, ags)
     upload(plot_resid_var, ags)
     upload(plot_runtimes, ags)
     upload(plot_train_test, ags)
