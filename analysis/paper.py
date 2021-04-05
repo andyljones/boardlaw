@@ -7,6 +7,7 @@ from .data import ELO
 import plotnine as pn
 import matplotlib.patheffects as path_effects
 from boardlaw import analysis, elos
+from boardlaw.arena import best
 from functools import wraps
 import torch
 from mizani.formatters import percent_format
@@ -35,6 +36,22 @@ def plot_hex(n_envs=1, boardsize=9, seed=8):
     ult, _ = penult.step(actions, reset=False)
 
     return ult.display()
+
+def plot_elos():
+    diffs = np.linspace(-1000, +1000)
+    rates = 1/(1 + 10**(-diffs/400))
+    df = pd.DataFrame({'elo': diffs, 'winrate': rates})
+
+    return (pn.ggplot(df)
+        + pn.geom_line(pn.aes(x='elo', y='winrate'))
+        + pn.geom_vline(xintercept=0, alpha=.1)
+        + pn.geom_hline(yintercept=.5, alpha=.1)
+        + pn.labs(
+            x='Own Elo relative to opponent\'s Elo',
+            y='Win rate v. opponent')
+        + pn.scale_y_continuous(labels=percent_format())
+        + pn.coord_cartesian(expand=False)
+        + plot.IEEE())
 
 def plot_flops_curves(ags):
     df = ags.query('test_nodes == 64').copy()
@@ -176,7 +193,7 @@ def boardsize_hyperparams_table(ags):
         .reset_index()
         .to_latex(index=True, label='boardsize', caption='Board size-dependent hyperparameters'))
 
-def parameters_table(ags):
+def parameters_table(ags, caption='Fitted frontier parameters'):
     df, model = data.modelled_elos(ags)
     params = {k: v.detach().cpu().numpy() for k, v in model.named_parameters()}
     raw = ELO*pd.Series({
@@ -191,7 +208,12 @@ def parameters_table(ags):
             .unstack(0)
             .fillna('')
             .iloc[::-1, ::-1]
-            .to_latex(index=True, label='parameters', caption='Fitted frontier parameters', escape=False))
+            .to_latex(index=True, label='parameters', caption=caption, escape=False))
+
+def direct_params_table(ags):
+    ags = ags.copy()
+    ags['elo'] = pd.concat([best.best_rates(best.TOPS[b]) for b in best.TOPS])
+    return parameters_table(ags, 'Fitted frontier parameters, using direct evaluation')
 
 if __name__ == '__main__':
     ags = data.load()
@@ -205,8 +227,9 @@ if __name__ == '__main__':
     upload(plot_train_test, ags)
     upload(plot_test, ags)
     upload(plot_calibrations)
-    upload(plot_nash_frontier)
+    upload(plot_elos)
 
     overleaf.table(boardsize_hyperparams_table(ags), 'boardsize_hyperparams')
     overleaf.table(parameters_table(ags), 'parameters')
+    overleaf.table(direct_params_table(ags), 'direct-parameters')
     overleaf.table(hyperparams_table(), 'hyperparams')

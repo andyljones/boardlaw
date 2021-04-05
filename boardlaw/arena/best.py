@@ -60,7 +60,7 @@ def uniform_available(ref_id, n_envs):
                 .drop(seen, 0, errors='ignore')
                 .index)
 
-def std_available(max_std=.5, max_games=256*1024):
+def std_available(max_std=.5, max_games=512*1024):
     ws, gs = [], []
     agents = sql.agent_query().query('test_nodes == 64 & description.str.startswith("bee/")')
     trials = sql.trial_query(None, 'bee/%', 64)
