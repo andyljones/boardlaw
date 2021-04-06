@@ -56,18 +56,19 @@ def plot_elos():
 def plot_flops_curves(ags):
     df = ags.query('test_nodes == 64').copy()
     labels = df.sort_values('train_flops').groupby('boardsize').first().reset_index()
+    modelled, _ = data.modelled_elos(ags)
 
-    return (pn.ggplot(df, pn.aes(x='train_flops', color='factor(boardsize)', group='run'))
-        + pn.geom_line(pn.aes(y='ELO*elo'), size=.25, show_legend=False)
-        + pn.geom_point(pn.aes(y='ELO*elo'), size=1/16, show_legend=False, shape='.')
-        + pn.geom_text(pn.aes(y='ELO*elo', label='boardsize'), data=labels, show_legend=False, size=6, nudge_x=-.25, nudge_y=-15)
-        + pn.labs(
-            x='FLOPS', 
-            y='Elo v. perfect play')
-        + pn.scale_color_discrete(l=.4)
-        + pn.scale_x_continuous(trans='log10')
-        + pn.coord_cartesian(None, (None, 0))
-        + plot.IEEE())
+    return (pn.ggplot(df, pn.aes(x='train_flops', color='factor(boardsize)'))
+            + pn.geom_line(pn.aes(y='ELO*elo', group='run'), size=.25, show_legend=False, alpha=.15)
+            + pn.geom_line(pn.aes(y='ELO*elo'), modelled, size=.25, show_legend=False)
+            + pn.geom_text(pn.aes(y='ELO*elo', label='boardsize'), data=labels, show_legend=False, size=6, nudge_x=-.25, nudge_y=-15)
+            + pn.labs(
+                x='FLOPS', 
+                y='Elo v. perfect play')
+            + pn.scale_color_discrete(l=.4)
+            + pn.scale_x_continuous(trans='log10')
+            + pn.coord_cartesian(None, (None, 0))
+            + plot.IEEE())
 
 def plot_frontiers(ags):
     df, model = data.modelled_elos(ags)
@@ -198,7 +199,7 @@ def boardsize_hyperparams_table(ags):
         .reset_index()
         .to_latex(index=True, label='boardsize', caption='Board size-dependent hyperparameters'))
 
-def parameters_table(ags, caption='Fitted frontier parameters', label='parameters'):
+def parameters_table(ags, caption='Fitted Frontier Parameters', label='parameters'):
     df, model = data.modelled_elos(ags)
     params = {k: v.detach().cpu().numpy() for k, v in model.named_parameters()}
     raw = ELO*pd.Series({
@@ -218,7 +219,7 @@ def parameters_table(ags, caption='Fitted frontier parameters', label='parameter
 def direct_params_table(ags):
     ags = ags.copy()
     ags['elo'] = pd.concat([best.best_rates(best.TOPS[b]) for b in best.TOPS]).best_elo
-    return parameters_table(ags, 'Fitted frontier parameters, using direct evaluation', 'direct-parameters')
+    return parameters_table(ags, 'Fitted Frontier Parameters (Top-Agent Evaluation)', 'direct-parameters')
 
 if __name__ == '__main__':
     ags = data.load()
