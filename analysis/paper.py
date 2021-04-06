@@ -60,7 +60,7 @@ def plot_flops_curves(ags):
 
     return (pn.ggplot(df, pn.aes(x='train_flops', color='factor(boardsize)'))
             + pn.geom_line(pn.aes(y='ELO*elo', group='run'), size=.25, show_legend=False, alpha=.15)
-            + pn.geom_line(pn.aes(y='ELO*elo'), modelled, size=.25, show_legend=False)
+            + pn.geom_line(pn.aes(y='ELO*elo'), modelled, size=.5, show_legend=False)
             + pn.geom_text(pn.aes(y='ELO*elo', label='boardsize'), data=labels, show_legend=False, size=6, nudge_x=-.25, nudge_y=-15)
             + pn.labs(
                 x='FLOPS', 

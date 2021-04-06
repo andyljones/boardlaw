@@ -14,26 +14,32 @@ from boardlaw import arena
 # All Elos internally go as e^d; Elos in public are in base 10^(d/400)
 ELO = 400/np.log(10)
 
+GLOBAL_GAMES = 1024
+
 @aljpy.autocache()
-def _trial_elos(boardsize, counter, main_only):
-    trials = sql.trial_query(boardsize, 'bee/%')
+def _trial_elos(boardsize, counter):
+    # So in the paper we have two evaluation schemes: one where 1024 games are played between all agents,
+    # and another where >>64k games are played against the best agent. Both of the these evaluation schemes
+    # are saved in the same database, so to stop the 64k-results skewing everything, we grab the first 1000
+    # games played by each pair.
+    trials = (sql.trial_query(boardsize, 'bee/%')
+                .query('black_wins + white_wins >= 512')
+                .groupby(['black_agent', 'white_agent'])
+                .first().reset_index())
     ws, gs = elos.symmetrize(trials)
-    if main_only:
-        ags = sql.agent_query().query('test_nodes == 64')
-        mask = ws.index.isin(ags.index)
-        ws, gs = ws.loc[mask, mask], gs.loc[mask, mask]
+
     return elos.solve(ws, gs)
 
-def trial_elos(boardsize, main_only=False):
+def trial_elos(boardsize):
     counter = sql.file_change_counter()
-    return _trial_elos(boardsize, counter, main_only)
+    return _trial_elos(boardsize, counter)
 
-def load(main_only=False):
+def load():
     ags = sql.agent_query()
 
     es = []
     for b in tqdm(ags.boardsize.unique()):
-        es.append(trial_elos(b, main_only))
+        es.append(trial_elos(b))
     es = pd.concat(es)
 
     return ags.join(es, how='inner')
@@ -62,7 +68,7 @@ def interp_curves(g, x='train_flops', y='elo', group='run'):
 
 def interp_frontier(g, x='train_flops', y='elo', **kwargs):
     ys = interp_curves(g, x=x, y=y, **kwargs)
-    return ys.max(1).rename_axis(index=x).rename(y)
+    return ys.ffill().max(1).rename_axis(index=x).rename(y)
 
 class Changepoint(nn.Module):
 
