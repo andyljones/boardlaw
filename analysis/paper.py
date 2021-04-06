@@ -20,10 +20,11 @@ def upload(f, *args, **kwargs):
     [_, name] = f.__name__.split('plot_')
 
     y = f(*args, **kwargs)
-    overleaf.plot(y, name + '.png')
+    overleaf.plot(y, name + '.pdf')
 
 def plot_hex(n_envs=1, boardsize=9, seed=8):
     torch.manual_seed(seed)
+    from boardlaw import arena
 
     run, idx = RUNS[boardsize]
 
@@ -124,6 +125,7 @@ def plot_runtimes(ags):
 
 def plot_test(ags):
     df = ags.query('boardsize == 9').groupby('run').apply(lambda df: df[df.idx == df.idx.max()]).copy()
+    df['test_flops'] = df.test_nodes*(df.train_flops/df.samples)
 
     subset = df.query('test_nodes == 64').sort_values('test_flops')
     selection = [subset.loc[ELO*subset.elo > e].iloc[0].run for e in np.linspace(-2000, -500, 4)]
@@ -232,9 +234,9 @@ if __name__ == '__main__':
     upload(plot_resid_var, ags)
     upload(plot_runtimes, ags)
     upload(plot_train_test, ags)
+    upload(plot_elos)
     upload(plot_test, ags)
     upload(plot_calibrations)
-    upload(plot_elos)
 
     overleaf.table(boardsize_hyperparams_table(ags), 'boardsize_hyperparams')
     overleaf.table(parameters_table(ags), 'parameters')
