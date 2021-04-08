@@ -103,8 +103,8 @@ def plot_resid_var(ags):
         + pn.scale_y_continuous(trans='log10')
         + pn.scale_color_discrete(l=.4, limits=list(range(3, 10)))
         + pn.labs(
-            x='max board size observed',
-            y='residual variance')
+            x='Max board size observed',
+            y='Residual Variance')
         + plot.IEEE())
 
 def plot_runtimes(ags):
