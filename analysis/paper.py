@@ -64,7 +64,7 @@ def plot_flops_curves(ags):
             + pn.geom_line(pn.aes(y='ELO*elo'), modelled, size=.5, show_legend=False)
             + pn.geom_text(pn.aes(y='ELO*elo', label='boardsize'), data=labels, show_legend=False, size=6, nudge_x=-.25, nudge_y=-15)
             + pn.labs(
-                x='FLOPS', 
+                x='FLOPS-seconds', 
                 y='Elo v. perfect play')
             + pn.scale_color_discrete(l=.4)
             + pn.scale_x_continuous(trans='log10')
@@ -80,7 +80,7 @@ def plot_frontiers(ags):
                 + pn.geom_line(pn.aes(y='ELO*elohat'), size=.25, linetype='dashed', show_legend=False)
                 + pn.geom_text(pn.aes(y='ELO*elohat', label='boardsize'), data=labels, show_legend=False, size=6, nudge_x=-.25, nudge_y=-15)
                 + pn.labs(
-                    x='FLOPS', 
+                    x='FLOPS-seconds', 
                     y='Elo v. perfect play')
                 + pn.scale_color_discrete(l=.4)
                 + pn.scale_x_continuous(trans='log10')
@@ -144,7 +144,7 @@ def plot_test(ags):
         + pn.scale_color_cmap('plasma', trans='log10', limits=(df.params.min(), 10*df.params.max()))
         + pn.coord_cartesian((3.5, None))
         + pn.labs(
-            x='Test-time FLOPS',
+            x='Test-time FLOPS-seconds',
             y='Elo v. perfect play')
         + plot.IEEE())
 
@@ -161,8 +161,8 @@ def plot_train_test(ags):
         + pn.scale_x_continuous(trans='log10')
         + pn.scale_y_continuous(trans='log10')
         + pn.labs(
-            x='Train-time FLOPS',
-            y='Test-time FLOPS')
+            x='Train-time FLOPS-seconds',
+            y='Test-time FLOPS-seconds')
         + plot.IEEE())
 
 def plot_calibrations():
@@ -197,7 +197,7 @@ def boardsize_hyperparams_table(ags):
         .max()
         .assign(train_flops=lambda df: df.train_flops.apply(lambda s: f'{s:.1G}'))
         .assign(samples=lambda df: df.samples.apply(lambda s: f'{s:.1G}'))
-        .rename(columns={'boardsize': 'Board size', 'width': 'Max neurons', 'depth': 'Max layers', 'samples': 'Max samples', 'train_flops': 'Max FLOPS'})
+        .rename(columns={'boardsize': 'Board size', 'width': 'Max neurons', 'depth': 'Max layers', 'samples': 'Max samples', 'train_flops': 'Max FLOPS-seconds'})
         .reset_index()
         .to_latex(index=True, label='boardsize', caption='Board size-dependent hyperparameters'))
 
