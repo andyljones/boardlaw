@@ -151,9 +151,12 @@ class NoiseScale(Base):
     __tablename__ = 'noise_scales'
 
     id = Column(Integer, ForeignKey('snaps.id'), primary_key=True)
-    G2 = Column(Float)
+    G2s = Column(Float)
+    G2b = Column(Float)
+    Bs = Column(Float)
+    Bb = Column(Float)
     S = Column(Float)
-
+    G2 = Column(Float)
 
 _engine = None
 @contextmanager

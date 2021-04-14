@@ -91,6 +91,10 @@ def noise_scale(run, idx):
     S = 1/(1/Bs - 1/Bb) * (G2s - G2b)
 
     return pd.Series({
+        'G2s': float(G2s),
+        'G2b': float(G2b),
+        'Bs': float(B),
+        'Bb': float(T*B),
         'S': float(S), 
         'G2': float(G2)})
 
