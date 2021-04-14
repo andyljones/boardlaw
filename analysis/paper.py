@@ -179,6 +179,49 @@ def plot_calibrations():
             x='Board size')
         + plot.IEEE())
 
+def plot_optimal_model_size(ags):
+    from statsmodels.formula import api as smf
+
+    results = {}
+    for b, g in ags.groupby('boardsize'):
+        ordered = g.sort_values('elo').copy()
+        ordered['params'] = g.width**2 * g.depth
+
+        left = np.log10(g.train_flops.min())
+        right = np.log10(g.train_flops.max())
+        for f in np.linspace(left, right, 11)[1:]:
+            subset = ordered[ordered.train_flops <= 10**f]
+            results[b, 10**f] = subset.params.iloc[-1]
+    df = pd.Series(results).reset_index()
+    df.columns = ['boardsize', 'approx_flops', 'params']
+
+    model = smf.ols('np.log10(params) ~ np.log10(approx_flops) + 1', df).fit()
+
+    left, right = np.log10(df.approx_flops.min()), np.log10(df.approx_flops.max())
+    preds = pd.DataFrame({'approx_flops': 10**np.linspace(left, right, 21)})
+    preds['params'] = 10**model.predict(preds)
+
+    labs = df.sort_values('approx_flops').groupby('boardsize').last().reset_index()
+    labs['params'] = labs.apply(lambda r: df[df.approx_flops <= r.approx_flops].params.max(), axis=1)
+
+    points = df.sort_values('approx_flops').groupby('boardsize').last().reset_index()
+
+    return (pn.ggplot(df, pn.aes(x='approx_flops', y='params'))
+        + pn.geom_line(pn.aes(color='factor(boardsize)', group='boardsize'), show_legend=False)
+        + pn.geom_line(data=preds, linetype='dashed', size=.25)
+        + pn.geom_point(pn.aes(color='factor(boardsize)', group='boardsize'), data=points, size=.5, show_legend=False)
+        + pn.geom_text(pn.aes(color='factor(boardsize)', group='boardsize', label='boardsize'), data=labs, nudge_y=+.5, show_legend=False, size=6)
+        + pn.scale_x_continuous(trans='log10')
+        + pn.scale_y_continuous(trans='log10')
+        + pn.scale_color_hue(l=.4)
+        + pn.labs(
+            x='Train-time compute (FLOPS-seconds)',
+            y='Optimal model size (params)')
+        + plot.IEEE())
+
+
+
+
 def hyperparams_table():
     s = pd.Series({
         'Number of envs': '32k',
