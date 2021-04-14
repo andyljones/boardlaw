@@ -41,7 +41,7 @@ Our data is held in a `SQLite database <https://f002.backblazeb2.com/file/boardl
     import pandas as pd
     pd.read_sql('select * from agents', 'sqlite:///path_to_database.sql')
 
-You can find the schema for the database in `this module <https://github.com/andyljones/boardlaw/blob/master/boardlaw/sql.py#L24-L71>`_, along with 
+You can find the schema for the database in `this module <https://github.com/andyljones/boardlaw/blob/master/boardlaw/sql.py#L24-L146>`_, along with 
 documentation of the fields and some utility functions for querying it. 
 
 To download the files for a specific training run, the best option is to use backblaze's sync tool. ::

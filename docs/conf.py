@@ -54,7 +54,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 html_theme = "alabaster"
 
 html_theme_options = {
-    'description': 'multiagent scaling laws',
+    'description': 'board game scaling laws',
     'fixed_sidebar': True,
     'github_button': True,
     'github_user': 'andyljones',
