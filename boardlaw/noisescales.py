@@ -33,11 +33,7 @@ def collect(run, idx, n_envs=32*1024):
 
     return agent, chunk
 
-def zero_grad(network):
-    for p in network.parameters():
-        p.grad = None
-
-def accumulate_gradient(network, batch):
+def gradient(network, batch):
     d0 = batch.decisions
     d = network(batch.worlds)
 
@@ -52,32 +48,23 @@ def accumulate_gradient(network, batch):
 
     loss = policy_loss + value_loss
 
+    for p in network.parameters():
+        p.grad = None
     loss.backward()
 
-def gradient(network):
     return torch.cat([p.grad.flatten() for p in network.parameters() if p.grad is not None]) 
 
-def small_grads(network, chunk):
-    T = chunk.reward_to_go.size(0)
+def gradients(network, chunk):
     grads = []
     for t in range(chunk.reward_to_go.size(0)):
-        zero_grad(network)
-        accumulate_gradient(network, chunk[t])
-        grads.append(gradient(network))
+        grads.append(gradient(network, chunk[t]))
     return torch.stack(grads)
-
-def big_grad(network, chunk):
-    T = chunk.reward_to_go.size(0)
-    zero_grad(network)
-    for t in range(T):
-        accumulate_gradient(network, chunk[t])
-    return gradient(network)/T
 
 def noise_scale(run, idx):
     agent, chunk = collect(run, idx)
 
-    gs = small_grads(agent.network, chunk)
-    gb = big_grad(agent.network, chunk) 
+    gs = gradients(agent.network, chunk)
+    gb = gs.mean(0)
 
     G2s = gs.pow(2).mean()
     G2b = gb.pow(2).mean()
