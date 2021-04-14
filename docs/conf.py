@@ -61,6 +61,7 @@ html_theme_options = {
     'github_repo': 'boardlaw',
     'github_type': 'star',
     'github_count': False,
+    'nosidebar': True
 }
 
 html_sidebars = {

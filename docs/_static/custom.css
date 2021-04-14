@@ -1,5 +1,18 @@
 @import './alabaster.css';
 
+body {
+    margin: auto;
+}
+
 dl {
     margin-bottom: 15px;
+}
+
+p {
+    text-align: justify;
+}
+
+img {
+    display: block;
+    margin: auto;
 }

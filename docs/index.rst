@@ -5,17 +5,6 @@ Scaling Scaling Laws with Board Games
 
 Below you can find the code, models and data from our `Scaling Scaling Laws <https://arxiv.org/abs/2104.03113>`_ paper.
 
-Abstract
-********
-
-*The largest experiments in machine learning now require resources far beyond the budget of all but a few institutions. 
-Fortunately, it has recently been shown that the results of these huge experiments can often be extrapolated from the 
-results of a sequence of far smaller, cheaper experiments. In this work, we show that not only can the extrapolation be 
-done based on the size of the model, but on the size of the problem as well. By conducting a sequence of experiments 
-using AlphaZero and Hex, we show that the performance achievable with a fixed amount of compute degrades predictably 
-as the game gets larger and harder. Along with our main result, we further show that increasing the test-time compute 
-available to an agent can substitute for reduced train-time compute, and vice versa.*
-
 .. image:: flops_curves.svg
     :alt: A replication of the compute-performance curves
     :width: 640
