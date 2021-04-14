@@ -151,7 +151,10 @@ def plot_test(ags):
 def plot_train_test(ags):
     frontiers = data.train_test(ags)
     frontiers, model = data.train_test_model(frontiers)
+
     labs = frontiers.sort_values('train_flops').groupby('elo').first().reset_index()
+    desc = f'log₁₀(test) = {model.params[1]:.1f} · log₁₀(train) + {model.params[2]:.1g} · elo + {model.params[0]:.0f}'
+
     return (pn.ggplot(frontiers, pn.aes(x='train_flops', y='test_flops', color='elo', group='elo'))
         + pn.geom_line(size=.5, show_legend=False)
         + pn.geom_line(pn.aes(y='test_flops_hat'), size=.25, show_legend=False, linetype='dashed')
@@ -160,6 +163,7 @@ def plot_train_test(ags):
         + pn.scale_color_cmap(limits=(-1500, 0))
         + pn.scale_x_continuous(trans='log10')
         + pn.scale_y_continuous(trans='log10')
+        + pn.annotate('text', 1.5e13, 5e9, label=desc, ha='left', size=6, family='serif')
         + pn.labs(
             x='Train-time compute (FLOPS-seconds)',
             y='Test-time compute (FLOPS-seconds)')
@@ -206,11 +210,14 @@ def plot_optimal_model_size(ags):
 
     points = df.sort_values('approx_flops').groupby('boardsize').last().reset_index()
 
+    desc = f'log₁₀(params) = {model.params[1]:.2f} · log₁₀(compute) − {-model.params[0]:.1f}'
+
     return (pn.ggplot(df, pn.aes(x='approx_flops', y='params'))
         + pn.geom_line(pn.aes(color='factor(boardsize)', group='boardsize'), show_legend=False)
         + pn.geom_line(data=preds, linetype='dashed', size=.25)
         + pn.geom_point(pn.aes(color='factor(boardsize)', group='boardsize'), data=points, size=.5, show_legend=False)
         + pn.geom_text(pn.aes(color='factor(boardsize)', group='boardsize', label='boardsize'), data=labs, nudge_y=+.5, show_legend=False, size=6)
+        + pn.annotate('text', 1e9, 2e7, label=desc, ha='left', size=6, family='serif')
         + pn.scale_x_continuous(trans='log10')
         + pn.scale_y_continuous(trans='log10')
         + pn.scale_color_hue(l=.4)
@@ -218,9 +225,6 @@ def plot_optimal_model_size(ags):
             x='Train-time compute (FLOPS-seconds)',
             y='Optimal model size (params)')
         + plot.IEEE())
-
-
-
 
 def hyperparams_table():
     s = pd.Series({
@@ -280,6 +284,7 @@ if __name__ == '__main__':
     upload(plot_elos)
     upload(plot_test, ags)
     upload(plot_calibrations)
+    upload(plot_optimal_model_size)
 
     overleaf.table(boardsize_hyperparams_table(ags), 'boardsize_hyperparams')
     overleaf.table(parameters_table(ags), 'parameters')
