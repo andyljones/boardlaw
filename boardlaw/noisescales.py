@@ -6,8 +6,10 @@ from rebar import arrdict, dotdict
 import numpy as np
 from tqdm.auto import tqdm
 
-def collect(run, idx, n_envs=32*1024):
+def collect(run, idx, n_envs=32*1024, n_nodes=None):
     agent = common.agent(run, idx, 'cuda')
+    if n_nodes is not None:
+        agent.kwargs['n_nodes'] = n_nodes
     worlds = common.worlds(run, n_envs, 'cuda')
 
     buffer = []
@@ -60,8 +62,8 @@ def gradients(network, chunk):
         grads.append(gradient(network, chunk[t]))
     return torch.stack(grads)
 
-def noise_scale_components(run, idx):
-    agent, chunk = collect(run, idx)
+def noise_scale_components(run, idx, **kwargs):
+    agent, chunk = collect(run, idx, **kwargs)
 
     gs = gradients(agent.network, chunk)
 
@@ -76,8 +78,8 @@ def noise_scale_components(run, idx):
         'batch_size': float(B),
         'batches': float(T)})
 
-def noise_scale(meansq, var, **kwargs):
-    return meansq/var
+def noise_scale(result):
+    return result.batch_size*result.variance/result.mean_sq
 
 def run(n=2, r=0):
     extant = sql.query('select id from noise_scales').id
@@ -117,3 +119,11 @@ def load():
     df['low_var'] = df.batch_size*df.variance/df.mean_sq
 
     return df
+
+def node_sweep(run='2021-02-21 09-04-51 wavy-mills', idx=13):
+    results = {}
+    for r in range(3):
+        for n in [1, 2, 4, 8, 16, 32, 64, 128, 256]:
+            print(n, r)
+            results[n, r] = noise_scale_components(run, idx, n_nodes=n)
+    results = pd.concat(results, 0).unstack()

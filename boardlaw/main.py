@@ -129,9 +129,8 @@ def optimize(network, scaler, opt, batch):
         B = batch.transitions.terminal.nelement()
         stats.mean('noise-scale', learning.noise_scale(B, opt))
 
-def run(boardsize, width, depth, nodes, desc):
+def run(boardsize, width, depth, nodes, desc, n_envs=32*1024):
     buffer_len = 64
-    n_envs = 32*1024
 
     worlds = learning.mix(hex.Hex.initial(n_envs, boardsize))
     network = networks.FCModel(worlds.obs_space, worlds.action_space, width=width, depth=depth).to(worlds.device)
@@ -142,7 +141,7 @@ def run(boardsize, width, depth, nodes, desc):
 
     run = runs.new_run(
             description=desc, 
-            params=dict(boardsize=worlds.boardsize, width=width, depth=depth, nodes=nodes))
+            params=dict(boardsize=worlds.boardsize, width=width, depth=depth, nodes=nodes, n_envs=n_envs))
 
     archive.archive(run)
 
