@@ -60,30 +60,24 @@ def gradients(network, chunk):
         grads.append(gradient(network, chunk[t]))
     return torch.stack(grads)
 
-def noise_scale(run, idx):
+def noise_scale_components(run, idx):
     agent, chunk = collect(run, idx)
 
     gs = gradients(agent.network, chunk)
-    gb = gs.mean(0)
-
-    G2s = gs.pow(2).mean()
-    G2b = gb.pow(2).mean()
 
     T = chunk.reward_to_go.size(0)
     B = chunk.reward_to_go.size(1)
-    Bb = T*B
-    Bs = B
-
-    G2 = 1/(Bb - Bs) * (Bb*G2b - Bs*G2s)
-    S = 1/(1/Bs - 1/Bb) * (G2s - G2b)
 
     return pd.Series({
-        'G2s': float(G2s),
-        'G2b': float(G2b),
-        'Bs': float(B),
-        'Bb': float(T*B),
-        'S': float(S), 
-        'G2': float(G2)})
+        'mean_sq': float(gs.mean(0).pow(2).mean()),
+        'sq_mean': float(gs.pow(2).mean()),
+        'variance': float((gs - gs.mean(0, keepdim=True)).pow(2).mean(0).mul(T/(T-1)).mean(0)),
+        'n_params': float(gs.shape[1]),
+        'batch_size': float(B),
+        'batches': float(T)})
+
+def noise_scale(meansq, var, **kwargs):
+    return meansq/var
 
 def run(n=2, r=0):
     extant = sql.query('select id from noise_scales').id
@@ -96,6 +90,30 @@ def run(n=2, r=0):
     desired = desired[desired.index % n == r]
 
     for id, row in tqdm(list(desired.iterrows())):
-        result = noise_scale(row.run, row.idx)
+        result = noise_scale_components(row.run, row.idx)
         result['id'] = id
         sql.save_noise_scale(result)
+
+def load():
+    from analysis import data
+
+    ags = data.load()
+
+    noise = sql.query('''select * from noise_scales''')
+    df = pd.merge(ags, noise, left_on='snap_id', right_on='id').query('test_nodes == 64')
+
+    # High-var low-bias estimate
+    Bb = df.batches*df.batch_size 
+    Bs = df.batch_size
+    Gb = df.mean_sq
+    Gs = df.sq_mean
+
+    G2 = 1/(Bb - Bs)*(Bb*Gb - Bs*Gs)
+    S = 1/(1/Bs - 1/Bb)*(Gs - Gb)
+
+    df['low_bias'] = S/G2
+    
+    # Low-var high-bias estimate
+    df['low_var'] = df.batch_size*df.variance/df.mean_sq
+
+    return df
