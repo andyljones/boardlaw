@@ -35,7 +35,7 @@ def trial_elos(boardsize):
     return _trial_elos(boardsize, counter)
 
 def load():
-    ags = sql.agent_query().query('c == 1/16')
+    ags = sql.agent_query().query('test_c == 1/16')
 
     es = []
     for b in tqdm(ags.boardsize.unique()):

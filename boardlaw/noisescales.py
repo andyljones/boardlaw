@@ -1,3 +1,4 @@
+from rebar import parallel
 import pandas as pd
 import torch
 from .arena import common
@@ -6,8 +7,19 @@ from rebar import arrdict, dotdict
 import numpy as np
 from tqdm.auto import tqdm
 from logging import getLogger
+from multiprocessing import set_start_method
 
 log = getLogger(__name__)
+
+# Smallest networks to make it to within -.5 of perfect play.
+RUNS = {
+    3: '2021-02-17 19-34-03 valid-ships',
+    4: '2021-02-21 05-22-28 watery-drunks',
+    5: '2021-02-19 11-15-16 skinny-tactic',
+    6: '2021-02-21 08-52-28 these-plow',
+    7: '2021-02-19 19-50-36 tan-buffer',
+    8: '2021-02-21 22-55-52 double-spoon',
+    9: '2021-02-20 21-11-32 intent-nets'}
 
 def stored_agent(agent_id):
     info = sql.query('select * from agents_details where id == ?', int(agent_id)).iloc[0]
@@ -95,8 +107,8 @@ def noise_scale(result):
     return result.batch_size*result.variance/result.mean_sq
 
 def evaluate_noise_scale(agent_id):
-    extant = sql.query('select * from noise_scales where id == ?', agent_id)
-    if agent_id not in extant.index:
+    extant = sql.query('select * from noise_scales where id == ?', int(agent_id))
+    if agent_id not in extant.id.values:
         result = noise_scale_components(agent_id)
         log.info(f'{agent_id}: {noise_scale(result):.0f}')
         sql.save_noise_scale(result)
@@ -114,19 +126,20 @@ def evaluate_perf(agent_id, n_envs=1024):
     extant = sql.query('''
         select * from trials 
         where ((black_agent == ?) and (white_agent == ?)) 
-        or ((white_agent == ?) and (black_agent == ?))''', agent_id, opponent_id, agent_id, opponent_id)
+        or ((white_agent == ?) and (black_agent == ?))''', 
+        int(agent_id), int(opponent_id), int(agent_id), int(opponent_id))
     games = (extant.black_wins + extant.white_wins).sum()
     if games < n_envs:
         a = stored_agent(agent_id)
         o = stored_agent(opponent_id)
         w = stored_worlds(agent_id, n_envs)
 
-        results = common.evaluate(w, {agent_id: a, opponent_id: o})
+        results = common.evaluate(w, [(agent_id, a), (opponent_id, o)])
 
         sql.save_trials(results)
 
 def evaluate(run, idx, nodes, c_puct):
-    snap_id = sql.query_one('select id from snaps where run == ? and idx == ?', run, idx).id
+    snap_id = sql.query_one('select id from snaps where run == ? and idx == ?', run, int(idx)).id
     extant = sql.query('select * from agents where snap == ? and nodes == ? and c == ?', int(snap_id), int(nodes), float(c_puct))
     if len(extant) == 0:
         log.info(f'Creating agent run="{run}", idx={idx}, nodes={nodes}, c_puct={c_puct:.3f}')
@@ -136,6 +149,23 @@ def evaluate(run, idx, nodes, c_puct):
 
     evaluate_noise_scale(agent_id)
     evaluate_perf(agent_id)
+
+def evaluate_board(boardsize=None):
+    if boardsize is None:
+        for b in RUNS:
+            evaluate_board(b)
+        return 
+    run = RUNS[boardsize]
+    snaps = sql.query('select * from snaps where run == ?', run)
+
+    set_start_method('spawn', True)
+    with parallel.parallel(evaluate, N=2, executor='cuda', desc=str(boardsize)) as pool:
+        futures = {}
+        for idx in snaps.idx.unique():
+            for nodes in [1, 2, 4, 8, 16, 32, 64, 128, 256]:
+                for c in [1/64, 1/32, 1/16, 1/8, 1/4, 1/2, 1.]:
+                    futures[idx, nodes, c] = pool(run, idx, nodes, c)
+        pool.wait(futures)
 
 def load():
     from analysis import data

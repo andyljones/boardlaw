@@ -83,7 +83,7 @@ def VariableExecutor(N=None, executor='process', **kwargs):
        
  
 @contextmanager
-def parallel(f, progress=True, **kwargs):
+def parallel(f, progress=True, desc=None, **kwargs):
     """Sugar for using the VariableExecutor. Call as
     
     with parallel(f) as g:
@@ -121,7 +121,7 @@ def parallel(f, progress=True, **kwargs):
             futures = {fut: k for k, fut in c.items()}
             
             results = {}
-            for fut in tqdm(as_completed(futures), total=len(c), disable=not progress):
+            for fut in tqdm(as_completed(futures), total=len(c), disable=not progress, desc=desc):
                 results[futures[fut]] = reraise(fut, futures)
                 
             return results

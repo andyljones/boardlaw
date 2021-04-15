@@ -150,7 +150,7 @@ class MohexTrial(Base):
 class NoiseScale(Base):
     __tablename__ = 'noise_scales'
 
-    id = Column(Integer, ForeignKey('snaps.id'), primary_key=True)
+    id = Column(Integer, ForeignKey('agents.id'), primary_key=True)
     mean_sq = Column(Float)
     sq_mean = Column(Float)
     variance = Column(Float)
