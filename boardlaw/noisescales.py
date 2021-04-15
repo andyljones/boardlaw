@@ -6,10 +6,12 @@ from rebar import arrdict, dotdict
 import numpy as np
 from tqdm.auto import tqdm
 
-def collect(run, idx, n_envs=32*1024, n_nodes=None):
+def collect(run, idx, n_envs=32*1024, n_nodes=None, c_puct=None):
     agent = common.agent(run, idx, 'cuda')
     if n_nodes is not None:
         agent.kwargs['n_nodes'] = n_nodes
+    if c_puct is not None:
+        agent.kwargs['c_puct'] = c_puct
     worlds = common.worlds(run, n_envs, 'cuda')
 
     buffer = []
@@ -122,8 +124,9 @@ def load():
 
 def node_sweep(run='2021-02-21 09-04-51 wavy-mills', idx=13):
     results = {}
-    for r in range(3):
+    for c in [1/64, 1/32, 1/16, 1/8, 1/4]:
         for n in [1, 2, 4, 8, 16, 32, 64, 128, 256]:
-            print(n, r)
-            results[n, r] = noise_scale_components(run, idx, n_nodes=n)
+            print(c, n)
+            results[c, n] = noise_scale_components(run, idx, n_nodes=n, c_puct=c)
     results = pd.concat(results, 0).unstack()
+    return results
