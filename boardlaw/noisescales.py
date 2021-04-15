@@ -5,14 +5,24 @@ from boardlaw import learning, main, sql
 from rebar import arrdict, dotdict
 import numpy as np
 from tqdm.auto import tqdm
+from logging import getLogger
 
-def collect(run, idx, n_nodes=None, c_puct=None, n_envs=32*1024):
-    agent = common.agent(run, idx, 'cuda')
-    if n_nodes is not None:
-        agent.kwargs['n_nodes'] = n_nodes
-    if c_puct is not None:
-        agent.kwargs['c_puct'] = c_puct
-    worlds = common.worlds(run, n_envs, 'cuda')
+log = getLogger(__name__)
+
+def stored_agent(agent_id):
+    info = sql.query('select * from agents_details where id == ?', int(agent_id)).iloc[0]
+    agent = common.agent(info.run, info.idx, 'cuda')
+    agent.kwargs['n_nodes'] = info.test_nodes
+    agent.kwargs['c_puct'] = info.test_c
+    return agent
+
+def stored_worlds(agent_id, n_envs):
+    info = sql.query('select * from agents_details where id == ?', int(agent_id)).iloc[0]
+    return common.worlds(info.run, n_envs, 'cuda')
+
+def collect(agent_id, n_envs=32*1024):
+    agent = stored_agent(agent_id)
+    worlds = stored_worlds(agent_id, n_envs)
 
     buffer = []
     while True:
@@ -64,8 +74,8 @@ def gradients(network, chunk):
         grads.append(gradient(network, chunk[t]))
     return torch.stack(grads)
 
-def noise_scale_components(run, idx, **kwargs):
-    agent, chunk = collect(run, idx, **kwargs)
+def noise_scale_components(agent_id):
+    agent, chunk = collect(agent_id)
 
     gs = gradients(agent.network, chunk)
 
@@ -73,6 +83,7 @@ def noise_scale_components(run, idx, **kwargs):
     B = chunk.reward_to_go.size(1)
 
     return pd.Series({
+        'id': agent_id,
         'mean_sq': float(gs.mean(0).pow(2).mean()),
         'sq_mean': float(gs.pow(2).mean()),
         'variance': float((gs - gs.mean(0, keepdim=True)).pow(2).mean(0).mul(T/(T-1)).mean(0)),
@@ -83,20 +94,48 @@ def noise_scale_components(run, idx, **kwargs):
 def noise_scale(result):
     return result.batch_size*result.variance/result.mean_sq
 
-def run(n=2, r=0):
-    extant = sql.query('select id from noise_scales').id
-    desired = (sql.agent_query()
-                .groupby('snap_id').first()
-                .assign(params=lambda df: df.width**2 * df.depth)
-                .sample(frac=1)
-                .drop(extant, axis=0))
-
-    desired = desired[desired.index % n == r]
-
-    for id, row in tqdm(list(desired.iterrows())):
-        result = noise_scale_components(row.run, row.idx)
-        result['id'] = id
+def evaluate_noise_scale(agent_id):
+    extant = sql.query('select * from noise_scales where id == ?', agent_id)
+    if agent_id not in extant.index:
+        result = noise_scale_components(agent_id)
+        log.info(f'{agent_id}: {noise_scale(result):.0f}')
         sql.save_noise_scale(result)
+
+def agents_opponent(agent_id):
+    return sql.query('''
+        select id from agents 
+        where snap == (
+            select snap from agents where id == ?)
+        and nodes == 64 
+        and c == 1./16''', int(agent_id)).id.iloc[0]
+    
+def evaluate_perf(agent_id, n_envs=1024):
+    opponent_id = agents_opponent(agent_id)
+    extant = sql.query('''
+        select * from trials 
+        where ((black_agent == ?) and (white_agent == ?)) 
+        or ((white_agent == ?) and (black_agent == ?))''', agent_id, opponent_id, agent_id, opponent_id)
+    games = (extant.black_wins + extant.white_wins).sum()
+    if games < n_envs:
+        a = stored_agent(agent_id)
+        o = stored_agent(opponent_id)
+        w = stored_worlds(agent_id, n_envs)
+
+        results = common.evaluate(w, {agent_id: a, opponent_id: o})
+
+        sql.save_trials(results)
+
+def evaluate(run, idx, nodes, c_puct):
+    snap_id = sql.query_one('select id from snaps where run == ? and idx == ?', run, idx).id
+    extant = sql.query('select * from agents where snap == ? and nodes == ? and c == ?', int(snap_id), int(nodes), float(c_puct))
+    if len(extant) == 0:
+        log.info(f'Creating agent run="{run}", idx={idx}, nodes={nodes}, c_puct={c_puct:.3f}')
+        sql.execute('insert into agents values (null, ?, ?, ?)', int(snap_id), int(nodes), float(c_puct))
+        extant = sql.query('select * from agents where snap == ? and nodes == ? and c == ?', int(snap_id), int(nodes), float(c_puct))
+    agent_id = extant.id.iloc[0]
+
+    evaluate_noise_scale(agent_id)
+    evaluate_perf(agent_id)
 
 def load():
     from analysis import data

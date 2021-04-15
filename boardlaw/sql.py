@@ -179,7 +179,7 @@ def create():
         conn.execute('''
             create view agents_details as
             select 
-                agents.id, agents.nodes as test_nodes, 
+                agents.id, agents.nodes as test_nodes, agents.c as test_c,
                 snaps.id as snap_id, snaps.samples, snaps.flops as train_flops, snaps.idx, 
                 runs.run, runs.description, runs.boardsize, runs.width, runs.depth, runs.nodes as train_nodes
             from agents
@@ -247,9 +247,17 @@ def execute(sql, *args, **kwargs):
     with connection() as conn:
         return conn.execute(sql, *args, **kwargs)
 
-def query(sql, **kwargs):
+def query(sql, *args, **kwargs):
+    if len(args) > 0 and 'params' not in kwargs:
+        kwargs['params'] = args
     with connection() as conn:
         return pd.read_sql_query(sql, conn, **kwargs)
+
+def query_one(sql, *args, **kwargs):
+    df = query(sql, *args, **kwargs)
+    if len(df) == 1:
+        return df.iloc[0]
+    raise ValueError(f'query_one returned {len(df)} results')
 
 def agent_query():
     return query('''select * from agents_details''', index_col='id')
