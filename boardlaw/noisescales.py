@@ -152,10 +152,10 @@ def evaluate(run, idx, nodes, c_puct):
     evaluate_noise_scale(agent_id)
     evaluate_perf(agent_id)
 
-def evaluate_board(boardsize=None):
+def sweep_trees(boardsize=None):
     if boardsize is None:
         for b in RUNS:
-            evaluate_board(b)
+            sweep_trees(b)
         return 
     run = RUNS[boardsize]
     snaps = sql.query('select * from snaps where run == ?', run)
@@ -168,6 +168,17 @@ def evaluate_board(boardsize=None):
                 for c in [1/64, 1/32, 1/16, 1/8, 1/4, 1/2, 1.]:
                     futures[idx, nodes, c] = pool(run, idx, nodes, c)
         pool.wait(futures)
+
+def sweep_runs():
+    runs = sql.query('select * from runs where description like "bee/%"')
+    np.random.seed(0)
+    runs.sample(frac=1)
+
+    set_start_method('spawn', True)
+    for i, run in enumerate(runs.run.unique()):
+        snaps = sql.query('select * from snaps where run == ?', run)
+        with parallel.parallel(evaluate, N=2, executor='cuda', desc=str(i)) as pool:
+            pool.wait([pool(run, idx, 64, 1/16) for idx in snaps.idx.unique()])
 
 def load():
     from analysis import data

@@ -32,7 +32,7 @@ class IEEE(pn.theme):
             strip_background_y=pn.element_text(color='w', width=.1),
             legend_key_width=10,
             legend_key_height=10.,
-            legend_text_colorbar=pn.element_text(size=4.),
+            legend_text_colorbar=pn.element_text(size=6.),
             complete=True)
 
         self._rcParams.update({
