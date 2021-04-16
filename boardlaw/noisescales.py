@@ -140,7 +140,7 @@ def evaluate_perf(agent_id, n_envs=1024):
 
         sql.save_trials(results)
 
-def evaluate(run, idx, nodes, c_puct):
+def evaluate(run, idx, nodes, c_puct, perf=True):
     snap_id = sql.query_one('select id from snaps where run == ? and idx == ?', run, int(idx)).id
     extant = sql.query('select * from agents where snap == ? and nodes == ? and c == ?', int(snap_id), int(nodes), float(c_puct))
     if len(extant) == 0:
@@ -150,7 +150,8 @@ def evaluate(run, idx, nodes, c_puct):
     agent_id = extant.id.iloc[0]
 
     evaluate_noise_scale(agent_id)
-    evaluate_perf(agent_id)
+    if perf:
+        evaluate_perf(agent_id)
 
 def sweep_trees(boardsize=None):
     if boardsize is None:
@@ -172,13 +173,13 @@ def sweep_trees(boardsize=None):
 def sweep_runs():
     runs = sql.query('select * from runs where description like "bee/%"')
     np.random.seed(0)
-    runs.sample(frac=1)
+    runs = runs.sample(frac=1)
 
     set_start_method('spawn', True)
     for i, run in enumerate(runs.run.unique()):
         snaps = sql.query('select * from snaps where run == ?', run)
         with parallel.parallel(evaluate, N=2, executor='cuda', desc=str(i)) as pool:
-            pool.wait([pool(run, idx, 64, 1/16) for idx in snaps.idx.unique()])
+            pool.wait([pool(run, idx, 64, 1/16, perf=False) for idx in snaps.idx.unique()])
 
 def load():
     from analysis import data
