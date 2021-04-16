@@ -59,6 +59,12 @@ def collect(agent_id, n_envs=32*1024):
 
     return agent, chunk
 
+def flat_grad(network, loss):
+    for p in network.parameters():
+        p.grad = None
+    loss.backward(retain_graph=True)
+    return torch.cat([p.grad.flatten() for p in network.parameters() if p.grad is not None]) 
+
 def gradient(network, batch):
     d0 = batch.decisions
     d = network(batch.worlds)
@@ -72,30 +78,23 @@ def gradient(network, batch):
     target_value = batch.reward_to_go
     value_loss = (target_value - d.v).square().mean()
 
-    loss = policy_loss + value_loss
-
-    for p in network.parameters():
-        p.grad = None
-    loss.backward()
-
-    return torch.cat([p.grad.flatten() for p in network.parameters() if p.grad is not None]) 
+    return arrdict.arrdict(
+        policy=flat_grad(network, policy_loss),
+        value=flat_grad(network, value_loss),
+        joint=flat_grad(network, policy_loss + value_loss))
 
 def gradients(network, chunk):
     grads = []
     for t in range(chunk.reward_to_go.size(0)):
         grads.append(gradient(network, chunk[t]))
-    return torch.stack(grads)
+    return arrdict.stack(grads)
 
-def noise_scale_components(agent_id):
-    agent, chunk = collect(agent_id)
-
-    gs = gradients(agent.network, chunk)
-
+def noise_scale_components(chunk, gs, kind, agent_id):
     T = chunk.reward_to_go.size(0)
     B = chunk.reward_to_go.size(1)
-
     return pd.Series({
-        'id': agent_id,
+        'agent_id': agent_id,
+        'kind': kind,
         'mean_sq': float(gs.mean(0).pow(2).mean()),
         'sq_mean': float(gs.pow(2).mean()),
         'variance': float((gs - gs.mean(0, keepdim=True)).pow(2).mean(0).mul(T/(T-1)).mean(0)),
@@ -107,11 +106,14 @@ def noise_scale(result):
     return result.batch_size*result.variance/result.mean_sq
 
 def evaluate_noise_scale(agent_id):
-    extant = sql.query('select * from noise_scales where id == ?', int(agent_id))
-    if agent_id not in extant.id.values:
-        result = noise_scale_components(agent_id)
-        log.info(f'{agent_id}: {noise_scale(result):.0f}')
-        sql.save_noise_scale(result)
+    extant = sql.query('select * from noise_scales where agent_id == ?', int(agent_id))
+    if len(extant) == 0:
+        agent, chunk = collect(agent_id)
+        gs = gradients(agent.network, chunk)
+
+        results = pd.DataFrame([noise_scale_components(chunk, gs[k], k, agent_id) for k in gs])
+        log.info(f'{agent_id}: {noise_scale(results.iloc[0]):.0f}')
+        sql.save_noise_scale(results)
 
 def agents_opponent(agent_id):
     return sql.query('''
@@ -161,7 +163,7 @@ def evaluate_board(boardsize=None):
     set_start_method('spawn', True)
     with parallel.parallel(evaluate, N=2, executor='cuda', desc=str(boardsize)) as pool:
         futures = {}
-        for idx in snaps.idx.unique():
+        for idx in snaps.idx[snaps.idx % 2 == 0].unique():
             for nodes in [1, 2, 4, 8, 16, 32, 64, 128, 256]:
                 for c in [1/64, 1/32, 1/16, 1/8, 1/4, 1/2, 1.]:
                     futures[idx, nodes, c] = pool(run, idx, nodes, c)

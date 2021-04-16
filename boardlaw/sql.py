@@ -150,7 +150,9 @@ class MohexTrial(Base):
 class NoiseScale(Base):
     __tablename__ = 'noise_scales'
 
-    id = Column(Integer, ForeignKey('agents.id'), primary_key=True)
+    id = Column(Integer, primary_key=True)
+    agent_id = Column(Integer, ForeignKey('agents.id'))
+    kind = Column(String)
     mean_sq = Column(Float)
     sq_mean = Column(Float)
     variance = Column(Float)
@@ -326,8 +328,10 @@ def mohex_trial_query(boardsize, desc='%'):
             ((black.description like ?) or (white.description like ?))''', index_col='id', params=(int(boardsize), int(boardsize), desc, desc))
 
 def save_noise_scale(rows):
+    if isinstance(rows, pd.Series):
+        rows = pd.DataFrame([rows])
     with connection() as conn:
-        rows.to_frame().T.to_sql('noise_scales', conn, index=False, if_exists='append')
+        rows.to_sql('noise_scales', conn, index=False, if_exists='append')
 
 def file_change_counter():
     # https://www.sqlite.org/fileformat.html
