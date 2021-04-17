@@ -1,3 +1,6 @@
+import plotnine as pn
+from analysis import plot
+
 from rebar import parallel
 import pandas as pd
 import torch
@@ -172,7 +175,7 @@ def sweep_trees(boardsize=None):
 
 def sweep_runs():
     runs = sql.query('select * from runs where description like "bee/%"')
-    np.random.seed(0)
+    runs = runs[runs.width*runs.depth <= 1024] # Bigger than this blows out my memory. Think there's a leak somewhere.
     runs = runs.sample(frac=1)
 
     set_start_method('spawn', True)
@@ -181,30 +184,6 @@ def sweep_runs():
         with parallel.parallel(evaluate, N=2, executor='cuda', desc=str(i)) as pool:
             pool.wait([pool(run, idx, 64, 1/16, perf=False) for idx in snaps.idx.unique()])
 
-def load():
-    from analysis import data
-
-    ags = data.load()
-
-    noise = sql.query('''select * from noise_scales''')
-    df = pd.merge(ags, noise, left_on='snap_id', right_on='id').query('test_nodes == 64')
-
-    # High-var low-bias estimate
-    Bb = df.batches*df.batch_size 
-    Bs = df.batch_size
-    Gb = df.mean_sq
-    Gs = df.sq_mean
-
-    G2 = 1/(Bb - Bs)*(Bb*Gb - Bs*Gs)
-    S = 1/(1/Bs - 1/Bb)*(Gs - Gb)
-
-    df['low_bias'] = S/G2
-    
-    # Low-var high-bias estimate
-    df['low_var'] = df.batch_size*df.variance/df.mean_sq
-
-    return df
-
 def node_sweep(run='2021-02-21 09-04-51 wavy-mills', idx=13):
     results = {}
     for c in [1/64, 1/32, 1/16, 1/8, 1/4, 1/2, 1., 2.]:
@@ -212,3 +191,43 @@ def node_sweep(run='2021-02-21 09-04-51 wavy-mills', idx=13):
             results[c, n] = noise_scale_components(run, idx, n_nodes=n, c_puct=c)
     results = pd.concat(results, 0).unstack()
     return results
+
+def relative_elo(g):
+    left = g[g.idx == 0].elo.mean()
+    g = g.copy()
+    g['rel_elo'] = -g.elo/left
+    return g
+
+def load():
+    from analysis import data
+
+    ags = data.load()
+
+    noise = (sql.query('select * from noise_scales')
+                .set_index(['agent_id', 'kind'])
+                .pipe(lambda df: df.batch_size*df.variance/df.mean_sq)
+                .unstack())
+
+    df = pd.merge(ags, noise, left_index=True, right_index=True, how='inner')
+    df['uplift'] = df.groupby('snap_id').apply(lambda g: g.elo - g.query('test_nodes == 1').elo.mean()).reset_index(0, drop=True)
+    df['tree_spec'] = df.test_c.astype(str) + '/' + df.test_nodes.astype(str)
+    df['params'] = df.width**2 * df.depth
+    df = df.groupby('boardsize', as_index=False).apply(relative_elo).reset_index(level=0, drop=True)
+
+    expected = sql.query('select * from snaps').groupby('run').idx.count()
+    actual = df.groupby(['run', 'idx']).idx.count().groupby(level=0).count()
+    df['complete'] = actual.reindex_like(expected).eq(expected).reindex(df.run.values).values
+
+    return df
+
+def plot_policy(df):
+    trunk = (df
+                .query('complete & test_nodes == 64 & test_c == 1/16')
+                .groupby('snap_id', as_index=False).first())
+
+    return (pn.ggplot(trunk, pn.aes(x='rel_elo', y='policy', group='run', color='factor(boardsize)'))
+        + pn.geom_jitter(show_legend=False, size=.25, width=.02, shape='.')
+        + pn.scale_y_continuous(trans='log10')
+        + pn.scale_color_continuous(trans='log2')
+        + pn.labs(x='Relative Elo (-1 random, 0 perfect play)')
+        + plot.IEEE((5, 4)))

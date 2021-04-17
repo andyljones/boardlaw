@@ -22,7 +22,7 @@ def poster_sizes():
 
 class IEEE(pn.theme):
 
-    def __init__(self):
+    def __init__(self, figsize=(3.487, 2.155)):
         # https://matplotlib.org/stable/tutorials/introductory/customizing.html
         margin = {'t': 1, 'b': 1, 'l': 1, 'r': 1, 'units': 'pt'}
         super().__init__(
@@ -36,7 +36,7 @@ class IEEE(pn.theme):
             complete=True)
 
         self._rcParams.update({
-            'figure.figsize': (3.487, 2.155),
+            'figure.figsize': figsize,
             'figure.dpi': 300,
             'font.family': 'serif',
             'font.size': 6,
