@@ -1,5 +1,6 @@
 import plotnine as pn
 from analysis import plot
+from statsmodels.formula import api as smf
 
 from rebar import parallel
 import pandas as pd
@@ -221,13 +222,13 @@ def load():
     return df
 
 def plot_policy(df):
-    trunk = (df
-                .query('complete & test_nodes == 64 & test_c == 1/16')
-                .groupby('snap_id', as_index=False).first())
+    trunk = df.query('complete & test_nodes == 64 & test_c == 1/16')
 
     return (pn.ggplot(trunk, pn.aes(x='rel_elo', y='policy', group='run', color='factor(boardsize)'))
         + pn.geom_jitter(show_legend=False, size=.25, width=.02, shape='.')
         + pn.scale_y_continuous(trans='log10')
         + pn.scale_color_continuous(trans='log2')
-        + pn.labs(x='Relative Elo (-1 random, 0 perfect play)')
+        + pn.labs(
+            x='Relative Elo (-1 random, 0 perfect play)',
+            y='Policy Noise Scale')
         + plot.IEEE((5, 4)))
