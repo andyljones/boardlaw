@@ -246,10 +246,9 @@ class NoiseScales:
             results = pd.DataFrame([noise_scale_components(chunk, gs[k], k) for k in gs])
 
             for k, v in results.set_index('kind').unstack().iteritems():
-                stats.silent('noise.'.join(k), v)
+                stats.silent('noise.' + '.'.join(k), v)
 
-            for row in results.iterrows():
+            for _, row in results.iterrows():
                 stats.mean(f'noise.{row.kind}', row.batch_size*row.variance/row.mean_sq)
 
         self._count += 1
-        pass
