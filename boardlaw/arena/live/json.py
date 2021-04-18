@@ -54,7 +54,7 @@ def save(run, result):
         v['black_wins'] += result.wins[0]
         v['white_wins'] += result.wins[1]
         v['moves'] += result.moves
-        v['times'] += result.times
+        # v['times'] += result.times
 
         l[:] = _to_list(d)
 

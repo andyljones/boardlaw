@@ -56,6 +56,27 @@ def offdiag_refill(run, names, queue, count=1):
         queue.append(pair)
         queue.append(pair[::-1])
 
+def uniform_refill(run, names, queue, count=1, target=512):
+    n = (json.symmetric_games(run)
+            .reindex(index=names, columns=names)
+            .fillna(0))
+
+    for (i, j) in queue:
+        ni, nj = names[i], names[j]
+        n.loc[ni, nj] += 1
+
+    deficit = (target - n.values).clip(0, None)
+    if (deficit == 0).all():
+        return
+    probs = np.exp(-deficit)/np.exp(-deficit).sum()
+    while len(queue) < count:
+        idx = np.random.choice(np.arange(n.size), p=probs.flatten())
+        pair = (idx // n.shape[0], idx % n.shape[0])
+
+        log.info(f'Adding {pair} to the list')
+        queue.append(pair)
+        queue.append(pair[::-1])
+
 def reference_ladder(boardsize):
     """Run this to generate the `mohex-{boardsize}.json` files"""
     run_name = f'mohex-{boardsize}'
@@ -66,13 +87,13 @@ def reference_ladder(boardsize):
     names = sorted([f'mohex-{r}' for r in universe])
 
     queue = []
-    offdiag_refill(run_name, names, queue, worlds.n_envs)
+    uniform_refill(run_name, names, queue, worlds.n_envs)
 
     active = torch.tensor(queue[:worlds.n_envs])
     queue = queue[worlds.n_envs:]
 
     moves = torch.zeros((worlds.n_envs,))
-    while True:
+    while (queue or active.size(0)):
         idxs = active.gather(1, worlds.seats[:, None].long().cpu())[:, 0]
         agent.random = universe[idxs]
 
@@ -97,10 +118,11 @@ def reference_ladder(boardsize):
 
             moves[idx] = 0
 
-            offdiag_refill(run_name, names, queue)
-            log.info(f'Starting on {queue[0]}')
-            active[idx] = torch.tensor(queue[0])
-            queue = queue[1:]
+            uniform_refill(run_name, names, queue)
+            if queue:
+                log.info(f'Starting on {queue[0]}')
+                active[idx] = torch.tensor(queue[0])
+                queue = queue[1:]
 
 def append(df, name):
     names = list(df.index) + [name]
