@@ -1,4 +1,4 @@
-import time
+import pandas as pd
 import numpy as np
 import torch
 from rebar import arrdict
@@ -8,6 +8,20 @@ from torch.nn import functional as F
 from logging import getLogger
 
 log = getLogger(__name__)
+
+# from analysis import data
+# df = data.load()
+# best = df.query('test_nodes == 64 & test_c == 1/16 & elo > -.5').sort_values(['train_flops']).groupby('boardsize', as_index=False).first()
+# for _, r in best.iterrows():
+#     print(f'[{r.boardsize}, {r.width:3d}, {r.depth}, 64, 1/16, {2*r.train_flops:7.2g}],')
+BEST = pd.DataFrame([
+    [3,   2, 4, 64, 1/16, 2.5e+11],
+    [4,   8, 2, 64, 1/16, 1.8e+12],
+    [6, 128, 1, 64, 1/16, 2.3e+14],
+    [7, 128, 4, 64, 1/16,   2e+15],
+    [8, 256, 4, 64, 1/16,   9e+15],
+    [9, 512, 4, 64, 1/16, 3.6e+16]], columns=
+    ['boardsize', 'width', 'depth', 'nodes', 'c_puct', 'flops'])
 
 @torch.no_grad()
 def chunk_stats(chunk, n_new):
@@ -129,7 +143,7 @@ def optimize(network, scaler, opt, batch):
         B = batch.transitions.terminal.nelement()
         stats.mean('noise-scale', learning.noise_scale(B, opt))
 
-def run(boardsize, width, depth, nodes, c_puct, desc, n_envs=32*1024):
+def run(boardsize, width, depth, nodes, c_puct, desc, flops, n_envs=32*1024):
     buffer_len = 64
 
     worlds = learning.mix(hex.Hex.initial(n_envs, boardsize))
@@ -145,7 +159,7 @@ def run(boardsize, width, depth, nodes, c_puct, desc, n_envs=32*1024):
 
     archive.archive(run)
 
-    storer = storage.LogarithmicStorer(run, agent)
+    storer = storage.LogarithmicStorer(run, agent, flops_limit=flops)
     noise = noisescales.NoiseScales(agent, buffer_len)
 
     buffer = []
@@ -192,4 +206,7 @@ def run_jittens():
     import ast
     d = ast.literal_eval(os.environ['JITTENS_PARAMS'])
     run(**d)
-     
+
+def run_noisescale():
+    for _, row in BEST.astype(object).iterrows():
+        run(**row, desc='noise-scale') 
