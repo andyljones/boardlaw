@@ -52,11 +52,10 @@ def offdiag_refill(run, names, queue, count=1):
         idx = np.random.choice(np.arange(n.size), p=probs.flatten())
         pair = (idx // n.shape[0], idx % n.shape[0])
 
-        log.info(f'Adding {pair} to the list')
         queue.append(pair)
         queue.append(pair[::-1])
 
-def uniform_refill(run, names, queue, count=1, target=512):
+def uniform_refill(run, names, queue, count=1, target=128):
     n = (json.symmetric_games(run)
             .reindex(index=names, columns=names)
             .fillna(0))
@@ -66,25 +65,28 @@ def uniform_refill(run, names, queue, count=1, target=512):
         n.loc[ni, nj] += 1
 
     deficit = (target - n.values).clip(0, None)
+    deficit[np.diag_indices_from(deficit)] = 0
     if (deficit == 0).all():
         return
-    probs = np.exp(-deficit)/np.exp(-deficit).sum()
+    probs = deficit/deficit.sum()
     while len(queue) < count:
         idx = np.random.choice(np.arange(n.size), p=probs.flatten())
         pair = (idx // n.shape[0], idx % n.shape[0])
 
-        log.info(f'Adding {pair} to the list')
         queue.append(pair)
         queue.append(pair[::-1])
 
 def reference_ladder(boardsize):
     """Run this to generate the `mohex-{boardsize}.json` files"""
+    #TODO: This is all a mess. Why'd I design it this way?
+    from IPython import display
+
     run_name = f'mohex-{boardsize}'
     agent = mohex.MoHexAgent()
     worlds = hex.Hex.initial(n_envs=8, boardsize=boardsize)
 
     universe = torch.linspace(0, 1, 11)
-    names = sorted([f'mohex-{r}' for r in universe])
+    names = sorted([f'mohex-{r:.2f}' for r in universe])
 
     queue = []
     uniform_refill(run_name, names, queue, worlds.n_envs)
@@ -94,12 +96,14 @@ def reference_ladder(boardsize):
 
     moves = torch.zeros((worlds.n_envs,))
     while (queue or active.size(0)):
+        display.clear_output(wait=True)
+        print(f'{boardsize}: {len(queue)} in queue, {len(active)} in active')
+
         idxs = active.gather(1, worlds.seats[:, None].long().cpu())[:, 0]
         agent.random = universe[idxs]
 
         decisions = agent(worlds)
         worlds, transitions = worlds.step(decisions.actions)
-        log.info('Stepped')
 
         moves += 1
 
@@ -113,16 +117,15 @@ def reference_ladder(boardsize):
                 moves=int(moves[idx]),
                 boardsize=worlds.boardsize)
 
-            log.info(f'Storing {result.names[0]} v {result.names[1]}, {result.wins[0]}-{result.wins[1]} in {result.moves} moves')
             json.save(run_name, result)
 
             moves[idx] = 0
 
             uniform_refill(run_name, names, queue)
-            if queue:
-                log.info(f'Starting on {queue[0]}')
-                active[idx] = torch.tensor(queue[0])
-                queue = queue[1:]
+            if not queue:
+                return
+            active[idx] = torch.tensor(queue[0])
+            queue = queue[1:]
 
 def append(df, name):
     names = list(df.index) + [name]
