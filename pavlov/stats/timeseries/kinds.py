@@ -79,6 +79,10 @@ def quantiles(qs, **kwargs):
 def line(xs, ys, **kwargs):
     return pd.Series(ys, xs).sort_index()
 
+@timeseries(formatters.null, plotters.Null)
+def silent(x, **kwargs):
+    return x.resample(**kwargs).last().ffill()
+
 #TODO:
 # * log_cumsum
 # * mean_std

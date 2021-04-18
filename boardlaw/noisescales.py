@@ -1,8 +1,8 @@
 import plotnine as pn
 from analysis import plot
 from statsmodels.formula import api as smf
-
 from rebar import parallel
+from pavlov import stats
 import pandas as pd
 import torch
 from .arena import common
@@ -93,11 +93,10 @@ def gradients(network, chunk):
         grads.append(gradient(network, chunk[t]))
     return arrdict.stack(grads)
 
-def noise_scale_components(chunk, gs, kind, agent_id):
+def noise_scale_components(chunk, gs, kind):
     T = chunk.reward_to_go.size(0)
     B = chunk.reward_to_go.size(1)
     return pd.Series({
-        'agent_id': agent_id,
         'kind': kind,
         'mean_sq': float(gs.mean(0).pow(2).mean()),
         'sq_mean': float(gs.pow(2).mean()),
@@ -115,7 +114,8 @@ def evaluate_noise_scale(agent_id):
         agent, chunk = collect(agent_id)
         gs = gradients(agent.network, chunk)
 
-        results = pd.DataFrame([noise_scale_components(chunk, gs[k], k, agent_id) for k in gs])
+        results = pd.DataFrame([noise_scale_components(chunk, gs[k], k) for k in gs])
+        results['agent_id'] = agent_id
         log.info(f'{agent_id}: {noise_scale(results.iloc[0]):.0f}')
         sql.save_noise_scale(results)
 
@@ -232,3 +232,24 @@ def plot_policy(df):
             x='Relative Elo (-1 random, 0 perfect play)',
             y='Policy Noise Scale')
         + plot.IEEE((5, 4)))
+
+class NoiseScales:
+
+    def __init__(self, agent, buffer_len):
+        self._agent = agent
+        self._count = 0
+        self._buffer_len = buffer_len
+
+    def step(self, chunk):
+        if (self._count % self._buffer_len == 0):
+            gs = gradients(self._agent.network, chunk)
+            results = pd.DataFrame([noise_scale_components(chunk, gs[k], k) for k in gs])
+
+            for k, v in results.set_index('kind').unstack().iteritems():
+                stats.silent('noise.'.join(k), v)
+
+            for row in results.iterrows():
+                stats.mean(f'noise.{row.kind}', row.batch_size*row.variance/row.mean_sq)
+
+        self._count += 1
+        pass

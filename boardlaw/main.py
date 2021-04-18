@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from rebar import arrdict
 from pavlov import stats, logs, runs, storage, archive
-from . import hex, mcts, networks, learning, arena, storage
+from . import hex, mcts, networks, learning, arena, storage, noisescales
 from torch.nn import functional as F
 from logging import getLogger
 
@@ -129,23 +129,24 @@ def optimize(network, scaler, opt, batch):
         B = batch.transitions.terminal.nelement()
         stats.mean('noise-scale', learning.noise_scale(B, opt))
 
-def run(boardsize, width, depth, nodes, desc, n_envs=32*1024):
+def run(boardsize, width, depth, nodes, c_puct, desc, n_envs=32*1024):
     buffer_len = 64
 
     worlds = learning.mix(hex.Hex.initial(n_envs, boardsize))
     network = networks.FCModel(worlds.obs_space, worlds.action_space, width=width, depth=depth).to(worlds.device)
-    agent = mcts.MCTSAgent(network, n_nodes=nodes)
+    agent = mcts.MCTSAgent(network, n_nodes=nodes, c_puct=c_puct)
 
     opt = torch.optim.Adam(network.parameters(), lr=1e-3)
     scaler = torch.cuda.amp.GradScaler()
 
     run = runs.new_run(
             description=desc, 
-            params=dict(boardsize=worlds.boardsize, width=width, depth=depth, nodes=nodes, n_envs=n_envs))
+            params=dict(boardsize=worlds.boardsize, width=width, depth=depth, nodes=nodes, c_puct=c_puct, n_envs=n_envs))
 
     archive.archive(run)
 
     storer = storage.LogarithmicStorer(run, agent)
+    noise = noisescales.NoiseScales(agent, buffer_len)
 
     buffer = []
     with logs.to_run(run), stats.to_run(run), \
@@ -176,6 +177,7 @@ def run(boardsize, width, depth, nodes, desc, n_envs=32*1024):
 
             stats.gpu(worlds.device, 15)
 
+            noise.step(chunk)
             finish = storer.step(agent, len(idxs[0]))
             if finish:
                 break

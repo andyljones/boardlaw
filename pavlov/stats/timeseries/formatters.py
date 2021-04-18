@@ -49,6 +49,5 @@ def quantiles(reader, rule):
     l, r = np.interp([.25, .75], final.index, final.values)
     return [(channel(reader), f'{l:.0f}-{r:.0f}')]
 
-
 def null(reader, rule):
     return []
