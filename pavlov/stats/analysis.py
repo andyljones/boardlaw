@@ -26,13 +26,15 @@ def pandas(run, channel, field=None, rule='60s', **kwargs):
         df = df[field]
     return df
 
-def compare(rs, *args, fill=False, query='', **kwargs):
+def compare(rs, channel, *args, query='', **kwargs):
+    if not isinstance(channel, str):
+        return pd.concat({c: compare(rs, c, *args, query=query, **kwargs) for c in channel}, 1)
     rs = [rs] if isinstance(rs, str) else rs
     ns = [n for r in rs for n in (runs.pandas(r).query(query) if query else runs.pandas(r)).index]
     df = {}
     for n in ns:
         try:
-            df[n] = pandas(n, *args, **kwargs)
+            df[n] = pandas(n, channel, *args, **kwargs)
         except OSError:
             log.info(f'Couldn\'t find data for "{n}"')
 
