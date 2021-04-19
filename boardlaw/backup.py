@@ -9,6 +9,8 @@ import multiprocessing
 from pavlov import runs, files, storage
 from tqdm.auto import tqdm
 
+BUCKET = 'boardlaw'
+
 @aljpy.memcache()
 def api(bucket):
     # Keys are in 1Password
@@ -65,10 +67,10 @@ def download(local, remote):
     return bucket.download_file_by_name(path, dest)
 
 def backup():
-    sync_up('./output/pavlov', 'boardlaw:output/pavlov')
-    sync_up('./output/experiments/eval', 'boardlaw:output/experiments/eval')
-    sync_up('./output/experiments/bee', 'boardlaw:output/experiments/bee')
-    sync_up('./output/experiments/architecture/results', 'boardlaw:output/experiments/architecture/results')
+    sync_up('./output/pavlov', f'{BUCKET}:output/pavlov')
+    sync_up('./output/experiments/eval', f'{BUCKET}:output/experiments/eval')
+    sync_up('./output/experiments/bee', f'{BUCKET}:output/experiments/bee')
+    sync_up('./output/experiments/architecture/results', f'{BUCKET}:output/experiments/architecture/results')
 
 def fetch():
     sync_down('./output/pavlov', 'boardlaw:output/pavlov')

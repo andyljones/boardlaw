@@ -7,9 +7,15 @@ from itertools import permutations
 from pavlov import storage, runs
 from ..mcts import MCTSAgent
 from ..hex import Hex
-from .. import sql
+from .. import sql, backup
 
 log = getLogger(__name__)
+
+def remote_agent(run, idx):
+    filename = storage.SNAPSHOT.format(n=idx)
+    local_path = f'{runs.ROOT}/{run}/{filename}'
+    remote_path = f'output/pavlov/{run}/{filename}'
+    backup.download(local_path, remote_path)
 
 def agent(run, idx=None, device='cpu'):
     try:
