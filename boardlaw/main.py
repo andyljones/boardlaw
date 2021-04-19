@@ -144,19 +144,19 @@ def optimize(network, scaler, opt, batch):
         B = batch.transitions.terminal.nelement()
         stats.mean('noise-scale', learning.noise_scale(B, opt))
 
-def run(boardsize, width, depth, nodes, c_puct, desc, flops, n_envs=32*1024):
+def run(boardsize, width, depth, desc, nodes=64, c_puct=1/16, lr=1e-3, flops=None, n_envs=32*1024):
     buffer_len = 64
 
     worlds = learning.mix(hex.Hex.initial(n_envs, boardsize))
     network = networks.FCModel(worlds.obs_space, worlds.action_space, width=width, depth=depth).to(worlds.device)
     agent = mcts.MCTSAgent(network, n_nodes=nodes, c_puct=c_puct)
 
-    opt = torch.optim.Adam(network.parameters(), lr=1e-3)
+    opt = torch.optim.Adam(network.parameters(), lr=lr)
     scaler = torch.cuda.amp.GradScaler()
 
     run = runs.new_run(
             description=desc, 
-            params=dict(boardsize=worlds.boardsize, width=width, depth=depth, nodes=nodes, c_puct=c_puct, n_envs=n_envs))
+            params=dict(boardsize=worlds.boardsize, width=width, depth=depth, nodes=nodes, c_puct=c_puct, lr=lr, n_envs=n_envs))
 
     archive.archive(run)
 

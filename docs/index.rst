@@ -11,10 +11,11 @@ Below you can find the code, models and data from our `Scaling Scaling Laws <htt
 
 Code
 ****
-Our code is `on Github <https://github.com/andyljones/boardlaw>`_. After cloning the repo, you can install the dependencies with:: 
-    
-    pip install -r requirements.txt
-
+Our code is `on Github <https://github.com/andyljones/boardlaw>`_. You can clone it and work directly from the repo,
+or you can install it as a package with
+```
+pip install git+https://github.com/andyljones/boardlaw.git#egg=boardlaw
+```
 We recommend you do this in a `virtual environment <https://docs.python.org/3/tutorial/venv.html>`_. Or, better yet, a Docker container. You can find our Dockerfile `here <https://github.com/andyljones/boardlaw/tree/master/docker>`_. 
 
 With the requirements installed and the database (see below) downloaded, you'll be able to reproduce all the plots from the paper using the `paper module <https://github.com/andyljones/boardlaw/blob/master/analysis/paper.py>`_. We recommend using the 
