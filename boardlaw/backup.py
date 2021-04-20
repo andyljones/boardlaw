@@ -89,14 +89,23 @@ def download_run_info(run):
     remote = Path('output/pavlov') / local.relative_to(runs.ROOT)
     download(local, remote)
 
-def download_agent(run, idx):
+def download_file(run, filename):
     download_run_info(run)
-    filename = storage.SNAPSHOT.format(n=idx)
     local_path = f'{runs.ROOT}/{run}/{filename}'
     if Path(local_path).exists():
-        log.info(f'Snapshot "{run}" #{idx} already exists')
+        log.info(f'File "{run}" "{filename}" already exists')
     remote_path = f'output/pavlov/{run}/{filename}'
     download(local_path, remote_path)
+
+def download_state_dict(run, idx):
+    download_file(run, storage.SNAPSHOT.format(n=idx))
+
+def download_model_file(run):
+    download_file(run, storage.NAMED.format(name='model'))
+
+def download_agent(run, idx):
+    download_model_file(run)
+    download_state_dict(run, idx)
 
 def backup():
     sync_up('./output/pavlov', f'{BUCKET}:output/pavlov')
