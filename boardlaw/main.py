@@ -144,7 +144,7 @@ def optimize(network, scaler, opt, batch):
         B = batch.transitions.terminal.nelement()
         stats.mean('noise-scale', learning.noise_scale(B, opt))
 
-def run(boardsize, width, depth, desc, nodes=64, c_puct=1/16, lr=1e-3, flops=None, n_envs=32*1024):
+def run(boardsize, width, depth, desc, nodes=64, c_puct=1/16, lr=1e-3, n_envs=32*1024):
     buffer_len = 64
 
     worlds = learning.mix(hex.Hex.initial(n_envs, boardsize))
@@ -160,7 +160,7 @@ def run(boardsize, width, depth, desc, nodes=64, c_puct=1/16, lr=1e-3, flops=Non
 
     archive.archive(run)
 
-    storer = storage.LogarithmicStorer(run, agent, flops_limit=flops)
+    storer = storage.TimeStorer(run, agent)
     noise = noisescales.NoiseScales(agent, buffer_len)
 
     buffer = []

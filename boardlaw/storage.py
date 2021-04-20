@@ -18,6 +18,10 @@ BOUNDS = {
     8: (1e11, 3e16),
     9: (1e12, 1e17)}
 
+TIMES = {
+    7: 3600,
+}
+
 SAMPLES = {
     3: 1e8,
     4: 2e8,
@@ -44,21 +48,21 @@ def flops_per_sample(agent):
 
     return n_nodes*count
 
-def savepoints(boardsize, n_snapshots=21, upper=None):
+def flops_savepoints(boardsize, n_snapshots=21, upper=None):
     lower = BOUNDS[boardsize][0]
     upper = upper or BOUNDS[boardsize][1]
     return 10**np.linspace(np.log10(lower), np.log10(upper), n_snapshots) 
 
-class LogarithmicStorer:
+class FlopsStorer:
 
-    def __init__(self, run, agent, flops_limit=None):
+    def __init__(self, run, agent):
         self._run = run
 
         self._flops_per = flops_per_sample(agent)
 
         boardsize = agent.network.obs_space.dim[0]
 
-        self._savepoints = savepoints(boardsize, upper=flops_limit)
+        self._savepoints = flops_savepoints(boardsize)
         self._next = 0
         self._n_samples = 0
         self._n_flops = 0
@@ -114,3 +118,48 @@ class LogarithmicStorer:
         sample_overflow = (self._n_samples > self._samples_bound)
         
         return flops_overflow or sample_overflow
+
+def time_savepoints(boardsize, n_snapshots=21):
+    return 10**np.linspace(0, np.log10(TIMES[boardsize]), n_snapshots) 
+
+class TimeStorer:
+
+    def __init__(self, run, agent):
+        self._run = run
+
+        self._flops_per = flops_per_sample(agent)
+
+        boardsize = agent.network.obs_space.dim[0]
+
+        self._savepoints = time_savepoints(boardsize)
+        self._next = 0
+        self._n_samples = 0
+        self._n_flops = 0
+
+        storage.save_raw(run, 'model', pickle.dumps(agent.network))
+
+        self._start = None
+
+    def step(self, agent, n_samples):
+        # Start the timer on the first step, so that warmup time doesn't impact us
+        if self._start is None:
+            self._start = time.time()
+        self._n_samples += n_samples
+        self._n_flops += self._flops_per*n_samples
+        sd = {
+            'agent': agent.state_dict(), 
+            'n_flops': self._n_flops, 
+            'n_samples': self._n_samples, 
+            'runtime': time.time() - self._start}
+        if time.time() - self._start >= self._savepoints[self._next]:
+            log.info(f'Taking a snapshot')
+            storage.save_snapshot(self._run, sd)
+            self._next += 1
+
+        # For the arena
+        #TODO: Swap arena to using snapshots
+        storage.throttled_latest(self._run, sd, 60)
+
+        # If there are no more snapshots to take, suggest a break
+        return (self._next >= len(self._savepoints))
+
