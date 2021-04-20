@@ -15,14 +15,14 @@ log = getLogger(__name__)
 # for _, r in best.iterrows():
 #     print(f'[{r.boardsize}, {r.width:3d}, {r.depth}, 64, 1/16, {2*r.train_flops:7.2g}],')
 BEST = pd.DataFrame([
-    [3,   2, 4, 64, 1/16, 2.5e+11],
-    [4,   8, 2, 64, 1/16, 1.8e+12],
-    [5,  16, 4, 64, 1/16, 1.9e+13],
-    [6, 128, 1, 64, 1/16, 2.3e+14],
-    [7, 128, 4, 64, 1/16,   2e+15],
-    [8, 256, 4, 64, 1/16,   9e+15],
-    [9, 512, 4, 64, 1/16, 3.6e+16]], columns=
-    ['boardsize', 'width', 'depth', 'nodes', 'c_puct', 'flops'])
+    [3,   2, 4, 64, 1/16],
+    [4,   8, 2, 64, 1/16],
+    [5,  16, 4, 64, 1/16],
+    [6, 128, 1, 64, 1/16],
+    [7, 128, 4, 64, 1/16],
+    [8, 256, 4, 64, 1/16],
+    [9, 512, 4, 64, 1/16]], columns=
+    ['boardsize', 'width', 'depth', 'nodes', 'c_puct'])
 
 @torch.no_grad()
 def chunk_stats(chunk, n_new):

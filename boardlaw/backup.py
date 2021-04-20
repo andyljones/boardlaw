@@ -8,14 +8,26 @@ import aljpy
 import multiprocessing
 from pavlov import runs, files, storage
 from tqdm.auto import tqdm
+from logging import getLogger
+
+log = getLogger(__name__)
 
 BUCKET = 'boardlaw'
+
+OPEN_CREDENTIALS = dict(
+    application_key_id='0025bc00838182c0000000006',
+    application_key='K0023q+mw4bVM5Qx/6keRDn8MMv6J/U')
 
 @aljpy.memcache()
 def api(bucket):
     # Keys are in 1Password
     api = b2.B2Api()
-    keys = json.loads(Path('credentials.json').read_text())['backblaze'][bucket]
+    path = Path('credentials.json')
+    if path.exists():
+        keys = json.loads(path.read_text())['backblaze'][bucket]
+    else:
+        keys = OPEN_CREDENTIALS
+        log.warn('No credentials file found; using public Backblaze access')
     api.authorize_account('production', **keys)
     return api
 
@@ -61,10 +73,30 @@ def ablate_snapshots():
         ablate_run_snapshots(run)
 
 def download(local, remote):
-    bucket, path = remote.split(':')
-    bucket = api(bucket).get_bucket_by_name(bucket)
+    local = str(local)
+    remote = str(remote)
+    Path(local).parent.mkdir(exist_ok=True, parents=True)
+
+    bucket = api(BUCKET).get_bucket_by_name(BUCKET)
     dest = b2.DownloadDestLocalFile(local)
-    return bucket.download_file_by_name(path, dest)
+    return bucket.download_file_by_name(remote, dest)
+
+def download_run_info(run):
+    local = runs.infopath(run, res=False)
+    if local.exists():
+        log.info(f'Run info for "{run}" already exists')
+        return
+    remote = Path('output/pavlov') / local.relative_to(runs.ROOT)
+    download(local, remote)
+
+def download_agent(run, idx):
+    download_run_info(run)
+    filename = storage.SNAPSHOT.format(n=idx)
+    local_path = f'{runs.ROOT}/{run}/{filename}'
+    if Path(local_path).exists():
+        log.info(f'Snapshot "{run}" #{idx} already exists')
+    remote_path = f'output/pavlov/{run}/{filename}'
+    download(local_path, remote_path)
 
 def backup():
     sync_up('./output/pavlov', f'{BUCKET}:output/pavlov')

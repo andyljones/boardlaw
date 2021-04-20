@@ -10,7 +10,7 @@ setup(
     author='Andy Jones',
     author_email='me@andyljones.com',
     url='http://andyljones.com/boardlaw',
-    packages=find_packages(include=['boardlaw*', 'pavlov*', 'rebar*']),
+    packages=find_packages(include=['boardlaw*', 'pavlov*', 'rebar*', 'activelo*']),
     python_requires='>=3.6',
     install_requires=[
         'cloudpickle>=1.6',
@@ -26,6 +26,7 @@ setup(
         'scipy>=1.6',
         'av>=8',
         'loky>=1.6',
+        'b2sdk>=1.6',
         'sqlalchemy>=1.4',
         'plotnine>=0.7',
         'geotorch@git+https://github.com/Lezcano/geotorch#egg=geotorch'],
