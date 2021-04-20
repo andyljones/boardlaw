@@ -31,4 +31,9 @@ setup(
         'plotnine>=0.7',
         'geotorch@git+https://github.com/Lezcano/geotorch#egg=geotorch'],
     extras_require={},
-    package_data={'boardlaw.arena': ['data/*'], 'boardlaw.arena.live': ['data/*']})
+    package_data={
+        'boardlaw': ['cpp/*'],
+        'boardlaw.mcts': ['cpp/*'],
+        'boardlaw.hex': ['cpp/*'],
+        'boardlaw.arena': ['data/*'], 
+        'boardlaw.arena.live': ['data/*']})
