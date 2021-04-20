@@ -28,6 +28,7 @@ setup(
         'loky>=1.6',
         'b2sdk>=1.6',
         'sqlalchemy>=1.4',
+        'ninja>=1.1',
         'plotnine>=0.7',
         'geotorch@git+https://github.com/Lezcano/geotorch#egg=geotorch'],
     extras_require={},

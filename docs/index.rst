@@ -12,10 +12,10 @@ Below you can find the code, models and data from our `Scaling Scaling Laws <htt
 Code
 ****
 Our code is `on Github <https://github.com/andyljones/boardlaw>`_. You can clone it and work directly from the repo,
-or you can install it as a package with
-```
+or you can install it as a package with :: 
+
 pip install git+https://github.com/andyljones/boardlaw.git#egg=boardlaw
-```
+
 We recommend you do this in a `virtual environment <https://docs.python.org/3/tutorial/venv.html>`_. Or, better yet, a Docker container. You can find our Dockerfile `here <https://github.com/andyljones/boardlaw/tree/master/docker>`_. 
 
 With the requirements installed and the database (see below) downloaded, you'll be able to reproduce all the plots from the paper using the `paper module <https://github.com/andyljones/boardlaw/blob/master/analysis/paper.py>`_. We recommend using the 
@@ -25,9 +25,9 @@ If you want to train your own models, take a look in the `main module <https://g
 
 If you want to evaluate your own models, take a look in the `arena package <https://github.com/andyljones/boardlaw/blob/master/boardlaw/arena/neural.py#L315-L322>`_.
 
-Data 
-****
-Our data is held in a `SQLite database <https://f002.backblazeb2.com/file/boardlaw/output/experiments/eval/database.sql>`_. Once you've downloaded it, you can query it with::
+Evaluation Data 
+***************
+Our evaluation data is held in a `SQLite database <https://f002.backblazeb2.com/file/boardlaw/output/experiments/eval/database.sql>`_. Once you've downloaded it, you can query it with::
 
     import pandas as pd
     pd.read_sql('select * from agents', 'sqlite:///path_to_database.sql')
@@ -35,6 +35,27 @@ Our data is held in a `SQLite database <https://f002.backblazeb2.com/file/boardl
 You can find the schema for the database in `this module <https://github.com/andyljones/boardlaw/blob/master/boardlaw/sql.py#L24-L146>`_, along with 
 documentation of the fields and some utility functions for querying it. 
 
+Elos are not stored in the database directly, but can be calculated from the trials table. See ``analysis.data.load`` for an example of how to do it.
+
+Agent Data
+**********
+To download and play a specific agent::
+
+    from boardlaw.arena import common
+    from boardlaw import analysis, backup
+
+    run, snapshot = '2021-02-20 21-11-32 intent-nets', 18
+
+    backup.download_agent(run, snapshot)
+    ag = common.agent(run, snapshot)
+    worlds = common.worlds(run, n_envs=1)
+
+    analysis.record(worlds, [ag, ag], n_trajs=1).notebook()
+
+You can alternatively get a full trace of the game with ``analysis.rollout(world, agents, n_trajs=1)``.
+
+Training Data
+*************
 To download the files for a specific training run, the best option is to use backblaze's sync tool. ::
 
     import b2sdk.v1 as b2
@@ -71,14 +92,4 @@ monitoring library built alongside this project::
     # To view the residual variance from the run
     stats.pandas(run, 'corr.resid-var')
 
-The state dicts from the snapshots themselves can also be accessed through pavlov, but if you've downloaded the database too then an easier option is ::
-
-    from boardlaw.arena import common
-    from boardlaw import analysis
-
-    ag = common.agent(run)
-    worlds = common.worlds(run, 1)
-
-    analysis.record(worlds, [ag, ag], n_trajs=1).notebook()
-
-which will play a game between the loaded agents and display it in your notebook. 
+The state dicts from the snapshots themselves can also be accessed through pavlov using the ``pavlov.storage`` module.
