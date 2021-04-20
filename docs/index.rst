@@ -9,12 +9,15 @@ Below you can find the code, models and data from our `Scaling Scaling Laws <htt
     :alt: A replication of the compute-performance curves
     :width: 640
 
+There's an `example notebook <https://colab.research.google.com/drive/1ItlSX1lEfj_6pSPXHMIrYWj9LBsCNCxl?usp=sharing>`_ 
+demonstrating many of the things discussed below.
+
 Code
 ****
 Our code is `on Github <https://github.com/andyljones/boardlaw>`_. You can clone it and work directly from the repo,
 or you can install it as a package with :: 
 
-pip install git+https://github.com/andyljones/boardlaw.git#egg=boardlaw
+    pip install git+https://github.com/andyljones/boardlaw.git#egg=boardlaw
 
 We recommend you do this in a `virtual environment <https://docs.python.org/3/tutorial/venv.html>`_. Or, better yet, a Docker container. You can find our Dockerfile `here <https://github.com/andyljones/boardlaw/tree/master/docker>`_. 
 
@@ -27,15 +30,43 @@ If you want to evaluate your own models, take a look in the `arena package <http
 
 Evaluation Data 
 ***************
-Our evaluation data is held in a `SQLite database <https://f002.backblazeb2.com/file/boardlaw/output/experiments/eval/database.sql>`_. Once you've downloaded it, you can query it with::
+Our evaluation data is held in a `SQLite database <https://f002.backblazeb2.com/file/boardlaw/output/experiments/eval/database.sql>`_. It'll be downloaded automatically
+when you first query it::
 
-    import pandas as pd
-    pd.read_sql('select * from agents', 'sqlite:///path_to_database.sql')
+    from boardlaw import sql, elos
+    sql.agent_query()
 
-You can find the schema for the database in `this module <https://github.com/andyljones/boardlaw/blob/master/boardlaw/sql.py#L24-L146>`_, along with 
+You can find the schema for the database in `the sql module <https://github.com/andyljones/boardlaw/blob/master/boardlaw/sql.py#L24-L146>`_, along with 
 documentation of the fields and some utility functions for querying it. 
 
-Elos are not stored in the database directly, but can be calculated from the trials table. See ``analysis.data.load`` for an example of how to do it.
+Elos are not stored in the database directly, but can be calculated from the trials table. ::
+
+    from boardlaw import sql, elos
+
+    boardsize = 9
+    ags = (sql.agent_query()
+            .query('test_nodes == 64'))
+
+    # There are a *lot* of trials, so for speed here we filter the table down
+    trials = (sql.trial_query(boardsize, 'bee/%')
+                .query('black_wins + white_wins >= 512')
+                .groupby(['black_agent', 'white_agent'])
+                .first().reset_index()
+                .loc[lambda df: df.black_agent.isin(ags.index)]
+                .loc[lambda df: df.white_agent.isin(ags.index)])
+    ws, gs = elos.symmetrize(trials)
+
+    ags_elos = elos.solve(ws, gs)
+    ags = ags.join(ags_elos, how='inner')
+
+which will give you a table that looks like this one
+
+.. image:: agents_details.png
+    :alt: An example of the resulting ags table
+    :width: 640
+
+The Elos here are in base *e* because that's easier to deal with internally. 
+Multiply by 400/ln(10) to get the Elos that you're used to.
 
 Agent Data
 **********
