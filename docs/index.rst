@@ -89,21 +89,21 @@ Training Data
 *************
 To download the files for a specific training run, the best option is to use backblaze's sync tool. ::
 
-    import b2sdk.v1 as b2
+    from boardlaw import backup
     import sys
-    import time 
+    import time
 
     run = '2021-03-26 15-30-17 harsh-wait'
     dest = 'local_storage'
 
     bucket = 'boardlaw'
-    api = b2.B2Api()
+    api = backup.api(bucket)
 
     syncer = b2.Synchronizer(4)
     with b2.SyncReport(sys.stdout, False) as reporter:
         syncer.sync_folders(
             source_folder=b2.parse_sync_folder(f'b2://boardlaw/output/pavlov/{run}', api),
-            dest_folder=b2.parse_sync_folder(f'dest/{run}', api),
+            dest_folder=b2.parse_sync_folder(f'{run}', api),
             now_millis=int(round(time.time() * 1000)),
             reporter=reporter)
 
