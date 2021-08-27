@@ -87,7 +87,7 @@ You can alternatively get a full trace of the game with ``analysis.rollout(world
 
 Training Data
 *************
-To download the files for a specific training run, the best option is to use backblaze's sync tool. ::
+To download the files for a specific training run, the best option is to use backblaze's sync tool. **There is a 100GB/day cap on downloading this data, which amounts to 2x downloads of the entire dataset. If you're running into this limit, come talk to me** ::
 
     from boardlaw import backup
     import sys
